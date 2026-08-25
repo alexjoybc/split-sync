@@ -1,0 +1,14 @@
+{
+  "name": "split-sync",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:reset": "supabase db reset"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
