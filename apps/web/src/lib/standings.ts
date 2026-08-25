@@ -36,7 +36,8 @@ export function fmtLapTime(ms: number | null): string {
  */
 export function computeStandings(
   crossings: Crossing[],
-  entries: Entry[]
+  entries: Entry[],
+  raceStartMs?: number | null
 ): StandingRow[] {
   const entryByBib = new Map(entries.map((e) => [e.bib, e]));
   const byBib = new Map<string, number[]>(); // bib -> sorted crossing times (epoch ms)
@@ -59,7 +60,13 @@ export function computeStandings(
     const entry = entryByBib.get(bib);
     const laps = times.length;
     const lastCrossingAt = laps > 0 ? times[laps - 1] : null;
-    const lastLapMs = laps >= 2 ? times[laps - 1] - times[laps - 2] : null;
+    // Lap time: delta from previous crossing; for lap 1, from the start gun if known
+    const lastLapMs =
+      laps >= 2
+        ? times[laps - 1] - times[laps - 2]
+        : laps === 1 && raceStartMs != null
+          ? times[0] - raceStartMs
+          : null;
     return {
       bib,
       name: entry?.name ?? `Bib ${bib}`,

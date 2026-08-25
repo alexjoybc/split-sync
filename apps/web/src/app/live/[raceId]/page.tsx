@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
 import { computeStandings, fmtLapTime } from "@/lib/standings";
@@ -9,14 +9,34 @@ function classNames(...classes: (string | false)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
+/** Ticking race clock, e.g. "12:04" since the start gun. */
+function RaceClock({ startedAt }: { startedAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const elapsed = Math.max(0, now - new Date(startedAt).getTime());
+  const totalS = Math.floor(elapsed / 1000);
+  const h = Math.floor(totalS / 3600);
+  const m = Math.floor((totalS % 3600) / 60);
+  const s = totalS % 60;
+  return (
+    <span className="tabular-nums">
+      {h > 0 ? `${h}:${String(m).padStart(2, "0")}` : m}:{String(s).padStart(2, "0")}
+    </span>
+  );
+}
+
 export default function LiveBoard({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
   const { race, entries, crossings, loading } = useRaceData(raceId);
   const [query, setQuery] = useState("");
 
+  const raceStartMs = race?.started_at ? new Date(race.started_at).getTime() : null;
   const standings = useMemo(
-    () => computeStandings(crossings, entries),
-    [crossings, entries]
+    () => computeStandings(crossings, entries, raceStartMs),
+    [crossings, entries, raceStartMs]
   );
 
   const leader = standings[0];
@@ -50,7 +70,14 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-white">{race.name}</h1>
-            <p className="text-xs text-gray-400">SplitSync live</p>
+            <p className="text-xs text-gray-400">
+              SplitSync live
+              {race.status === "active" && race.started_at && (
+                <span className="ml-2 font-medium text-gray-300">
+                  <RaceClock startedAt={race.started_at} />
+                </span>
+              )}
+            </p>
           </div>
           <span
             className={classNames(

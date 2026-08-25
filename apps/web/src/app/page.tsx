@@ -26,16 +26,28 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-      <div className="flex items-baseline gap-2">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
-          SplitSync
-        </h1>
-        <span className="text-sm text-gray-500 dark:text-gray-400">live timing</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-white">
+            SplitSync
+          </h1>
+          <span className="text-sm text-gray-500 dark:text-gray-400">live timing</span>
+        </div>
+        <Link
+          href="/new"
+          className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+        >
+          New event
+        </Link>
       </div>
 
       {events.map((event) => (
         <section key={event.id} className="mt-8">
-          <h2 className="text-base font-semibold text-gray-900 dark:text-white">{event.title}</h2>
+          <Link href={`/event/${event.id}`} className="group">
+            <h2 className="text-base font-semibold text-gray-900 group-hover:text-indigo-600 dark:text-white dark:group-hover:text-indigo-400">
+              {event.title} →
+            </h2>
+          </Link>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{event.location}</p>
 
           <ul className="mt-4 divide-y divide-gray-200 overflow-hidden rounded-lg bg-white shadow-sm dark:divide-white/10 dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
