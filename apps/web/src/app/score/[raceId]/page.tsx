@@ -79,22 +79,25 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
 
   if (loading || !race) {
     return (
-      <main className="flex min-h-dvh items-center justify-center bg-gray-950 text-gray-400">
+      <main className="race-page flex items-center justify-center text-race-muted">
         {loading ? "Loading…" : "Race not found"}
       </main>
     );
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg flex-col bg-gray-950 px-4 py-4">
+    <main className="race-page">
+      <div className="race-topline" />
+      <div className="mx-auto flex min-h-[calc(100dvh-0.5rem)] max-w-lg flex-col px-4 py-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-base font-semibold text-white">{race.name}</h1>
-          <p className="text-xs text-gray-400">
-            Scorer
+            <p className="race-kicker">Race control</p>
+            <h1 className="mt-1 text-lg font-black uppercase">{race.name}</h1>
+            <p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">
+              Scorer station
             {pending > 0 && (
-              <span className="ml-2 rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+              <span className="ml-2 bg-race-yellow px-2 py-0.5 text-xs font-black text-race-ink">
                 {pending} pending sync
               </span>
             )}
@@ -103,7 +106,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         {race.status === "upcoming" && (
           <button
             onClick={() => setRaceStatus("active")}
-            className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white hover:bg-green-500"
+            className="race-action race-action--yellow"
           >
             Start race
           </button>
@@ -111,13 +114,13 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         {race.status === "active" && (
           <button
             onClick={() => setRaceStatus("finished")}
-            className="rounded-md bg-white/10 px-3 py-2 text-sm font-semibold text-white inset-ring inset-ring-white/15 hover:bg-white/20"
+            className="race-action"
           >
             Finish
           </button>
         )}
         {race.status === "finished" && (
-          <Link href={`/live/${raceId}`} className="text-sm font-semibold text-indigo-400">
+          <Link href={`/live/${raceId}`} className="text-sm font-black uppercase text-race-red">
             View results
           </Link>
         )}
@@ -130,14 +133,14 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
             key={e.id}
             onClick={() => submit(e.bib)}
             className={classNames(
-              "rounded-lg px-3.5 py-2.5 text-lg font-bold tabular-nums transition-colors",
+              "border-2 border-race-ink px-3.5 py-2.5 text-lg font-black tabular-nums transition-colors",
               flash === e.bib
-                ? "bg-green-500 text-white"
-                : "bg-white/10 text-white inset-ring inset-ring-white/15 active:bg-indigo-500"
+                ? "border-race-red bg-race-red text-white"
+                : "bg-race-panel text-race-ink active:bg-race-yellow"
             )}
           >
             {e.bib}
-            <span className="ml-1.5 text-xs font-normal text-gray-400">
+            <span className="ml-1.5 text-xs font-bold text-race-muted">
               {lapsByBib.get(e.bib) ?? 0}
             </span>
           </button>
@@ -145,12 +148,12 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
       </div>
 
       {/* Bib display */}
-      <div className="mt-4 flex h-16 items-center justify-center rounded-lg bg-white/5 inset-ring inset-ring-white/10">
-        <span className="text-4xl font-bold tabular-nums tracking-widest text-white">
+      <div className="mt-4 flex h-16 items-center justify-center border-2 border-race-ink bg-race-panel">
+        <span className="text-4xl font-black tabular-nums tracking-widest text-race-ink">
           {flash && !bib ? (
-            <span className="text-green-400">#{flash} ✓</span>
+            <span className="text-race-red">#{flash} ✓</span>
           ) : (
-            bib || <span className="text-gray-600">bib</span>
+            bib || <span className="text-race-muted">bib</span>
           )}
         </span>
       </div>
@@ -161,52 +164,53 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
           <button
             key={d}
             onClick={() => setBib((b) => (b + d).slice(0, 4))}
-            className="rounded-lg bg-white/10 py-5 text-2xl font-semibold text-white inset-ring inset-ring-white/15 active:bg-white/25"
+            className="border-2 border-race-ink bg-race-panel py-5 text-2xl font-black text-race-ink active:bg-race-yellow"
           >
             {d}
           </button>
         ))}
         <button
           onClick={() => setBib((b) => b.slice(0, -1))}
-          className="flex items-center justify-center rounded-lg bg-white/10 py-5 text-white inset-ring inset-ring-white/15 active:bg-white/25"
+          className="flex items-center justify-center border-2 border-race-ink bg-race-panel py-5 text-race-ink active:bg-race-yellow"
         >
           <BackspaceIcon className="size-7" />
         </button>
         <button
           onClick={() => setBib((b) => (b + "0").slice(0, 4))}
-          className="rounded-lg bg-white/10 py-5 text-2xl font-semibold text-white inset-ring inset-ring-white/15 active:bg-white/25"
+          className="border-2 border-race-ink bg-race-panel py-5 text-2xl font-black text-race-ink active:bg-race-yellow"
         >
           0
         </button>
         <button
           onClick={() => submit(bib)}
           disabled={!bib}
-          className="rounded-lg bg-indigo-600 py-5 text-xl font-bold text-white active:bg-indigo-400 disabled:opacity-40"
+          className="border-2 border-race-red bg-race-red py-5 text-xl font-black text-white active:bg-race-ink disabled:opacity-40"
         >
           ✓
         </button>
       </div>
 
       {/* Recent crossings with undo */}
-      <ul className="mt-4 divide-y divide-white/10">
+      <ul className="mt-4 border-y-2 border-race-ink divide-y divide-zinc-300">
         {recent.map((c) => (
           <li key={c.id} className="flex items-center justify-between py-2 text-sm">
-            <span className="text-white">
+            <span className="text-race-ink">
               <span className="font-bold tabular-nums">#{c.bib}</span>
-              <span className="ml-2 text-gray-400">
+              <span className="ml-2 text-race-muted">
                 lap {lapsByBib.get(c.bib) ?? "?"} ·{" "}
                 {new Date(c.client_recorded_at).toLocaleTimeString()}
               </span>
             </span>
             <button
               onClick={() => undo(c.id)}
-              className="font-medium text-red-400 hover:text-red-300"
+              className="font-black uppercase text-race-red hover:text-race-ink"
             >
               Undo
             </button>
           </li>
         ))}
       </ul>
+      </div>
     </main>
   );
 }

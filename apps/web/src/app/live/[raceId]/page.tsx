@@ -39,16 +39,16 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
   const matches = (row: (typeof standings)[number]) => q !== "" && (row.bib === q || row.name.toLowerCase().includes(q));
 
   if (loading || !race) {
-    return <main className="grid min-h-dvh place-items-center bg-[#f4f1ea] font-sans text-sm font-bold uppercase tracking-widest text-zinc-600">{loading ? "Loading classification" : "Race not found"}</main>;
+    return <main className="grid min-h-dvh place-items-center bg-race-paper font-sans text-sm font-bold uppercase tracking-widest text-race-muted">{loading ? "Loading classification" : "Race not found"}</main>;
   }
 
   return (
-    <main className="min-h-dvh bg-[#f4f1ea] pb-12 font-sans text-zinc-950">
-      <div className="h-2 bg-[#ec1c24]" />
-      <header className="bg-zinc-950 px-4 py-4 text-white sm:px-6">
+    <main className="min-h-dvh bg-race-paper pb-12 font-sans text-race-ink">
+      <div className="race-topline" />
+      <header className="bg-race-ink px-4 py-4 text-white sm:px-6">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-[#f6d428]">SplitSync // live classification</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-race-yellow">SplitSync // live classification</p>
             <h1 className="mt-1 truncate text-xl font-black uppercase tracking-tight sm:text-2xl">{race.name}</h1>
           </div>
           <div className="shrink-0 border-l border-white/25 pl-4 text-right">
@@ -64,16 +64,16 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
         <div className="mx-auto grid max-w-4xl grid-cols-[1.1fr_1fr_1fr] divide-x-2 divide-zinc-950">
           <div className="pr-3 sm:pr-5">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Race status</p>
-            <p className={classNames("mt-1 text-base font-black uppercase", race.status === "active" ? "text-[#ec1c24]" : "text-zinc-950")}>
+            <p className={classNames("mt-1 text-base font-black uppercase", race.status === "active" ? "text-race-red" : "text-race-ink")}>
               {race.status === "active" ? "Live now" : race.status}
             </p>
           </div>
           <div className="px-3 sm:px-5">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Laps to go</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-race-muted">Laps to go</p>
             <p className="mt-1 text-2xl font-black tabular-nums leading-none">{lapsToGo ?? "—"}</p>
           </div>
           <div className="pl-3 sm:pl-5">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Leader last lap</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-race-muted">Leader last lap</p>
             <p className="mt-1 text-2xl font-black tabular-nums leading-none">{fmtLapTime(leader?.lastLapMs ?? null)}</p>
           </div>
         </div>

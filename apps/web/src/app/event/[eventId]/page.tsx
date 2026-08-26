@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type { Entry, EventRow, Participant, Race } from "@/lib/types";
 
 const categories = ["U13", "U15", "U17", "Junior", "U23", "Senior", "Master 35+", "Master 40+", "Master 50+", "Open"];
-const inputCls = "block w-full rounded-md bg-white px-3 py-2 text-sm text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 dark:bg-white/5 dark:text-white dark:outline-white/10 dark:placeholder:text-gray-500";
+const inputCls = "race-input";
 
 export default function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = use(params);
@@ -77,30 +77,30 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     refetch();
   };
 
-  if (!event) return <main className="flex min-h-dvh items-center justify-center text-gray-400">Loading…</main>;
+  if (!event) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
-      <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400">← All events</Link>
-      <h1 className="mt-2 text-xl font-bold text-gray-900 dark:text-white">{event.title}</h1>
-      <p className="text-sm text-gray-500 dark:text-gray-400">{event.location}</p>
+    <main className="race-page">
+      <div className="race-topline" />
+      <header className="race-masthead"><div className="mx-auto max-w-3xl"><Link href="/" className="text-xs font-black uppercase tracking-wide text-race-yellow hover:text-white">← All events</Link><p className="race-kicker mt-4">Event setup</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-zinc-400">{event.location}</p></div></header>
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
-      <section className="mt-8 rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
-        <div className="flex items-baseline justify-between"><h2 className="text-base font-semibold text-gray-900 dark:text-white">1. Event roster</h2><span className="text-sm text-gray-500 dark:text-gray-400">{participants.length} racers</span></div>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Add each racer once, then place them in one or more races below.</p>
+      <section className="race-panel mt-8 p-4">
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">1. Event roster</h2><span className="text-sm font-bold text-race-muted">{participants.length} racers</span></div>
+        <p className="mt-1 text-sm text-race-muted">Add each racer once, then place them in one or more races below.</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_150px_auto]">
           <input value={rider.bib} onChange={(e) => setRider({ ...rider, bib: e.target.value })} placeholder="Bib" inputMode="numeric" className={inputCls} />
           <input value={rider.name} onChange={(e) => setRider({ ...rider, name: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addParticipant()} placeholder="Racer name" className={inputCls} />
           <input value={rider.team} onChange={(e) => setRider({ ...rider, team: e.target.value })} placeholder="Team / club" className={inputCls} />
           <input value={rider.category} onChange={(e) => setRider({ ...rider, category: e.target.value })} placeholder="Category" list="categories" className={inputCls} />
-          <button onClick={addParticipant} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500"><PlusIcon className="size-5" /></button>
+          <button onClick={addParticipant} className="race-action flex items-center justify-center"><PlusIcon className="size-5" /></button>
         </div>
         <datalist id="categories">{categories.map((category) => <option key={category} value={category} />)}</datalist>
         {participants.length > 0 && <div className="mt-4 flex flex-wrap gap-1.5">{participants.map((participant) => <span key={participant.id} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{participant.bib}</b> {participant.name}{participant.category && <span className="ml-1 text-gray-500 dark:text-gray-400">· {participant.category}</span>}</span>)}</div>}
       </section>
 
       <section className="mt-6">
-        <div className="flex items-baseline justify-between"><h2 className="text-base font-semibold text-gray-900 dark:text-white">2. Races</h2><span className="text-sm text-gray-500 dark:text-gray-400">Create then assign racers</span></div>
+        <div className="race-section-heading flex items-baseline justify-between"><h2 className="text-base font-black uppercase">2. Races</h2><span className="text-sm font-bold text-race-muted">Create then assign racers</span></div>
         <div className="mt-3 space-y-3">
           {races.map((race) => {
             const raceEntries = entries.filter((entry) => entry.race_id === race.id);
@@ -114,6 +114,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
           <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Add race</h3><div className="mt-2 flex gap-2"><input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} /><input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} /><button onClick={addRace} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button></div></section>
         </div>
       </section>
+      </div>
     </main>
   );
 }
