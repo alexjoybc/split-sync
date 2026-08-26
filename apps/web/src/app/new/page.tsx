@@ -32,23 +32,25 @@ export default function NewEvent() {
   };
 
   const inputCls =
-    "block w-full rounded-md bg-white px-3 py-2 text-sm text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 dark:bg-white/5 dark:text-white dark:outline-white/10 dark:placeholder:text-gray-500";
+    "race-input";
 
   return (
-    <main className="mx-auto max-w-lg px-4 py-10 sm:px-6">
-      <h1 className="text-xl font-bold text-gray-900 dark:text-white">New event</h1>
+    <main className="race-page">
+      <div className="race-topline" />
+      <header className="race-masthead"><div className="mx-auto max-w-lg"><p className="race-kicker">Race calendar</p><h1 className="race-title">New event</h1></div></header>
+      <div className="mx-auto max-w-lg px-4 py-8 sm:px-6">
 
       <div className="mt-6 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-900 dark:text-white">Title</label>
+          <label className="block text-xs font-black uppercase tracking-wide">Title</label>
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Friday Night Racing" className={`mt-1 ${inputCls}`} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-900 dark:text-white">Location</label>
+          <label className="block text-xs font-black uppercase tracking-wide">Location</label>
           <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Greater Victoria Velodrome" className={`mt-1 ${inputCls}`} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-900 dark:text-white">Sport</label>
+          <label className="block text-xs font-black uppercase tracking-wide">Sport</label>
           <select value={sport} onChange={(e) => setSport(e.target.value)} className={`mt-1 ${inputCls}`}>
             <option value="velodrome">Velodrome</option>
             <option value="cyclocross">Cyclocross</option>
@@ -57,15 +59,16 @@ export default function NewEvent() {
           </select>
         </div>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="border-l-4 border-race-red bg-white px-3 py-2 text-sm font-bold text-race-red">{error}</p>}
 
         <button
           onClick={createEvent}
           disabled={saving}
-          className="w-full rounded-md bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white shadow-xs hover:bg-indigo-500 disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400"
+          className="race-action w-full disabled:opacity-50"
         >
           {saving ? "Creating…" : "Create event and add racers"}
         </button>
+      </div>
       </div>
     </main>
   );

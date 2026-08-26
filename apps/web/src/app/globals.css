@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --race-paper: #f4f1ea;
+  --race-panel: #ffffff;
+  --race-panel-alt: #e9e6df;
+  --race-ink: #18181b;
+  --race-muted: #71717a;
+  --race-red: #ec1c24;
+  --race-yellow: #f6d428;
+  --background: var(--race-paper);
+  --foreground: var(--race-ink);
 }
 
 @theme inline {
@@ -10,17 +17,62 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-race-paper: var(--race-paper);
+  --color-race-panel: var(--race-panel);
+  --color-race-panel-alt: var(--race-panel-alt);
+  --color-race-ink: var(--race-ink);
+  --color-race-muted: var(--race-muted);
+  --color-race-red: var(--race-red);
+  --color-race-yellow: var(--race-yellow);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Shared race-control visual system. Change these patterns, not each screen. */
+.race-page {
+  @apply min-h-dvh bg-race-paper pb-12 text-race-ink;
+}
+
+.race-topline {
+  @apply h-2 bg-race-red;
+}
+
+.race-masthead {
+  @apply border-b-2 border-race-ink bg-race-panel px-4 py-6 text-race-ink sm:px-6;
+}
+
+.race-kicker {
+  @apply text-[10px] font-black uppercase tracking-[0.2em] text-race-red;
+}
+
+.race-title {
+  @apply mt-1 text-3xl font-black uppercase tracking-tight;
+}
+
+.race-section-heading {
+  @apply border-b-2 border-race-ink pb-3;
+}
+
+.race-action {
+  @apply border-2 border-race-red bg-race-red px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-white hover:border-race-ink hover:bg-race-ink;
+}
+
+.race-action--yellow {
+  @apply border-race-ink bg-race-yellow text-race-ink hover:border-race-ink hover:bg-race-panel;
+}
+
+.race-action--outline {
+  @apply bg-transparent text-race-ink hover:border-race-ink hover:bg-race-yellow;
+}
+
+.race-input {
+  @apply w-full border-2 border-race-ink bg-race-panel px-3 py-2 text-sm font-bold text-race-ink outline-none placeholder:text-race-muted focus:border-race-red;
+}
+
+.race-panel {
+  @apply border-b-2 border-race-ink bg-race-panel;
 }
