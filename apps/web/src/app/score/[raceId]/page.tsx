@@ -6,6 +6,7 @@ import { BackspaceIcon } from "@heroicons/react/24/outline";
 import { supabase } from "@/lib/supabase";
 import { useRaceData } from "@/lib/useRaceData";
 import { recordCrossing, flushQueue, pendingCount } from "@/lib/crossingQueue";
+import { useAuth } from "@/lib/useAuth";
 
 function classNames(...classes: (string | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -17,6 +18,14 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const [bib, setBib] = useState("");
   const [pending, setPending] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!race || !user) return setIsOwner(false);
+    supabase.from("events").select("owner_id").eq("id", race.event_id).single()
+      .then(({ data }) => setIsOwner(data?.owner_id === user.id));
+  }, [race, user]);
 
   // Retry offline queue: on reconnect + every 5s
   useEffect(() => {
@@ -77,12 +86,16 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
     refetch();
   };
 
-  if (loading || !race) {
+  if (loading || authLoading || !race) {
     return (
       <main className="race-page flex items-center justify-center text-race-muted">
         {loading ? "Loading…" : "Race not found"}
       </main>
     );
+  }
+
+  if (!user || !isOwner) {
+    return <main className="race-page"><div className="race-topline" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Organizer sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event organizer can score this race until volunteer scorer access is configured.</p><Link href="/login" className="race-action mt-5 inline-block">Sign in</Link></div></div></main>;
   }
 
   return (
