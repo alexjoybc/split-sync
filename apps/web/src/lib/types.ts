@@ -44,4 +44,5 @@ export interface EventRow {
   sport_type: string;
   location: string | null;
   status: string;
+  owner_id: string | null;
 }

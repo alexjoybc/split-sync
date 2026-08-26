@@ -3,7 +3,9 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PlusIcon } from "@heroicons/react/20/solid";
+import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/useAuth";
 import type { Entry, EventRow, Participant, Race } from "@/lib/types";
 
 const categories = ["U13", "U15", "U17", "Junior", "U23", "Senior", "Master 35+", "Master 40+", "Master 50+", "Open"];
@@ -18,6 +20,8 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const [rider, setRider] = useState({ bib: "", name: "", team: "", category: "" });
   const [newRace, setNewRace] = useState({ name: "", laps: "" });
   const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
+  const [origin, setOrigin] = useState("");
+  const { user, loading: authLoading } = useAuth();
 
   const refetch = useCallback(async () => {
     const [ev, rs, en, ps] = await Promise.all([
@@ -33,6 +37,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   }, [eventId]);
 
   useEffect(() => { refetch(); }, [refetch]);
+  useEffect(() => { setOrigin(window.location.origin); }, []);
 
   const addParticipant = async () => {
     if (!rider.bib.trim() || !rider.name.trim()) return;
@@ -77,7 +82,13 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     refetch();
   };
 
-  if (!event) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
+  const publish = async () => {
+    await supabase.from("events").update({ status: "live" }).eq("id", eventId);
+    refetch();
+  };
+
+  if (!event || authLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
+  if (!user || event.owner_id !== user.id) return <main className="race-page"><div className="race-topline" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email to manage this event.</p><Link href="/login" className="race-action mt-5 inline-block">Sign in</Link></div></div></main>;
 
   return (
     <main className="race-page">
@@ -113,6 +124,10 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
           })}
           <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Add race</h3><div className="mt-2 flex gap-2"><input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} /><input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} /><button onClick={addRace} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button></div></section>
         </div>
+      </section>
+      <section className="race-panel mt-6 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker">3. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish when the roster is ready, then display or print a QR code for each race.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action">Publish event</button>}</div>
+        {event.status === "live" && origin && races.length > 0 && <div className="mt-5 grid gap-4 sm:grid-cols-2">{races.map((race) => { const liveUrl = `${origin}/live/${race.id}`; return <div key={race.id} className="border-2 border-race-ink bg-race-paper p-3"><div className="flex items-center gap-3"><QRCodeSVG value={liveUrl} size={76} bgColor="#f4f1ea" fgColor="#18181b" /><div className="min-w-0"><p className="text-sm font-black uppercase">{race.name}</p><p className="mt-1 break-all text-[10px] font-bold text-race-muted">{liveUrl}</p><a href={liveUrl} target="_blank" className="mt-2 inline-block text-xs font-black uppercase text-race-red">Open live board ↗</a></div></div></div>; })}</div>}
       </section>
       </div>
     </main>

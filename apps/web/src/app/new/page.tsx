@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/lib/useAuth";
 
 export default function NewEvent() {
   const router = useRouter();
@@ -11,14 +12,16 @@ export default function NewEvent() {
   const [sport, setSport] = useState("velodrome");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user, loading } = useAuth();
 
   const createEvent = async () => {
     setError(null);
+    if (!user) return router.push("/login");
     if (!title.trim()) return setError("Event needs a title.");
     setSaving(true);
     const { data: event, error: eventErr } = await supabase
       .from("events")
-      .insert({ title: title.trim(), location: location.trim() || null, sport_type: sport, status: "live" })
+      .insert({ title: title.trim(), location: location.trim() || null, sport_type: sport, status: "draft", owner_id: user.id })
       .select()
       .single();
 
@@ -39,6 +42,8 @@ export default function NewEvent() {
       <div className="race-topline" />
       <header className="race-masthead"><div className="mx-auto max-w-lg"><p className="race-kicker">Race calendar</p><h1 className="race-title">New event</h1></div></header>
       <div className="mx-auto max-w-lg px-4 py-8 sm:px-6">
+
+       {!loading && !user ? <div className="race-panel p-5"><p className="text-sm text-race-muted">Sign in before creating an event.</p><button onClick={() => router.push("/login")} className="race-action mt-4">Sign in</button></div> : <>
 
       <div className="mt-6 space-y-4">
         <div>
@@ -63,12 +68,13 @@ export default function NewEvent() {
 
         <button
           onClick={createEvent}
-          disabled={saving}
+          disabled={saving || loading}
           className="race-action w-full disabled:opacity-50"
         >
           {saving ? "Creating…" : "Create event and add racers"}
         </button>
       </div>
+      </>}
       </div>
     </main>
   );
