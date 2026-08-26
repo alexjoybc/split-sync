@@ -16,6 +16,16 @@ export interface Entry {
   bib: string;
   name: string;
   team: string | null;
+  category: string | null;
+}
+
+export interface Participant {
+  id: string;
+  event_id: string;
+  bib: string;
+  name: string;
+  team: string | null;
+  category: string | null;
 }
 
 export interface Crossing {

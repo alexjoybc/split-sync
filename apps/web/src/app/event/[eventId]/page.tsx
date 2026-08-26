@@ -4,61 +4,50 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { PlusIcon } from "@heroicons/react/20/solid";
 import { supabase } from "@/lib/supabase";
-import type { Entry, EventRow, Race } from "@/lib/types";
+import type { Entry, EventRow, Participant, Race } from "@/lib/types";
 
-const inputCls =
-  "block w-full rounded-md bg-white px-3 py-2 text-sm text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 dark:bg-white/5 dark:text-white dark:outline-white/10 dark:placeholder:text-gray-500";
-
-function AddRider({ raceId, onAdded }: { raceId: string; onAdded: () => void }) {
-  const [bib, setBib] = useState("");
-  const [name, setName] = useState("");
-
-  const add = async () => {
-    if (!bib.trim() || !name.trim()) return;
-    const { error } = await supabase
-      .from("entries")
-      .insert({ race_id: raceId, bib: bib.trim(), name: name.trim() });
-    if (!error) {
-      setBib("");
-      setName("");
-      onAdded();
-    }
-  };
-
-  return (
-    <div className="mt-3 flex gap-2">
-      <input value={bib} onChange={(e) => setBib(e.target.value)} placeholder="Bib" inputMode="numeric" className={`${inputCls} !w-20`} />
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Rider name" onKeyDown={(e) => e.key === "Enter" && add()} className={inputCls} />
-      <button onClick={add} className="shrink-0 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15 dark:hover:bg-white/20">
-        <PlusIcon className="size-5" />
-      </button>
-    </div>
-  );
-}
+const categories = ["U13", "U15", "U17", "Junior", "U23", "Senior", "Master 35+", "Master 40+", "Master 50+", "Open"];
+const inputCls = "block w-full rounded-md bg-white px-3 py-2 text-sm text-gray-900 outline-1 -outline-offset-1 outline-gray-300 placeholder:text-gray-400 focus:outline-2 focus:-outline-offset-2 focus:outline-indigo-600 dark:bg-white/5 dark:text-white dark:outline-white/10 dark:placeholder:text-gray-500";
 
 export default function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = use(params);
   const [event, setEvent] = useState<EventRow | null>(null);
   const [races, setRaces] = useState<Race[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [rider, setRider] = useState({ bib: "", name: "", team: "", category: "" });
   const [newRace, setNewRace] = useState({ name: "", laps: "" });
+  const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
-    const [ev, rs, en] = await Promise.all([
+    const [ev, rs, en, ps] = await Promise.all([
       supabase.from("events").select("*").eq("id", eventId).single(),
       supabase.from("races").select("*").eq("event_id", eventId).order("sequence_order"),
       supabase.from("entries").select("*"),
+      supabase.from("participants").select("*").eq("event_id", eventId).order("bib"),
     ]);
     if (ev.data) setEvent(ev.data);
-    if (rs.data) {
-      setRaces(rs.data);
-      if (en.data) setEntries(en.data.filter((e: Entry) => rs.data.some((r: Race) => r.id === e.race_id)));
-    }
+    if (rs.data) setRaces(rs.data);
+    if (en.data && rs.data) setEntries(en.data.filter((entry) => rs.data.some((race) => race.id === entry.race_id)));
+    if (ps.data) setParticipants(ps.data);
   }, [eventId]);
 
-  useEffect(() => {
-    refetch();
-  }, [refetch]);
+  useEffect(() => { refetch(); }, [refetch]);
+
+  const addParticipant = async () => {
+    if (!rider.bib.trim() || !rider.name.trim()) return;
+    const { error } = await supabase.from("participants").insert({
+      event_id: eventId,
+      bib: rider.bib.trim(),
+      name: rider.name.trim(),
+      team: rider.team.trim() || null,
+      category: rider.category || null,
+    });
+    if (!error) {
+      setRider({ bib: "", name: "", team: "", category: rider.category });
+      refetch();
+    }
+  };
 
   const addRace = async () => {
     if (!newRace.name.trim()) return;
@@ -72,58 +61,59 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     refetch();
   };
 
-  if (!event) {
-    return <main className="flex min-h-dvh items-center justify-center text-gray-400">Loading…</main>;
-  }
+  const toggleAssignment = async (race: Race, participant: Participant, assigned: boolean) => {
+    if (assigned) {
+      const existing = entries.find((entry) => entry.race_id === race.id && entry.bib === participant.bib);
+      if (existing) await supabase.from("entries").delete().eq("id", existing.id);
+    } else {
+      await supabase.from("entries").insert({
+        race_id: race.id,
+        bib: participant.bib,
+        name: participant.name,
+        team: participant.team,
+        category: participant.category,
+      });
+    }
+    refetch();
+  };
+
+  if (!event) return <main className="flex min-h-dvh items-center justify-center text-gray-400">Loading…</main>;
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+    <main className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400">← All events</Link>
       <h1 className="mt-2 text-xl font-bold text-gray-900 dark:text-white">{event.title}</h1>
       <p className="text-sm text-gray-500 dark:text-gray-400">{event.location}</p>
 
-      <div className="mt-6 space-y-4">
-        {races.map((race) => {
-          const raceEntries = entries.filter((e) => e.race_id === race.id);
-          return (
-            <section key={race.id} className="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} riders · {race.status}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Link href={`/live/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Live</Link>
-                  <Link href={`/score/${race.id}`} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Score</Link>
-                </div>
-              </div>
+      <section className="mt-8 rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-semibold text-gray-900 dark:text-white">1. Event roster</h2><span className="text-sm text-gray-500 dark:text-gray-400">{participants.length} racers</span></div>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Add each racer once, then place them in one or more races below.</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_150px_auto]">
+          <input value={rider.bib} onChange={(e) => setRider({ ...rider, bib: e.target.value })} placeholder="Bib" inputMode="numeric" className={inputCls} />
+          <input value={rider.name} onChange={(e) => setRider({ ...rider, name: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addParticipant()} placeholder="Racer name" className={inputCls} />
+          <input value={rider.team} onChange={(e) => setRider({ ...rider, team: e.target.value })} placeholder="Team / club" className={inputCls} />
+          <input value={rider.category} onChange={(e) => setRider({ ...rider, category: e.target.value })} placeholder="Category" list="categories" className={inputCls} />
+          <button onClick={addParticipant} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500"><PlusIcon className="size-5" /></button>
+        </div>
+        <datalist id="categories">{categories.map((category) => <option key={category} value={category} />)}</datalist>
+        {participants.length > 0 && <div className="mt-4 flex flex-wrap gap-1.5">{participants.map((participant) => <span key={participant.id} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{participant.bib}</b> {participant.name}{participant.category && <span className="ml-1 text-gray-500 dark:text-gray-400">· {participant.category}</span>}</span>)}</div>}
+      </section>
 
-              {raceEntries.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {raceEntries.map((e) => (
-                    <span key={e.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300">
-                      <b className="tabular-nums">#{e.bib}</b> {e.name}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {race.status === "upcoming" && <AddRider raceId={race.id} onAdded={refetch} />}
-            </section>
-          );
-        })}
-
-        <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">Add race</h2>
-          <div className="mt-2 flex gap-2">
-            <input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} />
-            <input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} />
-            <button onClick={addRace} className="shrink-0 rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button>
-          </div>
-        </section>
-      </div>
+      <section className="mt-6">
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-semibold text-gray-900 dark:text-white">2. Races</h2><span className="text-sm text-gray-500 dark:text-gray-400">Create then assign racers</span></div>
+        <div className="mt-3 space-y-3">
+          {races.map((race) => {
+            const raceEntries = entries.filter((entry) => entry.race_id === race.id);
+            const open = assigningRaceId === race.id;
+            return <section key={race.id} className="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
+              <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}</p></div><div className="flex gap-2"><button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button><Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link></div></div>
+              {open && <div className="mt-4 grid gap-1 border-t border-gray-200 pt-3 dark:border-white/10 sm:grid-cols-2">{participants.map((participant) => { const assigned = raceEntries.some((entry) => entry.bib === participant.bib); return <label key={participant.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600" /><span className="text-sm text-gray-900 dark:text-white"><b>#{participant.bib}</b> {participant.name}</span>{participant.category && <span className="ml-auto text-xs text-gray-500">{participant.category}</span>}</label>; })}</div>}
+              {raceEntries.length > 0 && !open && <div className="mt-3 flex flex-wrap gap-1.5">{raceEntries.map((entry) => <span key={entry.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{entry.bib}</b> {entry.name}</span>)}</div>}
+            </section>;
+          })}
+          <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Add race</h3><div className="mt-2 flex gap-2"><input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} /><input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} /><button onClick={addRace} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button></div></section>
+        </div>
+      </section>
     </main>
   );
 }
