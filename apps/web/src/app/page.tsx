@@ -5,20 +5,26 @@ import { Logo } from "@/components/Logo";
 const screenshots = [
   {
     src: "/screenshots/live-board.webp",
+    width: 1600,
+    height: 968,
     alt: "SplitSync public live classification board showing overall standings by rank, bib, rider, laps, last lap time, and gap",
     label: "Live board",
     detail: "What spectators watch",
   },
   {
     src: "/screenshots/announcer-view.webp",
+    width: 1600,
+    height: 954,
     alt: "SplitSync announcer view highlighting the current race leader and top of the field on a dark screen for track-side displays",
     label: "Announcer view",
     detail: "What the mic booth reads",
   },
   {
-    src: "/screenshots/event-roster.webp",
-    alt: "SplitSync organizer event roster screen listing racers with bib, name, team, category, and sex",
-    label: "Event roster",
+    src: "/screenshots/admin.webp",
+    width: 1600,
+    height: 1221,
+    alt: "SplitSync organizer admin screen showing the event roster and race-day check-in, listing racers with bib, name, team, category, sex, and check-in status",
+    label: "Organizer admin",
     detail: "What the organizer sets up",
   },
 ];
@@ -179,8 +185,9 @@ export default function Home() {
             {screenshots.map((shot, i) => (
               <div
                 key={shot.src}
-                className="group relative h-64 w-full overflow-hidden border-2 border-race-ink sm:h-80"
+                className="group relative w-full overflow-hidden border-2 border-race-ink"
                 style={{
+                  aspectRatio: `${shot.width} / ${shot.height}`,
                   clipPath:
                     i === 0
                       ? "polygon(0 0, 100% 0, 100% calc(100% - 28px), 0 100%)"
@@ -194,11 +201,11 @@ export default function Home() {
                   src={shot.src}
                   alt={shot.alt}
                   fill
-                  sizes="100vw"
-                  className="object-cover object-top transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+                  sizes="(min-width: 1152px) 1152px, 100vw"
+                  className="object-cover object-top"
                   priority={i === 0}
                 />
-                <div className="absolute inset-y-0 left-0 flex flex-col justify-center bg-race-ink/90 px-6">
+                <div className="absolute bottom-0 left-0 bg-race-ink/90 px-6 py-3">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-yellow">
                     {shot.detail}
                   </p>
