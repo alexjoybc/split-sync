@@ -27,7 +27,18 @@ http://localhost:3000/auth/callback
 org.splitsync.tracker://**
 ```
 
-Magic link emails use Resend SMTP. Do not use Supabase's default sender for real events because it is heavily rate-limited.
+Google OAuth is the organizer sign-in method. Set it up once:
+
+1. In Google Cloud Console, create (or reuse) a project, then under "APIs & Services -> Credentials" create an **OAuth client ID** of type **Web application**.
+2. Add this authorized redirect URI (the Supabase-hosted callback, not the app's `/auth/callback`):
+   ```text
+   https://bsihlrzncucrglqltjrc.supabase.co/auth/v1/callback
+   ```
+3. In the Supabase dashboard, go to Authentication -> Sign In / Providers -> Google, enable it, and paste the client ID and client secret from step 1.
+4. Configure the OAuth consent screen with the SplitSync name/logo and add `splitsync.org` as an authorized domain.
+5. The web login (`/login`) and mobile tracker both call `supabase.auth.signInWithOAuth({ provider: "google" })`; the redirect URLs above already cover the final app-side hop back to `/auth/callback`.
+
+Magic link is no longer used for organizer sign-in as of this setup; Resend SMTP below is retained only if email-based flows are reintroduced later.
 
 ## Resend And DNS
 

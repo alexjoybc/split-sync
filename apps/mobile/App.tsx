@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, FlatList, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "@supabase/supabase-js";
 import { flushCrossings, pendingCrossings, recordCrossing } from "./src/crossingQueue";
 import { supabase } from "./src/supabase";
 import type { Entry, Event, Race } from "./src/types";
+
+WebBrowser.maybeCompleteAuthSession();
 
 const colors = { paper: "#f4f1ea", panel: "#ffffff", ink: "#18181b", muted: "#71717a", red: "#ec1c24", yellow: "#f6d428", line: "#d4d1ca" };
 
@@ -19,7 +22,6 @@ function Header({ title, onBack, onSignOut }: { title: string; onBack?: () => vo
 
 function Tracker() {
   const [session, setSession] = useState<Session | null>(null);
-  const [email, setEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
@@ -31,6 +33,13 @@ function Tracker() {
   const [pending, setPending] = useState(0);
 
   const consumeLink = useCallback(async (url: string) => {
+    const { queryParams } = Linking.parse(url);
+    const code = typeof queryParams?.code === "string" ? queryParams.code : undefined;
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) setMessage(error.message);
+      return;
+    }
     const fragment = url.split("#")[1];
     if (!fragment) return;
     const params = new URLSearchParams(fragment);
@@ -60,9 +69,17 @@ function Tracker() {
     return () => clearInterval(interval);
   }, []);
 
-  const sendMagicLink = async () => {
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: "org.splitsync.tracker://auth/callback" } });
-    setMessage(error ? error.message : "Magic link sent. Open it on this phone to return to the tracker.");
+  const signInWithGoogle = async () => {
+    setMessage(null);
+    const redirectTo = Linking.createURL("auth/callback");
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (error || !data.url) return setMessage(error?.message ?? "Could not start Google sign-in.");
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type === "success") await consumeLink(result.url);
+    else if (result.type !== "cancel") setMessage("Google sign-in was interrupted. Try again.");
   };
   const chooseEvent = async (event: Event) => {
     const { data } = await supabase.from("races").select("id,event_id,name,laps_planned,status").eq("event_id", event.id).order("sequence_order");
@@ -97,7 +114,7 @@ function Tracker() {
     setMessage(`Bib ${value} recorded`);
   };
 
-  if (!session) return <SafeAreaView style={styles.screen}><Header title="Organizer sign in" /><View style={styles.content}><View style={styles.panel}><Text style={styles.copy}>Enter your organizer email. The magic link opens this tracker app on your phone.</Text><Text style={styles.label}>EMAIL</Text><TextInput value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" placeholder="you@example.com" placeholderTextColor={colors.muted} style={styles.input} /><View style={styles.space} /><Button title="Send magic link" onPress={sendMagicLink} variant="red" disabled={!email} />{message && <Text style={styles.message}>{message}</Text>}</View></View><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
+  if (!session) return <SafeAreaView style={styles.screen}><Header title="Organizer sign in" /><View style={styles.content}><View style={styles.panel}><Text style={styles.copy}>Sign in with your Google account to manage your events.</Text><View style={styles.space} /><Button title="Continue with Google" onPress={signInWithGoogle} variant="red" />{message && <Text style={styles.message}>{message}</Text>}</View></View><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
 
   if (!selectedEvent) return <SafeAreaView style={styles.screen}><Header title="My events" onSignOut={() => supabase.auth.signOut()} /><FlatList contentContainerStyle={styles.list} data={events} keyExtractor={(event) => event.id} onRefresh={loadEvents} refreshing={false} ListEmptyComponent={<Text style={styles.empty}>No events yet. Create an event on splitsync.org first.</Text>} renderItem={({ item }) => <Pressable onPress={() => chooseEvent(item)} style={styles.eventRow}><View><Text style={styles.eventTitle}>{item.title}</Text><Text style={styles.muted}>{item.location ?? "Location TBC"}</Text></View><Text style={styles.arrow}>›</Text></Pressable>} /><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
 
