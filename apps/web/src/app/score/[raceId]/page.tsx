@@ -84,7 +84,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   return (
     <main className="race-page">
       <div className="race-topline" />
-      <RaceNav links={[{ href: `/event/${race.event_id}`, label: "Event setup" }, { href: `/results/${race.event_id}`, label: "Spectator results" }]} />
+      <RaceNav links={[{ href: `/event/${race.event_id}`, label: "Event setup" }, { href: `/results/${race.event_id}`, label: "Spectator results" }]} showAuth />
       <div className="mx-auto flex min-h-[calc(100dvh-0.5rem)] max-w-lg flex-col px-4 py-5">
       {/* Header */}
       <div className="flex items-center justify-between">

@@ -95,7 +95,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   return (
     <main className="race-page">
       <div className="race-topline" />
-      <RaceNav links={[{ href: `/results/${eventId}`, label: "Spectator results" }]} />
+      <RaceNav links={[{ href: `/results/${eventId}`, label: "Spectator results" }]} showAuth />
       <header className="race-masthead"><div className="mx-auto max-w-3xl"><p className="race-kicker">Event setup</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
