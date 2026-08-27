@@ -80,6 +80,13 @@ export default function HelpPage() {
               an extra lap on the rest of the field also picks up a lap-gain
               bonus.
             </li>
+            <li>
+              A red <strong>Penalty</strong> badge next to a rider&apos;s name
+              means an official applied a time penalty, lap penalty, or
+              relegation. Hover or tap the badge to see the reason. The
+              rider&apos;s position and gap already reflect the penalty — the
+              underlying crossing times are never changed.
+            </li>
           </ul>
         </section>
 
@@ -207,6 +214,17 @@ export default function HelpPage() {
               crossings. You&apos;ll be asked for an optional reason, which is
               kept with the change.
             </li>
+            <li>
+              Tap <strong>+ Penalty</strong> under a rider&apos;s tile on the
+              scorer screen to apply a <strong>time penalty</strong> (added
+              seconds), a <strong>lap penalty</strong> (dropped laps), a{" "}
+              <strong>relegation</strong>, or a plain <strong>note</strong> —
+              a reason is required for every one. The penalty adjusts that
+              rider&apos;s position and gap on the live/results boards without
+              ever touching their recorded crossing times; spectators see a
+              <strong> Penalty</strong> badge with the reason. Remove a
+              mistaken entry with <strong>Remove</strong> next to it.
+            </li>
           </ul>
         </section>
 
@@ -226,7 +244,7 @@ export default function HelpPage() {
             <li><strong>Organizer</strong> — everything you can do except delete the event: roster, races, publishing, and inviting/revoking other volunteers.</li>
             <li><strong>Scorer</strong> — records and undoes crossings, and starts/finishes races. Cannot edit the roster or event details.</li>
             <li><strong>Check-in</strong> — can view the private roster before publish and one-tap check racers in as they arrive, without being able to edit their bib, name, team, or category.</li>
-            <li><strong>Read-only official</strong> — can view the event, roster, races, and crossings without changing anything.</li>
+            <li><strong>Official</strong> — can view the event, roster, races, and crossings, and is the only role (besides organizer) that can apply penalties and adjustments to a rider on the scorer screen. Cannot otherwise edit the roster, races, or crossings.</li>
           </ul>
           <p className="mt-4 text-sm font-semibold text-zinc-700">
             Send the generated link directly to that person (text, email,

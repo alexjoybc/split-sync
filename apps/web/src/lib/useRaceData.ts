@@ -2,18 +2,20 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import type { Crossing, Entry, Race } from "./types";
+import type { Crossing, Entry, EntryPenalty, Race } from "./types";
 
 /**
- * Loads race + entries + crossings and keeps them fresh via Supabase Realtime.
- * On any crossings/races change we refetch — simple and always consistent;
- * at grassroots scale (hundreds of rows) this is well within budget.
+ * Loads race + entries + crossings + penalties and keeps them fresh via
+ * Supabase Realtime. On any crossings/races/entries change we refetch —
+ * simple and always consistent; at grassroots scale (hundreds of rows) this
+ * is well within budget.
  */
 export function useRaceData(raceId: string) {
   const [race, setRace] = useState<Race | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [crossings, setCrossings] = useState<Crossing[]>([]);
   const [deletedCrossings, setDeletedCrossings] = useState<Crossing[]>([]);
+  const [penalties, setPenalties] = useState<EntryPenalty[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refetch = useCallback(async () => {
@@ -39,6 +41,19 @@ export function useRaceData(raceId: string) {
     if (entriesRes.data) setEntries(entriesRes.data);
     if (crossingsRes.data) setCrossings(crossingsRes.data);
     if (deletedRes.data) setDeletedCrossings(deletedRes.data);
+
+    // Penalties are scoped to entries, not race_id directly.
+    const entryIds = (entriesRes.data ?? []).map((e) => e.id);
+    if (entryIds.length > 0) {
+      const penaltiesRes = await supabase
+        .from("race_entry_penalties")
+        .select("*")
+        .in("entry_id", entryIds)
+        .order("set_at", { ascending: true });
+      if (penaltiesRes.data) setPenalties(penaltiesRes.data);
+    } else {
+      setPenalties([]);
+    }
     setLoading(false);
   }, [raceId]);
 
@@ -57,6 +72,15 @@ export function useRaceData(raceId: string) {
         { event: "*", schema: "public", table: "races", filter: `id=eq.${raceId}` },
         () => refetch()
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "entries", filter: `race_id=eq.${raceId}` },
+        () => refetch()
+      )
+      // race_entry_penalties has no race_id column to filter on directly,
+      // so listen unfiltered and let refetch() re-scope by this race's
+      // entry ids — fine at grassroots scale, same tradeoff as above.
+      .on("postgres_changes", { event: "*", schema: "public", table: "race_entry_penalties" }, () => refetch())
       .subscribe();
 
     return () => {
@@ -64,5 +88,5 @@ export function useRaceData(raceId: string) {
     };
   }, [raceId, refetch]);
 
-  return { race, entries, crossings, deletedCrossings, loading, refetch };
+  return { race, entries, crossings, deletedCrossings, penalties, loading, refetch };
 }

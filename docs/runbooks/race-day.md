@@ -23,8 +23,9 @@
 8. Watch the pending-sync indicator. It should be zero when connected.
 9. Use web scorer undo for an accidental crossing; soft deletion updates spectators immediately.
 10. If a rider crashes, abandons, or is pulled from the race, mark them **DNF** or **DSQ** on the scorer screen — they stay on the live board with that badge instead of a misleading lap count.
-11. Finish the race only after the final crossing sequence is recorded.
-12. For a points race, nothing extra happens at the scorer screen — sprints and lap-gain bonuses score automatically from the crossings you're already recording. Watch the live board or announcer view to call out each sprint result to spectators as it appears.
+11. If an official calls a time penalty, lap penalty, or relegation (e.g. illegal feed, blocking), tap **+ Penalty** under that rider's tile, pick the type, enter the value if required, and give a reason — it's applied to the live classification immediately and shown to spectators as a **Penalty** badge, without touching that rider's recorded crossings.
+12. Finish the race only after the final crossing sequence is recorded.
+13. For a points race, nothing extra happens at the scorer screen — sprints and lap-gain bonuses score automatically from the crossings you're already recording. Watch the live board or announcer view to call out each sprint result to spectators as it appears.
 
 ## If Connectivity Fails
 

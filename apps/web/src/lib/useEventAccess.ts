@@ -39,3 +39,7 @@ export function useEventAccess(eventId: string | null | undefined, user: User | 
 export const canManageEvent = (role: EventAccessRole) => role === "owner" || role === "organizer";
 export const canScore = (role: EventAccessRole) => role === "owner" || role === "organizer" || role === "scorer";
 export const canCheckIn = (role: EventAccessRole) => role === "owner" || role === "organizer" || role === "checkin";
+// Penalties/adjustments (#71): the "official" role's first write capability
+// — it existed as read-only classification review, but adjudicating
+// penalties is that role's real-world mandate.
+export const canManagePenalties = (role: EventAccessRole) => role === "owner" || role === "organizer" || role === "official";

@@ -6,9 +6,9 @@ import { supabase } from "@/lib/supabase";
 import { useRaceData } from "@/lib/useRaceData";
 import { recordCrossing, flushQueue, pendingCount } from "@/lib/crossingQueue";
 import { useAuth } from "@/lib/useAuth";
-import { canManageEvent, canScore, useEventAccess } from "@/lib/useEventAccess";
+import { canManageEvent, canManagePenalties, canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
-import type { Entry, EntryStatus } from "@/lib/types";
+import type { Entry, EntryStatus, PenaltyType } from "@/lib/types";
 
 const STATUS_OPTIONS: { value: EntryStatus; label: string }[] = [
   { value: "ok", label: "OK" },
@@ -16,6 +16,34 @@ const STATUS_OPTIONS: { value: EntryStatus; label: string }[] = [
   { value: "dnf", label: "DNF" },
   { value: "dsq", label: "DSQ" },
 ];
+
+const PENALTY_TYPE_OPTIONS: { value: PenaltyType; label: string; needsValue: boolean }[] = [
+  { value: "time_penalty", label: "Time penalty (s)", needsValue: true },
+  { value: "lap_penalty", label: "Lap penalty", needsValue: true },
+  { value: "relegation", label: "Relegation", needsValue: false },
+  { value: "note", label: "Note only", needsValue: false },
+];
+
+const PENALTY_TYPE_LABEL: Record<PenaltyType, string> = {
+  time_penalty: "Time penalty",
+  lap_penalty: "Lap penalty",
+  relegation: "Relegation",
+  note: "Note",
+};
+
+function penaltySummary(type: PenaltyType, value: number | null): string {
+  if (type === "time_penalty") return `+${value}s`;
+  if (type === "lap_penalty") return `-${value} lap${value === 1 ? "" : "s"}`;
+  return PENALTY_TYPE_LABEL[type];
+}
+
+interface PenaltyFormState {
+  entryId: string;
+  type: PenaltyType;
+  value: string;
+  reason: string;
+  error: string | null;
+}
 
 // datetime-local inputs need "YYYY-MM-DDTHH:mm:ss.sss" in local time; round-trip
 // through the input's own timezone rather than assuming UTC.
@@ -43,18 +71,30 @@ interface RestoreState {
 
 export default function Scorer({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
-  const { race, entries, crossings, deletedCrossings, loading, refetch } = useRaceData(raceId);
+  const { race, entries, crossings, deletedCrossings, penalties, loading, refetch } = useRaceData(raceId);
   const [pending, setPending] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
   const { role, loading: roleLoading } = useEventAccess(race?.event_id, user);
-  const allowed = canScore(role);
+  const canManagePenaltiesRole = canManagePenalties(role);
+  const allowed = canScore(role) || canManagePenaltiesRole;
   const canManageStatus = canManageEvent(role);
   const [reopening, setReopening] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [restoring, setRestoring] = useState<RestoreState | null>(null);
+  const [penaltyForm, setPenaltyForm] = useState<PenaltyFormState | null>(null);
+
+  const penaltiesByEntry = useMemo(() => {
+    const m = new Map<string, typeof penalties>();
+    for (const p of penalties) {
+      const arr = m.get(p.entry_id);
+      if (arr) arr.push(p);
+      else m.set(p.entry_id, [p]);
+    }
+    return m;
+  }, [penalties]);
 
   // Retry offline queue: on reconnect + every 5s
   useEffect(() => {
@@ -142,6 +182,35 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
     refetch();
   };
 
+  const startPenalty = (entryId: string) =>
+    setPenaltyForm({ entryId, type: "time_penalty", value: "", reason: "", error: null });
+
+  const savePenalty = async () => {
+    if (!penaltyForm) return;
+    const opt = PENALTY_TYPE_OPTIONS.find((o) => o.value === penaltyForm.type)!;
+    if (opt.needsValue && (!penaltyForm.value.trim() || Number(penaltyForm.value) <= 0)) {
+      return setPenaltyForm({ ...penaltyForm, error: `${opt.label} requires a positive value` });
+    }
+    if (!penaltyForm.reason.trim()) {
+      return setPenaltyForm({ ...penaltyForm, error: "A reason is required" });
+    }
+    const { error } = await supabase.from("race_entry_penalties").insert({
+      entry_id: penaltyForm.entryId,
+      type: penaltyForm.type,
+      value: opt.needsValue ? Number(penaltyForm.value) : null,
+      reason: penaltyForm.reason.trim(),
+    });
+    if (error) return setPenaltyForm({ ...penaltyForm, error: error.message });
+    setPenaltyForm(null);
+    refetch();
+  };
+
+  const removePenalty = async (id: string) => {
+    if (!window.confirm("Remove this penalty/adjustment?")) return;
+    await supabase.from("race_entry_penalties").delete().eq("id", id);
+    refetch();
+  };
+
   const reopenRace = async () => {
     setReopenError(null);
     const { error } = await supabase.rpc("reopen_race", { p_race_id: raceId, p_reason: reopenReason });
@@ -160,7 +229,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   }
 
   if (!user || !allowed) {
-    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event owner or an invited organizer/scorer can score this race. Ask the organizer for an invite link.</p><Link href={`/login?next=${encodeURIComponent(`/score/${raceId}`)}`} className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event owner or an invited organizer/scorer/official can access this race&apos;s scorer screen. Ask the organizer for an invite link.</p><Link href={`/login?next=${encodeURIComponent(`/score/${raceId}`)}`} className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   }
 
   return (
@@ -252,7 +321,8 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {entries.map((entry) => {
           const statused = entry.status !== "ok";
-          const canScore = race.status === "active" && !statused;
+          const canRecord = canScore(role) && race.status === "active" && !statused;
+          const entryPenalties = penaltiesByEntry.get(entry.id) ?? [];
           return (
             <div
               key={entry.id}
@@ -260,8 +330,8 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
             >
               <button
                 type="button"
-                onClick={() => canScore && submit(entry.bib)}
-                disabled={!canScore}
+                onClick={() => canRecord && submit(entry.bib)}
+                disabled={!canRecord}
                 className="block w-full text-left disabled:cursor-not-allowed"
               >
                 <span className="block text-3xl font-black tabular-nums">#{entry.bib}</span>
@@ -282,6 +352,87 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                       {opt.label}
                     </button>
                   ))}
+                </div>
+              )}
+
+              {entryPenalties.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {entryPenalties.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-1 bg-race-yellow/40 px-1.5 py-0.5 text-[10px] font-bold uppercase text-race-ink">
+                      <span className="truncate" title={p.reason}>
+                        {penaltySummary(p.type, p.value)}
+                      </span>
+                      {canManagePenaltiesRole && (
+                        <button type="button" onClick={() => removePenalty(p.id)} className="shrink-0 font-black underline decoration-2 underline-offset-2">
+                          Remove
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {canManagePenaltiesRole && (
+                <button
+                  type="button"
+                  onClick={() => startPenalty(entry.id)}
+                  className="mt-2 text-[10px] font-black uppercase tracking-wide text-race-ink underline decoration-2 underline-offset-2"
+                >
+                  + Penalty
+                </button>
+              )}
+
+              {penaltyForm?.entryId === entry.id && (
+                <div className="race-panel mt-2 p-2">
+                  <label className="block text-[10px] font-bold uppercase tracking-wide text-race-muted">
+                    Type
+                    <select
+                      value={penaltyForm.type}
+                      onChange={(e) => setPenaltyForm({ ...penaltyForm, type: e.target.value as PenaltyType, error: null })}
+                      className="mt-1 w-full border-2 border-race-ink bg-white p-1.5 text-xs"
+                    >
+                      {PENALTY_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {PENALTY_TYPE_OPTIONS.find((o) => o.value === penaltyForm.type)?.needsValue && (
+                    <label className="mt-2 block text-[10px] font-bold uppercase tracking-wide text-race-muted">
+                      Value
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={penaltyForm.value}
+                        onChange={(e) => setPenaltyForm({ ...penaltyForm, value: e.target.value, error: null })}
+                        className="mt-1 w-full border-2 border-race-ink bg-white p-1.5 text-xs tabular-nums"
+                      />
+                    </label>
+                  )}
+                  <label className="mt-2 block text-[10px] font-bold uppercase tracking-wide text-race-muted">
+                    Reason (required)
+                    <textarea
+                      value={penaltyForm.reason}
+                      onChange={(e) => setPenaltyForm({ ...penaltyForm, reason: e.target.value, error: null })}
+                      placeholder="Why is this penalty being applied?"
+                      className="mt-1 w-full border-2 border-race-ink bg-white p-1.5 text-xs"
+                      rows={2}
+                    />
+                  </label>
+                  {penaltyForm.error && <p className="mt-1 text-[10px] font-bold text-race-red">{penaltyForm.error}</p>}
+                  <div className="mt-2 flex gap-3">
+                    <button onClick={savePenalty} className="race-action--muted race-action--yellow px-2 py-1 text-[10px]">
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setPenaltyForm(null)}
+                      className="text-[10px] font-black uppercase text-race-ink underline decoration-2 underline-offset-2"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
