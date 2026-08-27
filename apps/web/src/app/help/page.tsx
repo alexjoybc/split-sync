@@ -88,6 +88,14 @@ export default function HelpPage() {
               same roster.
             </li>
             <li>
+              Running a recurring series? Use <strong>Clone event</strong> on an
+              existing event to start a new draft with the same details,
+              categories, and race structure. Optionally include a copy of the
+              participant roster. Cloning never copies race-day data — the new
+              event starts as a draft with no entries, crossings, or results,
+              and its races always start <strong>upcoming</strong>.
+            </li>
+            <li>
               A race can only be edited (name, entries) while it is
               <strong> upcoming</strong>. Starting a race locks its entry list.
             </li>
