@@ -1,116 +1,129 @@
-# SplitSync ⏱️
+# SplitSync
 
-> **Eliminating the "black box" of local sports timing.**
-> Real-time live timing, heat tracking, and push notifications for grassroots sports — swimming, velodromes, ski racing, track & field, and beyond.
+Live race classification for grassroots cycling events. SplitSync gives event organizers a fast crossing tracker and gives spectators a public, mobile-first results board.
 
----
+The active MVP is designed for mass-start lap racing: velodrome and cyclocross. The first real-world target is a velodrome event, followed by Cross on the Rock cyclocross events on Vancouver Island.
 
-## 📌 Executive Summary
+## Product Surfaces
 
-At local sports events (swim meets, ski races, velodrome meets, track & field), timing data is locked inside clunky desktop software or physical finish-line clipboards. Parents in packed stands or along mountain courses sit in the dark, wondering what heat or lap their athlete is on.
+| Surface | Audience | Purpose |
+| --- | --- | --- |
+| Web organizer | Race organizer | Create event, register roster, create races, assign riders, publish event |
+| Web scorer | Race organizer | Start/finish race and record a crossing by tapping an assigned rider bib |
+| Web spectator | Public | View realtime classifications and event results with no account |
+| Mobile tracker | Race organizer | Native Android/iOS companion for start/finish and one-tap bib crossings |
 
-**SplitSync** bridges this gap. It provides:
-1. **SplitSync Capture**: A zero-cost, local-first volunteer tapping app or hardware connector that logs timestamps with millisecond accuracy.
-2. **SplitSync Live**: A polished spectator mobile and web experience that streams real-time heat updates, live leaderboards, lap splits, and push notifications when bookmarked athletes are on deck.
+## Race-Day Workflow
 
----
+1. Sign in at `/login` with a magic link.
+2. Create an event at `/new`.
+3. Add every participant once to the event roster: bib, name, team, category.
+4. Create races and assign rostered participants to each race.
+5. Publish the event. It creates one QR code linking to `/results/[eventId]`.
+6. Spectators scan the QR code and choose a race from the public results hub.
+7. Open `/score/[raceId]` or the mobile tracker, start the race, and tap rider bib tiles as riders cross the line.
+8. Finish the race. The final classification remains public at the event results URL.
 
-## 🎯 Key Objectives
+Race entries lock at start. Riders are never added during live timing.
 
-* **Instant Spectator Visibility**: Real-time WebSocket updates (<50ms latency) streaming heat progression and lap/split times to spectator phones.
-* **Low-Cost Data Capture**: Eliminate the requirement for $10,000+ touchpad or photobeam rigs for local grassroots clubs.
-* **Offline-First Resilience**: Full local data buffering via SQLite/IndexedDB so venue cellular dropouts (concrete velodromes, remote ski slopes) never lose a timestamp.
-* **Multi-Sport Versatility**: A unified core engine supporting linear time trials, multi-lane heats, lap races, and modular scoring overlays (e.g., Velodrome Points Races).
+## Architecture
 
----
+```text
+Web organizer / web scorer / mobile tracker
+             |
+             | Supabase JS client
+             v
+Supabase Auth + Postgres + Realtime
+             |
+             v
+Public web spectator classification board
+```
 
-## 🗺️ Product Roadmap & Development Phases
+- **Web:** Next.js 16, TypeScript, Tailwind CSS v4, Tailwind Plus patterns. `apps/web`
+- **Mobile:** Expo SDK 57, React Native, TypeScript. `apps/mobile`
+- **Backend:** Hosted Supabase project `bsihlrzncucrglqltjrc`
+- **Hosting:** Vercel at `https://splitsync.org`
+- **Database migrations:** GitHub Actions applies `supabase/migrations` on merge to `main`
+- **Email:** Supabase Auth magic links through Resend SMTP using `noreply@splitsync.org`
 
-Phase 1: Core Engine & "Tap-and-Sync" MVP
-- Admin Web Portal (Event creation, CSV heat sheet parser)
-- Volunteer Tap-Recorder UI (Large-button lane/bib logger)
-- Supabase / WebSocket Real-Time Broadcast Engine
-- Web-based Spectator Live Board (Active heat & split feed)
+See `docs/architecture.md` for table definitions, access model, and realtime behavior.
 
-Phase 2: Mobile Spectator Experience & Push Engine
-- Native iOS & Android apps (React Native / Expo)
-- Athlete "Follow" / Bookmarking system
-- Push Notifications ("Maya is on deck in Heat 4!")
-- Advanced offline queue auto-syncing
+## Local Development
 
-Phase 3: Sport Overlays & Hardware Integration
-- Velodrome Points Race & Criterium scoring rules overlay
-- BLE Beacon / Handheld RFID sensor integration
-- Legacy timing hardware API bridges (Colorado Time, MYLAPS, etc.)
-
----
-
-## 🏗️ System Architecture
-
-1. Admin Web Portal imports CSV Heat Sheets to Cloud Backend.
-2. Volunteer Tap App / BLE Receiver logs local taps to Local Buffer (IndexedDB / SQLite).
-3. Local Buffer syncs via WebSocket / MQTT to Cloud Backend (Supabase).
-4. Cloud Backend streams real-time state re-renders to Spectator Live App and sends alerts to Push Service (FCM/APNs).
-
----
-
-## 📊 Database Schema Overview
-
-The relational database structure (PostgreSQL / Supabase) separates core race metadata, real-time split capture, and scoring overlays:
-
-- `events`: id, title, sport_type, location, starts_at, status
-- `athletes`: id, name, bib_number, team, category
-- `heats`: id, event_id, name, sequence_order, status (upcoming, active, completed)
-- `heat_entries`: id, heat_id, athlete_id, lane_or_position
-- `time_stamps`: id, heat_entry_id, split_name (e.g., "Lap 2", "Finish"), elapsed_ms, recorded_at
-- `scoring_events`: id, heat_entry_id, event_type (sprint_points, lap_gained), points, lap_number
-
----
-
-## 🚴 Supported Sports & Rules Engine
-
-| Sport Category | Key Metrics & Data Captured | Special Scoring Support |
-| :--- | :--- | :--- |
-| **Swimming** | Heat/Lane assignments, 25m/50m splits, final time | Age group & stroke filter |
-| **Velodrome Track Cycling** | Lap counts, lap split times, lead/chase group split | Points Race overlay (Sprint laps: 5, 3, 2, 1 pts; Lap gained: +20 pts) |
-| **Alpine & Cross-Country Skiing** | Interval splits (Sector 1, Sector 2), finish time, delta (+/-) | Run 1 + Run 2 combined time |
-| **Track & Field** | Lane assignment, lap splits (400m/800m/1500m), finish time | Multi-heat summary rankings |
-
----
-
-## 💻 Recommended Tech Stack
-
-* **Frontend Framework**: React / Next.js (Admin Portal), React Native + Expo (Cross-platform Mobile Apps)
-* **Backend & Database**: Supabase (PostgreSQL, Row-Level Security, Realtime Broadcast Channels)
-* **State & Local Persistence**: TanStack Query + WatermelonDB / SQLite (Offline-first architecture)
-* **Push Notifications**: Expo Push API / Firebase Cloud Messaging (FCM)
-* **Styling**: Tailwind CSS / NativeWind
-
----
-
-## 🚀 Getting Started (Development)
-
-### Prerequisites
-* Node.js >= 18.x
-* npm / pnpm / yarn
-* Docker (for local Supabase instance)
-
-### Setup Instructions
+Prerequisites: Node 20+, pnpm, Docker/OrbStack, Android Studio only for Android builds.
 
 ```bash
-# 1. Clone the repository
-git clone [https://github.com/your-org/splitsync.git](https://github.com/your-org/splitsync.git)
-cd splitsync
-
-# 2. Install dependencies
 pnpm install
-
-# 3. Start local Supabase backend
-pnpm supabase start
-
-# 4. Run the Admin Web & Recorder development server
+supabase start
+supabase db reset
 pnpm dev
+```
 
-# 5. Launch mobile spectator app (Expo)
-cd apps/mobile
-pnpm start
+Web app: `http://localhost:3000`
+Supabase Studio: `http://127.0.0.1:54323`
+
+`supabase/seed.sql` creates a fake velodrome event for local visual testing. Do not apply the seed to production.
+
+### Mobile Tracker
+
+Create an ignored `apps/mobile/.env` from `.env.example` with the hosted public Supabase URL and publishable key. Do not add a Supabase secret key.
+
+```bash
+pnpm --filter mobile exec tsc --noEmit
+pnpm --filter mobile exec expo run:android --device
+```
+
+For direct Android development, configure `JAVA_HOME` to JDK 17 and `ANDROID_HOME` to the Android SDK. See `docs/runbooks/mobile-development.md`.
+
+## Deployment
+
+### Web
+
+Vercel project: `split-sync-web`.
+
+Required Vercel variables for Production, Preview, and Development:
+
+```text
+NEXT_PUBLIC_SUPABASE_URL
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+```
+
+### Database
+
+Required GitHub Actions secrets:
+
+```text
+SUPABASE_ACCESS_TOKEN
+SUPABASE_PROJECT_ID
+SUPABASE_DB_PASSWORD
+```
+
+The `Apply Supabase migrations` workflow runs for migration changes on `main` and can be run manually for recovery.
+
+### Auth
+
+Supabase Auth URL configuration must include:
+
+```text
+https://splitsync.org/auth/callback
+http://localhost:3000/auth/callback
+org.splitsync.tracker://**
+```
+
+See `docs/runbooks/production-setup.md` for the complete setup and recovery steps.
+
+## Key Decisions
+
+- Standings are derived from append-only crossing facts, not stored positions. See ADR 0001.
+- Spectators are public read-only; organizers use magic links and RLS ownership. See ADR 0002.
+- Expo/React Native is the shared mobile implementation; Android is installed directly via Android Studio for now. See ADR 0003.
+
+## Current Backlog
+
+- Event-scoped volunteer scorer access (PIN/invite), tracked in GitHub issue #17.
+- Registration CSV import for CX fields, issue #6.
+- Velodrome points-race scoring, issue #13.
+- Existing timing-system connectors (CrossMgr, CTS Dolphin, Webscorer), issue #15.
+- iOS tracker validation after Android field testing, issue #37.
+
+Read `AGENTS.md` before changing code. It defines the surface boundaries and race-timing invariants.
