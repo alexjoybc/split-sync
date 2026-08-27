@@ -63,6 +63,13 @@ export default function HelpPage() {
               organizer reopens it to fix a scoring mistake. Standings refresh
               automatically once it is corrected and finished again.
             </li>
+            <li>
+              A rider marked <strong>DNS</strong> (did not start),{" "}
+              <strong>DNF</strong> (did not finish), or <strong>DSQ</strong>{" "}
+              (disqualified) by the organizer stays listed with that badge
+              instead of a rank, rather than showing a misleading &quot;0
+              laps&quot;.
+            </li>
           </ul>
         </section>
 
@@ -124,7 +131,45 @@ export default function HelpPage() {
               <strong>Recently removed</strong> below the recent list and tap{" "}
               <strong>Restore</strong>. A reason is required, same as editing.
             </li>
+            <li>
+              Mark a rider <strong>DNS</strong>, <strong>DNF</strong>, or{" "}
+              <strong>DSQ</strong> from the scorer screen at any time —
+              before the race starts (DNS), mid-race (DNF/DSQ), or even after
+              it finishes to correct a mistake. Statused riders are excluded
+              from ranked position on the live/results boards but stay
+              visible with their badge, and can&apos;t record further
+              crossings. You&apos;ll be asked for an optional reason, which is
+              kept with the change.
+            </li>
           </ul>
+        </section>
+
+        <section>
+          <div className="race-section-heading">
+            <p className="race-kicker--muted">For organizers</p>
+            <h2 className="mt-1 text-xl font-black uppercase">
+              Volunteer roles &amp; invites
+            </h2>
+          </div>
+          <p className="mt-4 text-sm font-semibold text-zinc-700">
+            You don&apos;t have to run an event alone. From your event setup
+            page&apos;s <strong>Volunteers</strong> section you can generate a
+            single-use invite link for each helper and pick their role:
+          </p>
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+            <li><strong>Organizer</strong> — everything you can do except delete the event: roster, races, publishing, and inviting/revoking other volunteers.</li>
+            <li><strong>Scorer</strong> — records and undoes crossings, and starts/finishes races. Cannot edit the roster or event details.</li>
+            <li><strong>Check-in</strong> — can view the private roster before publish, to help confirm racers as they arrive.</li>
+            <li><strong>Read-only official</strong> — can view the event, roster, races, and crossings without changing anything.</li>
+          </ul>
+          <p className="mt-4 text-sm font-semibold text-zinc-700">
+            Send the generated link directly to that person (text, email,
+            whatever&apos;s easiest) — generate one link per person rather
+            than sharing a single link with a group. Links expire after 14
+            days or as soon as they&apos;re used once. Revoking a volunteer or
+            an unused invite in the Volunteers section takes effect
+            immediately, at the database level, not just in the app.
+          </p>
         </section>
 
         <section>

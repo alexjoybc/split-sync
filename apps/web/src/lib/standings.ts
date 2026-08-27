@@ -1,7 +1,7 @@
-import type { Crossing, Entry } from "./types";
+import type { Crossing, Entry, EntryStatus } from "./types";
 
 export interface StandingRow {
-  position: number;
+  position: number | null; // null for DNS/DNF/DSQ rows — not part of ranked order
   bib: string;
   name: string;
   team: string | null;
@@ -10,6 +10,7 @@ export interface StandingRow {
   lastLapMs: number | null;
   gapText: string; // "—" for leader, "+12.3", "+1:04.2", "-2 laps"
   isUnknownBib: boolean;
+  status: EntryStatus; // "ok" unless the organizer marked DNS/DNF/DSQ
 }
 
 function fmtDuration(ms: number): string {
@@ -156,11 +157,22 @@ export function computeStandings(
       lastCrossingAt,
       lastLapMs,
       isUnknownBib: !entry,
+      // Unknown-bib crossings have no entry/status — treat them as ranked,
+      // same as before this feature existed.
+      status: entry?.status ?? "ok",
       times,
     };
   });
 
-  rows.sort((a, b) => {
+  // DNS/DNF/DSQ are adjudication facts overlaid on derived standings (see
+  // docs/adr/0007-rider-status.md): excluded from ranked position, but still
+  // listed rather than silently dropped or misranked among active riders.
+  const ranked = rows.filter((r) => r.status === "ok");
+  const statused = rows
+    .filter((r) => r.status !== "ok")
+    .sort((a, b) => a.name.localeCompare(b.name) || a.bib.localeCompare(b.bib));
+
+  ranked.sort((a, b) => {
     if (a.laps !== b.laps) return b.laps - a.laps;
     if (a.lastCrossingAt == null && b.lastCrossingAt == null) return 0;
     if (a.lastCrossingAt == null) return 1;
@@ -168,9 +180,9 @@ export function computeStandings(
     return a.lastCrossingAt - b.lastCrossingAt;
   });
 
-  const leader = rows[0];
+  const leader = ranked[0];
 
-  return rows.map((r, i) => {
+  const rankedResult = ranked.map((r, i) => {
     let gapText = "—";
     if (i > 0 && leader && leader.laps > 0) {
       if (r.laps === 0) {
@@ -194,6 +206,22 @@ export function computeStandings(
       lastLapMs: r.lastLapMs,
       gapText,
       isUnknownBib: r.isUnknownBib,
+      status: r.status,
     };
   });
+
+  const statusedResult = statused.map((r) => ({
+    position: null,
+    bib: r.bib,
+    name: r.name,
+    team: r.team,
+    laps: r.laps,
+    lastCrossingAt: r.lastCrossingAt,
+    lastLapMs: r.lastLapMs,
+    gapText: "",
+    isUnknownBib: r.isUnknownBib,
+    status: r.status,
+  }));
+
+  return [...rankedResult, ...statusedResult];
 }

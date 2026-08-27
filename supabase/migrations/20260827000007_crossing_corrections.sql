@@ -1,7 +1,10 @@
 -- Crossing correction and audit trail (#65). Today the only correction
 -- primitive is soft-delete via crossings.deleted_at; this adds an audited
 -- edit (bib/time) and restore path, following the audit-log conventions
--- established for race lifecycle changes (#64 / 20260827000004).
+-- established for race lifecycle changes (#64 / 20260827000004), and using
+-- the is_event_owner()/has_event_role() helpers from #75's volunteer roles
+-- (20260827000005_volunteer_roles.sql) so scorer/organizer volunteers get
+-- the same correction authority as the event owner.
 
 -- Append-only audit log for per-crossing corrections. `reason` is nullable
 -- because the existing plain soft-delete ("Undo" tap) is left unreasoned and
@@ -27,7 +30,11 @@ create policy "organizer read crossing corrections" on crossing_corrections for 
     select 1 from crossings
     join races on races.id = crossings.race_id
     join events on events.id = races.event_id
-    where crossings.id = crossing_corrections.crossing_id and events.owner_id = auth.jwt()->>'sub'
+    where crossings.id = crossing_corrections.crossing_id
+      and (
+        events.owner_id = auth.jwt()->>'sub'
+        or has_event_role(events.id, array['organizer', 'scorer']::event_member_role[])
+      )
   ));
 
 grant select on crossing_corrections to authenticated;
@@ -105,7 +112,8 @@ create trigger crossings_correction_audit
   execute function crossings_correction_audit();
 
 -- Edit a crossing's bib and/or displayed time. The original id/client_id
--- (idempotency key) are never touched. Requires event ownership and a reason.
+-- (idempotency key) are never touched. Requires event ownership (or an
+-- organizer/scorer event_members role) and a reason.
 create or replace function correct_crossing(
   p_crossing_id uuid,
   p_bib text,
@@ -119,6 +127,7 @@ set search_path = public
 as $$
 declare
   v_crossing crossings;
+  v_event_id uuid;
 begin
   if btrim(coalesce(p_reason, '')) = '' then
     raise exception 'a reason is required to correct a crossing';
@@ -133,10 +142,9 @@ begin
     raise exception 'crossing not found';
   end if;
 
-  if not exists (
-    select 1 from races join events on events.id = races.event_id
-    where races.id = v_crossing.race_id and events.owner_id = auth.jwt()->>'sub'
-  ) then
+  select event_id into v_event_id from races where id = v_crossing.race_id;
+
+  if not (is_event_owner(v_event_id) or has_event_role(v_event_id, array['organizer', 'scorer']::event_member_role[])) then
     raise exception 'not authorized to correct this crossing';
   end if;
 
@@ -155,7 +163,8 @@ $$;
 revoke all on function correct_crossing(uuid, text, timestamptz, text) from public;
 grant execute on function correct_crossing(uuid, text, timestamptz, text) to authenticated;
 
--- Restore a soft-deleted crossing. Requires event ownership and a reason.
+-- Restore a soft-deleted crossing. Requires event ownership (or an
+-- organizer/scorer event_members role) and a reason.
 create or replace function restore_crossing(p_crossing_id uuid, p_reason text)
 returns crossings
 language plpgsql
@@ -164,6 +173,7 @@ set search_path = public
 as $$
 declare
   v_crossing crossings;
+  v_event_id uuid;
 begin
   if btrim(coalesce(p_reason, '')) = '' then
     raise exception 'a reason is required to restore a crossing';
@@ -178,10 +188,9 @@ begin
     raise exception 'crossing is not deleted';
   end if;
 
-  if not exists (
-    select 1 from races join events on events.id = races.event_id
-    where races.id = v_crossing.race_id and events.owner_id = auth.jwt()->>'sub'
-  ) then
+  select event_id into v_event_id from races where id = v_crossing.race_id;
+
+  if not (is_event_owner(v_event_id) or has_event_role(v_event_id, array['organizer', 'scorer']::event_member_role[])) then
     raise exception 'not authorized to restore this crossing';
   end if;
 

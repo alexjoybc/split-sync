@@ -7,10 +7,13 @@
 | `events` | Event metadata, publication status, provider-neutral organizer `owner_id` |
 | `participants` | Event-level racer roster: bib, first/last name, team, category, sex |
 | `races` | A race/category within an event, planned laps and lifecycle state |
-| `entries` | Roster participants assigned to a specific race; frozen on start |
+| `entries` | Roster participants assigned to a specific race; roster identity frozen on start, status settable throughout |
 | `crossings` | A recorded line crossing: race, bib, client UUID, client/server timestamps, source |
 | `race_status_changes` | Append-only audit log of every race status transition, written by a trigger |
 | `crossing_corrections` | Append-only audit log of every crossing edit/restore, written by a trigger |
+| `entry_status_changes` | Append-only audit log of every entry status (DNS/DNF/DSQ) transition, written by a trigger |
+| `event_members` | Accepted volunteer grant: event, JWT-subject `user_id`, role |
+| `event_invites` | Single-use, time-limited invite link: event, role, token, expiry |
 
 `crossings` intentionally does not foreign-key `bib` to `entries`. It keeps a factual audit record and allows future connector ingestion. The current UI only presents assigned entries as tappable inputs.
 
@@ -41,15 +44,16 @@ race:  upcoming -> active -> finished
 - Crossings support two correction primitives beyond plain soft-delete:
   editing a crossing's `bib`/`client_recorded_at` via `correct_crossing()`,
   and restoring a soft-deleted crossing via `restore_crossing()`. Both are
-  `security definer` Postgres functions requiring event ownership and a
-  non-empty reason, and both preserve the crossing's original `id`/`client_id`
-  (the offline-retry idempotency key) — a correction only ever changes the
+  `security definer` Postgres functions requiring event ownership (or an
+  `organizer`/`scorer`-role `event_members` grant) and a non-empty reason,
+  and both preserve the crossing's original `id`/`client_id` (the
+  offline-retry idempotency key) — a correction only ever changes the
   displayed bib or time, never the crossing's identity. Every such change,
   plus every plain soft-delete, is recorded in `crossing_corrections` (actor,
   previous/new value, and — for edits/restores — a required reason) by a
   `crossings_correction_guard`/`crossings_correction_audit` trigger pair that
   enforces this regardless of which client performs the underlying `UPDATE`.
-  See ADR 0006.
+  See ADR 0008.
 
 ## Standings
 
@@ -62,6 +66,10 @@ race:  upcoming -> active -> finished
 
 The same logic should be shared with mobile before mobile begins presenting standings.
 
+## Rider Status (DNS/DNF/DSQ)
+
+`entries.status` (`ok` | `dns` | `dnf` | `dsq`) is an organizer-asserted fact, not derived from crossings — it sits alongside crossings as an input to `computeStandings`, which never persists a calculated standing itself (ADR 0001). `computeStandings` excludes non-`ok` entries from ranked position (`position: null`) but still returns them, sorted after all ranked riders, so the UI shows a status badge instead of dropping or misranking them. Every status change is timestamped and attributed (`status_set_by`/`status_set_at`, set by a trigger, not the client) and logged to `entry_status_changes`. See ADR 0007.
+
 ## Realtime
 
 Supabase Realtime publishes changes from `crossings` and `races`. Web clients use `useRaceData` to refetch current race data on a change, then recompute the pure standings function. This favors correctness and simple recovery over incremental client state.
@@ -72,10 +80,16 @@ Supabase RLS enforces the application boundary:
 
 - Anonymous: select published event/race/entry/crossing data only.
 - Authenticated organizer: manage only rows belonging to events where `owner_id` matches the JWT subject.
-- Entries: organizer writes are permitted only while the corresponding race is `upcoming`.
-- Crossings: organizer-only for now. Event-scoped scorer access is future issue #17.
-- Crossings: inserts are permitted only while the parent race is `active`; reads, corrections (soft-delete via update), and deletes remain available to the owning organizer in any race status.
-- Race status transitions: enforced by a trigger regardless of caller, not by RLS alone (RLS still confirms event ownership).
-- Crossing corrections: editing a bib/time or restoring a soft-deleted crossing is gated by a trigger requiring a reason, not by RLS alone; `crossing_corrections` itself is read-only to organizers (owner-scoped) and is only ever written by the `security definer` trigger/functions.
+- Entries: adding/removing an entry (insert/delete) is permitted only while the corresponding race is `upcoming`. Updates are scoped to the owner or an `organizer`-role member in any race status; the `entries_write_guard` trigger (not RLS) rejects roster identity (bib/name/team/category) changes outside `upcoming`, while allowing `status`/`status_reason` changes at any time.
+- Crossings: inserts are permitted only while the parent race is `active`; reads, corrections (soft-delete via update), and deletes remain available to the owning organizer (or a `scorer`/`organizer` member) in any race status.
+- Race status transitions: enforced by a trigger regardless of caller, not by RLS alone (RLS still confirms event ownership or an `organizer`-role `event_members` grant, see below).
+- Crossing corrections: editing a bib/time or restoring a soft-deleted crossing is gated by a trigger requiring a reason, not by RLS alone; `correct_crossing()`/`restore_crossing()` confirm the caller is the owner or an `organizer`/`scorer`-role member, same as `reopen_race()`. `crossing_corrections` itself is read-only (owner or `organizer`/`scorer`-role member) and is only ever written by the `security definer` trigger/functions.
+- Entry status transitions: attribution (`status_set_by`/`status_set_at`) is written only by a trigger, never accepted from the client; every transition is logged to `entry_status_changes`.
+- Authenticated volunteer: an accepted row in `event_members` grants role-scoped access to one event, independent of `owner_id` (see ADR 0006). `organizer` members can manage roster/races/participants/invites (including rider status) like the owner (but not delete the event) and share the owner's `reopen_race` authority; `scorer` members can record/undo/correct crossings and start/finish races (crossing inserts still require an `active` race); `checkin` and `official` members get read-only access to the private (draft) event.
+- Invite links (`event_invites`) are single-use and expire after 14 days. Looking up or accepting one goes through the `preview_event_invite` / `accept_event_invite` security-definer functions rather than a direct SELECT policy, so tokens are never listable.
 
-Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_crossing_corrections` adds the `crossing_corrections` audit table, the correction guard/audit triggers, and the `correct_crossing`/`restore_crossing` functions.
+Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_volunteer_roles` adds volunteer roles and invite links. Migration `20260827000006_race_entry_statuses` adds rider status, its audit log, and splits the entries write policy into insert/delete (upcoming-only) and update (owner/organizer-member, field-level lock via trigger). Migration `20260827000007_crossing_corrections` adds the `crossing_corrections` audit table, the correction guard/audit triggers, and the `correct_crossing`/`restore_crossing` functions.
+
+### Resolving a user's access to an event
+
+`apps/web/src/lib/useEventAccess.ts` resolves, for the signed-in user and one event, whether they are the `owner`, an `event_members` role, or have no access — this drives both the event setup page and the scorer page. It is a UX convenience only; the RLS policies above are the actual enforcement boundary.

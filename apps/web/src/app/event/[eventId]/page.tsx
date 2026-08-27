@@ -6,9 +6,18 @@ import { CheckIcon, PencilIcon, PlusIcon, XMarkIcon } from "@heroicons/react/20/
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
+import { canManageEvent, canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
 import { raceTemplates } from "@/lib/raceTemplates";
-import type { Entry, EventRow, Participant, Race, Sex } from "@/lib/types";
+import type { Entry, EventInvite, EventMember, EventMemberRole, EventRow, Participant, Race, Sex } from "@/lib/types";
+
+const roleOptions: { value: EventMemberRole; label: string; hint: string }[] = [
+  { value: "organizer", label: "Organizer", hint: "Manages roster, races, and invites like the owner." },
+  { value: "scorer", label: "Scorer", hint: "Records crossings and starts/finishes races." },
+  { value: "checkin", label: "Check-in", hint: "Views the private roster before publish." },
+  { value: "official", label: "Read-only official", hint: "Views everything, cannot make changes." },
+];
+const roleLabel = (role: EventMemberRole) => roleOptions.find((option) => option.value === role)?.label ?? role;
 
 const categories = ["U13", "U15", "U17", "Junior", "U23", "Senior", "Master 35+", "Master 40+", "Master 50+", "Open"];
 const sexOptions: { value: Sex; label: string }[] = [
@@ -80,6 +89,60 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const [editDraft, setEditDraft] = useState<RiderDraft>(emptyDraft);
   const bibInputRef = useRef<HTMLInputElement>(null);
   const { user, loading: authLoading } = useAuth();
+  const { role, loading: roleLoading } = useEventAccess(eventId, user);
+  const manage = canManageEvent(role);
+  const [members, setMembers] = useState<EventMember[]>([]);
+  const [invites, setInvites] = useState<EventInvite[]>([]);
+  const [inviteRole, setInviteRole] = useState<EventMemberRole>("scorer");
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+
+  const refetchVolunteers = useCallback(async () => {
+    if (!manage) return;
+    const [ms, is] = await Promise.all([
+      supabase.from("event_members").select("*").eq("event_id", eventId).order("created_at"),
+      supabase.from("event_invites").select("*").eq("event_id", eventId).is("used_at", null).order("created_at", { ascending: false }),
+    ]);
+    if (ms.data) setMembers(ms.data);
+    if (is.data) setInvites(is.data);
+  }, [eventId, manage]);
+
+  useEffect(() => { refetchVolunteers(); }, [refetchVolunteers]);
+
+  const createInvite = async () => {
+    if (!user) return;
+    setCreatingInvite(true);
+    const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+    const { error } = await supabase.from("event_invites").insert({
+      event_id: eventId,
+      role: inviteRole,
+      token,
+      created_by: user.id,
+    });
+    setCreatingInvite(false);
+    if (!error) refetchVolunteers();
+  };
+
+  const revokeInvite = async (invite: EventInvite) => {
+    await supabase.from("event_invites").delete().eq("id", invite.id);
+    refetchVolunteers();
+  };
+
+  const revokeMember = async (member: EventMember) => {
+    await supabase.from("event_members").delete().eq("id", member.id);
+    refetchVolunteers();
+  };
+
+  const copyInviteLink = async (invite: EventInvite) => {
+    const link = `${origin}/invite/${invite.token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedInviteId(invite.id);
+      setTimeout(() => setCopiedInviteId(null), 1500);
+    } catch {
+      window.prompt("Copy invite link", link);
+    }
+  };
 
   const refetch = useCallback(async () => {
     const [ev, rs, en, ps] = await Promise.all([
@@ -94,7 +157,17 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     if (ps.data) setParticipants(ps.data);
   }, [eventId]);
 
-  useEffect(() => { refetch(); }, [refetch]);
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setEvent(null);
+      setRaces([]);
+      setEntries([]);
+      setParticipants([]);
+      return;
+    }
+    refetch();
+  }, [refetch, authLoading, user]);
   useEffect(() => { setOrigin(window.location.origin); }, []);
   useEffect(() => {
     if (!event) return;
@@ -243,17 +316,20 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     refetch();
   };
 
-  if (!event || authLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
-  if (!user || event.owner_id !== user.id) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email to manage this event.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+  if (authLoading || roleLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
+  if (!user || !role) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email, or use a volunteer invite link, to access this event.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+  if (!event) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
 
   return (
     <main className="race-page">
       <div className="race-topline--muted" />
       <RaceNav links={[{ href: `/results/${eventId}`, label: "Spectator results" }]} showAuth />
-      <header className="race-masthead"><div className="mx-auto max-w-3xl"><p className="race-kicker--muted">Event setup</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header>
+      <header className="race-masthead"><div className="mx-auto max-w-3xl"><p className="race-kicker--muted">Event setup{role && role !== "owner" && ` · Signed in as ${roleLabel(role)}`}</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
-      <section className="race-panel mt-8 p-4">
+      {!manage && <section className="race-panel mt-8 p-4"><p className="race-kicker--muted">Volunteer access</p><p className="mt-1 text-sm text-race-muted">You have <b>{roleLabel(role)}</b> access to this event. {canScore(role) ? "Open a race below to score it." : "Roster and race setup are read-only for your role."}</p></section>}
+
+      {manage && <section className="race-panel mt-8 p-4">
         <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">1. Event details</h2>{detailsSaved && <span className="text-xs font-bold text-race-muted">Saved</span>}</div>
         <p className="mt-1 text-sm text-race-muted">Shown to spectators on the results page and shared with anyone you invite.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -292,9 +368,9 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
           </div>
         </div>
         <button onClick={saveDetails} disabled={savingDetails} className="race-action--muted mt-4 disabled:opacity-50">{savingDetails ? "Saving…" : "Save details"}</button>
-      </section>
+      </section>}
 
-      <section className="race-panel mt-6 p-4">
+      {manage && <section className="race-panel mt-6 p-4">
         <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">2. Event roster</h2><span className="text-sm font-bold text-race-muted">{participants.length} racers</span></div>
         <p className="mt-1 text-sm text-race-muted">Add each racer once, then place them in one or more races below.</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_1fr_150px_72px_auto]">
@@ -368,21 +444,21 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
             </table>
           </div>
         )}
-      </section>
+      </section>}
 
       <section className="mt-6">
-        <div className="race-section-heading flex items-baseline justify-between"><h2 className="text-base font-black uppercase">3. Races</h2><span className="text-sm font-bold text-race-muted">Create then assign racers</span></div>
+        <div className="race-section-heading flex items-baseline justify-between"><h2 className="text-base font-black uppercase">3. Races</h2><span className="text-sm font-bold text-race-muted">{manage ? "Create then assign racers" : "Open a race to score it"}</span></div>
         <div className="mt-3 space-y-3">
           {races.map((race) => {
             const raceEntries = entries.filter((entry) => entry.race_id === race.id);
             const open = assigningRaceId === race.id;
             return <section key={race.id} className="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
-              <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}</p></div><div className="flex gap-2">{race.status === "upcoming" ? <button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button> : <span className="px-2 py-2 text-xs font-black uppercase text-race-muted">Roster locked</span>}<Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link></div></div>
+              <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}</p></div><div className="flex gap-2">{manage && (race.status === "upcoming" ? <button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button> : <span className="px-2 py-2 text-xs font-black uppercase text-race-muted">Roster locked</span>)}{canScore(role) && <Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link>}</div></div>
               {open && <div className="mt-4 grid gap-1 border-t border-gray-200 pt-3 dark:border-white/10 sm:grid-cols-2">{participants.map((participant) => { const assigned = raceEntries.some((entry) => entry.bib === participant.bib); return <label key={participant.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600" /><span className="text-sm text-gray-900 dark:text-white"><b>#{participant.bib}</b> {fullName(participant)}</span>{participant.category && <span className="ml-auto text-xs text-gray-500">{participant.category}</span>}</label>; })}</div>}
-              {raceEntries.length > 0 && !open && <div className="mt-3 flex flex-wrap gap-1.5">{raceEntries.map((entry) => <span key={entry.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{entry.bib}</b> {entry.name}</span>)}</div>}
+              {raceEntries.length > 0 && !open && <div className="mt-3 flex flex-wrap gap-1.5">{raceEntries.map((entry) => <span key={entry.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{entry.bib}</b> {entry.name}{entry.status !== "ok" && <b className="ml-1 uppercase text-race-red">{entry.status}</b>}</span>)}</div>}
             </section>;
           })}
-          <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15">
+          {manage && <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15">
             <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Add race</h3>
             <div className="mt-2">
               <label className="block text-xs font-black uppercase tracking-wide text-race-muted">Template (optional)</label>
@@ -402,13 +478,55 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
               })()}
             </div>
             <div className="mt-2 flex gap-2"><input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} /><input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} /><button onClick={addRace} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button></div>
-          </section>
+          </section>}
         </div>
       </section>
-      <section className="race-panel mt-6 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker--muted">4. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish once, then print or display this event QR code. Spectators choose their race from the results page.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action--muted">Publish event</button>}</div>
+
+      {manage && <section className="race-panel mt-6 p-4">
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">4. Volunteers</h2><span className="text-sm font-bold text-race-muted">{members.length} active</span></div>
+        <p className="mt-1 text-sm text-race-muted">Generate a role-scoped invite link for people helping you run the event. <Link href="/help" className="underline decoration-2 underline-offset-4">What can each role do?</Link></p>
+
+        <div className="mt-4 flex flex-wrap items-end gap-2">
+          <div>
+            <label className="block text-xs font-black uppercase tracking-wide">Role</label>
+            <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as EventMemberRole)} className={`mt-1 ${inputCls}`}>
+              {roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </div>
+          <button onClick={createInvite} disabled={creatingInvite} className="race-action--muted disabled:opacity-50">{creatingInvite ? "Generating…" : "Generate invite link"}</button>
+        </div>
+        <p className="mt-1 text-xs text-race-muted">{roleOptions.find((option) => option.value === inviteRole)?.hint} Links expire after 14 days or first use.</p>
+
+        {invites.length > 0 && (
+          <ul className="mt-4 divide-y divide-zinc-300 border-y-2 border-race-ink">
+            {invites.map((invite) => (
+              <li key={invite.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                <span><span className="bg-race-yellow px-2 py-0.5 text-xs font-black uppercase">{roleLabel(invite.role)}</span> <span className="ml-2 break-all text-xs text-race-muted">{origin}/invite/{invite.token}</span></span>
+                <span className="flex gap-3 text-xs font-black uppercase">
+                  <button onClick={() => copyInviteLink(invite)} className="text-race-ink underline decoration-2 underline-offset-4">{copiedInviteId === invite.id ? "Copied" : "Copy link"}</button>
+                  <button onClick={() => revokeInvite(invite)} className="text-race-muted hover:text-race-ink">Revoke</button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {members.length > 0 && (
+          <ul className="mt-4 divide-y divide-zinc-300 border-y-2 border-race-ink">
+            {members.map((member) => (
+              <li key={member.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                <span><span className="bg-race-panel-alt px-2 py-0.5 text-xs font-black uppercase">{roleLabel(member.role)}</span> <span className="ml-2 text-xs text-race-muted">{member.user_id}</span></span>
+                <button onClick={() => revokeMember(member)} className="text-xs font-black uppercase text-race-muted hover:text-race-ink">Revoke</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>}
+
+      {manage && <section className="race-panel mt-6 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker--muted">5. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish once, then print or display this event QR code. Spectators choose their race from the results page.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action--muted">Publish event</button>}</div>
         {event.status === "live" && origin && <div className="mt-5 border-2 border-race-ink bg-race-paper p-4"><div className="flex flex-wrap items-center gap-5">{(() => { const resultsUrl = `${origin}/results/${eventId}`; return <><QRCodeSVG value={resultsUrl} size={136} bgColor="#f4f1ea" fgColor="#18181b" /><div className="min-w-0"><p className="text-lg font-black uppercase">Event results QR</p><p className="mt-1 max-w-md text-sm text-race-muted">One link for every live race and finished classification at this event.</p><p className="mt-3 break-all text-[10px] font-bold text-race-muted">{resultsUrl}</p><a href={resultsUrl} target="_blank" className="mt-3 inline-block text-xs font-black uppercase text-race-ink underline decoration-2 underline-offset-4">Open spectator results ↗</a></div></>; })()}</div></div>}
-      </section>
+      </section>}
       </div>
     </main>
   );

@@ -21,6 +21,8 @@ export interface RaceStatusChange {
   created_at: string;
 }
 
+export type EntryStatus = "ok" | "dns" | "dnf" | "dsq";
+
 export interface Entry {
   id: string;
   race_id: string;
@@ -28,6 +30,20 @@ export interface Entry {
   name: string;
   team: string | null;
   category: string | null;
+  status: EntryStatus;
+  status_reason: string | null;
+  status_set_by: string | null;
+  status_set_at: string | null;
+}
+
+export interface EntryStatusChange {
+  id: string;
+  entry_id: string;
+  previous_status: EntryStatus;
+  new_status: EntryStatus;
+  reason: string | null;
+  actor: string;
+  created_at: string;
 }
 
 export type Sex = "M" | "F" | "X";
@@ -63,6 +79,33 @@ export interface CrossingCorrection {
   new_value: string | null;
   actor: string;
   reason: string | null;
+  created_at: string;
+}
+
+export type EventMemberRole = "organizer" | "scorer" | "checkin" | "official";
+
+// Access resolved for the signed-in user against a single event: the literal
+// event owner, an accepted event_members role, or none.
+export type EventAccessRole = "owner" | EventMemberRole | null;
+
+export interface EventMember {
+  id: string;
+  event_id: string;
+  user_id: string;
+  role: EventMemberRole;
+  invited_by: string | null;
+  created_at: string;
+}
+
+export interface EventInvite {
+  id: string;
+  event_id: string;
+  role: EventMemberRole;
+  token: string;
+  created_by: string;
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
   created_at: string;
 }
 
