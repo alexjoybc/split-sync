@@ -23,7 +23,7 @@ importers:
         specifier: ~57.0.2
         version: 57.0.2(expo@57.0.17)
       expo-haptics:
-        specifier: ^57.0.2
+        specifier: ~57.0.2
         version: 57.0.2(expo@57.0.17)
       expo-linking:
         specifier: ~57.0.8
