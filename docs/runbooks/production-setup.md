@@ -68,3 +68,14 @@ SUPABASE_DB_PASSWORD
 ```
 
 The workflow runs on `main` when a migration changes. Use Actions -> Apply Supabase migrations -> Run workflow to manually reconcile production.
+
+## Continuous Integration
+
+GitHub workflow: `CI` (`.github/workflows/ci.yml`), runs on every pull request into `main`.
+
+- `web` job: `pnpm --filter web lint`, `pnpm --filter web typecheck`, `pnpm --filter web build`.
+- `mobile` job: `pnpm --filter mobile lint`, `pnpm --filter mobile typecheck`.
+
+The web build step needs `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` because `src/lib/supabase.ts` throws at module load if they are unset. CI sets placeholder values (no real Supabase project is contacted during a build) so no repository secrets are required for this workflow.
+
+This is a pre-merge gate only; it does not deploy anything. Production builds still go through Vercel's own build/preview pipeline, and database migrations still ship only through the `Apply Supabase migrations` workflow above.

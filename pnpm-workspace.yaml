@@ -1,6 +1,8 @@
 packages:
   - "apps/*"
   - "packages/*"
+allowBuilds:
+  unrs-resolver: false
 minimumReleaseAgeExclude:
   - '@expo/cli@57.0.19'
   - '@expo/inline-modules@0.1.7'

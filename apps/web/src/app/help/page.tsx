@@ -169,7 +169,7 @@ export default function HelpPage() {
               your sprint interval.
             </li>
             <li>
-              Use the scorer screen to record crossings by tapping a rider's
+              Use the scorer screen to record crossings by tapping a rider&apos;s
               bib as they cross the line. Free-form bib entry is intentionally
               not supported — only assigned entries appear as tiles.
             </li>

@@ -51,7 +51,6 @@ function ResetPasswordContent() {
       active = false;
       listener.subscription.unsubscribe();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
   const updatePassword = async () => {
