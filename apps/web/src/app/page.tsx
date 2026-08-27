@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
+import { AuthStatus } from "@/components/AuthStatus";
 import type { EventRow, Race } from "@/lib/types";
 
 const statusStyle: Record<string, string> = {
@@ -28,7 +29,9 @@ export default function Home() {
       <header className="race-masthead">
         <div className="mx-auto flex max-w-3xl items-end justify-between gap-4">
           <div><p className="race-kicker">Grassroots race control</p><h1 className="race-title">SplitSync</h1></div>
-          {loading ? null : user ? <Link href="/new" className="race-action race-action--yellow">+ New event</Link> : <Link href="/login" className="race-action race-action--yellow">Organizer sign in</Link>}
+          <div className="flex items-center gap-4">
+            {loading ? null : user ? <><AuthStatus user={user} loading={loading} /><Link href="/new" className="race-action race-action--yellow">+ New event</Link></> : <Link href="/login" className="race-action race-action--yellow">Organizer sign in</Link>}
+          </div>
         </div>
       </header>
       <div className="mx-auto max-w-3xl px-4 pt-8 sm:px-6">
