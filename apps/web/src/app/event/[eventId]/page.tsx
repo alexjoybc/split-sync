@@ -2,11 +2,12 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CheckIcon, PencilIcon, PlusIcon, XMarkIcon } from "@heroicons/react/20/solid";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
-import { canManageEvent, canScore, useEventAccess } from "@/lib/useEventAccess";
+import { canCheckIn, canManageEvent, canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
 import { RosterCsvImport } from "@/components/RosterCsvImport";
 import { raceTemplates } from "@/lib/raceTemplates";
@@ -74,6 +75,7 @@ const emptyDraft: RiderDraft = { bib: "", firstName: "", lastName: "", team: "",
 
 export default function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = use(params);
+  const router = useRouter();
   const [event, setEvent] = useState<EventRow | null>(null);
   const [races, setRaces] = useState<Race[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -92,11 +94,16 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const { user, loading: authLoading } = useAuth();
   const { role, loading: roleLoading } = useEventAccess(eventId, user);
   const manage = canManageEvent(role);
+  const checkin = canCheckIn(role);
   const [members, setMembers] = useState<EventMember[]>([]);
   const [invites, setInvites] = useState<EventInvite[]>([]);
   const [inviteRole, setInviteRole] = useState<EventMemberRole>("scorer");
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [copiedInviteId, setCopiedInviteId] = useState<string | null>(null);
+  const [checkinQuery, setCheckinQuery] = useState("");
+  const [checkinCategory, setCheckinCategory] = useState("");
+  const [checkinStatus, setCheckinStatus] = useState<"all" | "in" | "out">("all");
+  const [checkinBusyId, setCheckinBusyId] = useState<string | null>(null);
 
   const refetchVolunteers = useCallback(async () => {
     if (!manage) return;
@@ -144,6 +151,12 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       window.prompt("Copy invite link", link);
     }
   };
+
+  const [cloning, setCloning] = useState(false);
+  const [cloneTitle, setCloneTitle] = useState("");
+  const [cloneRoster, setCloneRoster] = useState(false);
+  const [cloneSaving, setCloneSaving] = useState(false);
+  const [cloneError, setCloneError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
     const [ev, rs, en, ps] = await Promise.all([
@@ -228,6 +241,16 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const removeParticipant = async (participant: Participant) => {
     await supabase.from("participants").delete().eq("id", participant.id);
     refetch();
+  };
+
+  const toggleCheckIn = async (participant: Participant) => {
+    setCheckinBusyId(participant.id);
+    const { error } = await supabase.rpc("set_participant_checked_in", {
+      p_participant_id: participant.id,
+      p_checked_in: !participant.checked_in_at,
+    });
+    setCheckinBusyId(null);
+    if (!error) refetch();
   };
 
   const handleRiderKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -317,18 +340,82 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     refetch();
   };
 
+  const checkinCategories = Array.from(new Set(participants.map((p) => p.category).filter(Boolean))) as string[];
+  const checkedInCount = participants.filter((p) => p.checked_in_at).length;
+  const checkinList = participants.filter((participant) => {
+    if (checkinCategory && participant.category !== checkinCategory) return false;
+    if (checkinStatus === "in" && !participant.checked_in_at) return false;
+    if (checkinStatus === "out" && participant.checked_in_at) return false;
+    if (checkinQuery.trim()) {
+      const q = checkinQuery.trim().toLowerCase();
+      const haystack = `${participant.bib} ${fullName(participant)} ${participant.team ?? ""}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const openClone = () => {
+    setCloneTitle(event ? `${event.title} (copy)` : "");
+    setCloneRoster(false);
+    setCloneError(null);
+    setCloning(true);
+  };
+
+  const cloneEvent = async () => {
+    setCloneSaving(true);
+    setCloneError(null);
+    const { data, error } = await supabase.rpc("clone_event", {
+      p_event_id: eventId,
+      p_include_roster: cloneRoster,
+      p_title: cloneTitle.trim() || null,
+    });
+    setCloneSaving(false);
+    if (error || !data) {
+      setCloneError(error?.message ?? "Failed to clone event");
+      return;
+    }
+    router.push(`/event/${data.id}`);
+  };
+
   if (authLoading || roleLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
-  if (!user || !role) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email, or use a volunteer invite link, to access this event.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+  if (!user || !role) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email, or use a volunteer invite link, to access this event.</p><Link href={`/login?next=${encodeURIComponent(`/event/${eventId}`)}`} className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   if (!event) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
 
   return (
     <main className="race-page">
       <div className="race-topline--muted" />
       <RaceNav links={[{ href: `/results/${eventId}`, label: "Spectator results" }]} showAuth />
-      <header className="race-masthead"><div className="mx-auto max-w-3xl"><p className="race-kicker--muted">Event setup{role && role !== "owner" && ` · Signed in as ${roleLabel(role)}`}</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header>
+      <header className="race-masthead"><div className="mx-auto flex max-w-3xl items-end justify-between gap-4"><div><p className="race-kicker--muted">Event setup{role && role !== "owner" && ` · Signed in as ${roleLabel(role)}`}</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div>{manage && <button onClick={openClone} className="race-action--muted race-action--outline shrink-0">Clone event</button>}</div></header>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
-      {!manage && <section className="race-panel mt-8 p-4"><p className="race-kicker--muted">Volunteer access</p><p className="mt-1 text-sm text-race-muted">You have <b>{roleLabel(role)}</b> access to this event. {canScore(role) ? "Open a race below to score it." : "Roster and race setup are read-only for your role."}</p></section>}
+      {!manage && <section className="race-panel mt-8 p-4"><p className="race-kicker--muted">Volunteer access</p><p className="mt-1 text-sm text-race-muted">You have <b>{roleLabel(role)}</b> access to this event. {canScore(role) ? "Open a race below to score it." : checkin ? "Use the Check-in section below to confirm racers as they arrive." : "Roster and race setup are read-only for your role."}</p></section>}
+
+      {manage && cloning && (
+        <section className="race-panel mt-8 p-4">
+          <p className="race-kicker--muted">Clone event</p>
+          <p className="mt-2 text-sm text-race-muted">
+            Creates a new draft event with the same details, categories, and race structure. Race-day data
+            (entries, crossings, race status) is never copied — new races always start upcoming.
+          </p>
+          <div className="mt-3">
+            <label className="block text-xs font-black uppercase tracking-wide">New event title</label>
+            <input value={cloneTitle} onChange={(e) => setCloneTitle(e.target.value)} className={`mt-1 ${inputCls}`} />
+          </div>
+          <label className="mt-3 flex cursor-pointer items-center gap-2">
+            <input type="checkbox" checked={cloneRoster} onChange={(e) => setCloneRoster(e.target.checked)} className="size-4 border-2 border-race-ink accent-race-ink" />
+            <span className="text-sm font-bold">Include participant roster</span>
+          </label>
+          {cloneError && <p className="mt-2 text-sm font-bold text-race-red">{cloneError}</p>}
+          <div className="mt-3 flex gap-3">
+            <button onClick={cloneEvent} disabled={cloneSaving || !cloneTitle.trim()} className="race-action--muted race-action--yellow disabled:opacity-40">
+              {cloneSaving ? "Cloning…" : "Confirm clone"}
+            </button>
+            <button onClick={() => { setCloning(false); setCloneError(null); }} className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4">
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
 
       {manage && <section className="race-panel mt-8 p-4">
         <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">1. Event details</h2>{detailsSaved && <span className="text-xs font-bold text-race-muted">Saved</span>}</div>
@@ -449,14 +536,77 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
         <RosterCsvImport eventId={eventId} participants={participants} races={races} onImported={refetch} />
       </section>}
 
+      {checkin && <section className="race-panel mt-6 p-4">
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">3. Check-in</h2><span className="text-sm font-bold text-race-muted">{checkedInCount} / {participants.length} checked in</span></div>
+        <p className="mt-1 text-sm text-race-muted">One tap to confirm a racer has arrived and collected their bib.</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_150px_150px]">
+          <input value={checkinQuery} onChange={(e) => setCheckinQuery(e.target.value)} placeholder="Search bib, name, or team" className={inputCls} />
+          <select value={checkinCategory} onChange={(e) => setCheckinCategory(e.target.value)} className={inputCls}>
+            <option value="">All categories</option>
+            {checkinCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+          </select>
+          <select value={checkinStatus} onChange={(e) => setCheckinStatus(e.target.value as "all" | "in" | "out")} className={inputCls}>
+            <option value="all">All riders</option>
+            <option value="in">Checked in</option>
+            <option value="out">Not checked in</option>
+          </select>
+        </div>
+
+        {participants.length === 0 && <p className="mt-4 text-sm text-race-muted">Add racers to the roster before check-in opens.</p>}
+        {participants.length > 0 && checkinList.length === 0 && <p className="mt-4 text-sm text-race-muted">No racers match this search or filter.</p>}
+
+        {checkinList.length > 0 && (
+          <div className="mt-4 overflow-hidden border-t-2 border-race-ink">
+            <table className="w-full table-fixed border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-zinc-300 text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
+                  <th className="w-14 py-2">Bib</th>
+                  <th className="py-2">Name</th>
+                  <th className="w-28 py-2">Team</th>
+                  <th className="w-24 py-2">Category</th>
+                  <th className="w-28 py-2">Status</th>
+                  <th className="w-24 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {checkinList.map((participant) => (
+                  <tr key={participant.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                    <td className="py-2 font-black tabular-nums">#{participant.bib}</td>
+                    <td className="truncate py-2 font-bold">{fullName(participant)}</td>
+                    <td className="truncate py-2 text-race-muted">{participant.team ?? "—"}</td>
+                    <td className="truncate py-2 text-race-muted">{participant.category ?? "—"}</td>
+                    <td className="py-2">
+                      {participant.checked_in_at ? (
+                        <span className="bg-race-yellow px-2 py-0.5 text-xs font-black uppercase text-race-ink">Checked in</span>
+                      ) : (
+                        <span className="bg-race-panel-alt px-2 py-0.5 text-xs font-black uppercase text-race-muted">Not in</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right">
+                      <button
+                        onClick={() => toggleCheckIn(participant)}
+                        disabled={checkinBusyId === participant.id}
+                        className="race-action--muted disabled:opacity-50"
+                      >
+                        {participant.checked_in_at ? "Undo" : "Check in"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>}
+
       <section className="mt-6">
-        <div className="race-section-heading flex items-baseline justify-between"><h2 className="text-base font-black uppercase">3. Races</h2><span className="text-sm font-bold text-race-muted">{manage ? "Create then assign racers" : "Open a race to score it"}</span></div>
+        <div className="race-section-heading flex items-baseline justify-between"><h2 className="text-base font-black uppercase">4. Races</h2><span className="text-sm font-bold text-race-muted">{manage ? "Create then assign racers" : "Open a race to score it"}</span></div>
         <div className="mt-3 space-y-3">
           {races.map((race) => {
             const raceEntries = entries.filter((entry) => entry.race_id === race.id);
             const open = assigningRaceId === race.id;
             return <section key={race.id} className="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
-              <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}</p></div><div className="flex gap-2">{manage && (race.status === "upcoming" ? <button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button> : <span className="px-2 py-2 text-xs font-black uppercase text-race-muted">Roster locked</span>)}{canScore(role) && <Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link>}</div></div>
+              <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}</p></div><div className="flex gap-2">{manage && (race.status === "upcoming" ? <button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button> : <span className="px-2 py-2 text-xs font-black uppercase text-race-muted">Roster locked</span>)}{role && <Link href={`/startlist/${race.id}`} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Start list</Link>}{canScore(role) && <Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link>}</div></div>
               {open && <div className="mt-4 grid gap-1 border-t border-gray-200 pt-3 dark:border-white/10 sm:grid-cols-2">{participants.map((participant) => { const assigned = raceEntries.some((entry) => entry.bib === participant.bib); return <label key={participant.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600" /><span className="text-sm text-gray-900 dark:text-white"><b>#{participant.bib}</b> {fullName(participant)}</span>{participant.category && <span className="ml-auto text-xs text-gray-500">{participant.category}</span>}</label>; })}</div>}
               {raceEntries.length > 0 && !open && <div className="mt-3 flex flex-wrap gap-1.5">{raceEntries.map((entry) => <span key={entry.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{entry.bib}</b> {entry.name}{entry.status !== "ok" && <b className="ml-1 uppercase text-race-red">{entry.status}</b>}</span>)}</div>}
             </section>;
@@ -486,7 +636,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       </section>
 
       {manage && <section className="race-panel mt-6 p-4">
-        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">4. Volunteers</h2><span className="text-sm font-bold text-race-muted">{members.length} active</span></div>
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">5. Volunteers</h2><span className="text-sm font-bold text-race-muted">{members.length} active</span></div>
         <p className="mt-1 text-sm text-race-muted">Generate a role-scoped invite link for people helping you run the event. <Link href="/help" className="underline decoration-2 underline-offset-4">What can each role do?</Link></p>
 
         <div className="mt-4 flex flex-wrap items-end gap-2">
@@ -527,7 +677,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       </section>}
 
       {manage && <section className="race-panel mt-6 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker--muted">5. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish once, then print or display this event QR code. Spectators choose their race from the results page.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action--muted">Publish event</button>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker--muted">6. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish once, then print or display this event QR code. Spectators choose their race from the results page.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action--muted">Publish event</button>}</div>
         {event.status === "live" && origin && <div className="mt-5 border-2 border-race-ink bg-race-paper p-4"><div className="flex flex-wrap items-center gap-5">{(() => { const resultsUrl = `${origin}/results/${eventId}`; return <><QRCodeSVG value={resultsUrl} size={136} bgColor="#f4f1ea" fgColor="#18181b" /><div className="min-w-0"><p className="text-lg font-black uppercase">Event results QR</p><p className="mt-1 max-w-md text-sm text-race-muted">One link for every live race and finished classification at this event.</p><p className="mt-3 break-all text-[10px] font-bold text-race-muted">{resultsUrl}</p><a href={resultsUrl} target="_blank" className="mt-3 inline-block text-xs font-black uppercase text-race-ink underline decoration-2 underline-offset-4">Open spectator results ↗</a></div></>; })()}</div></div>}
       </section>}
       </div>

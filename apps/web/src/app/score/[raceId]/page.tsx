@@ -17,9 +17,33 @@ const STATUS_OPTIONS: { value: EntryStatus; label: string }[] = [
   { value: "dsq", label: "DSQ" },
 ];
 
+// datetime-local inputs need "YYYY-MM-DDTHH:mm:ss.sss" in local time; round-trip
+// through the input's own timezone rather than assuming UTC.
+function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number, len = 2) => String(n).padStart(len, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+    d.getMinutes()
+  )}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+}
+
+interface EditState {
+  id: string;
+  bib: string;
+  time: string;
+  reason: string;
+  error: string | null;
+}
+
+interface RestoreState {
+  id: string;
+  reason: string;
+  error: string | null;
+}
+
 export default function Scorer({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
-  const { race, entries, crossings, loading, refetch } = useRaceData(raceId);
+  const { race, entries, crossings, deletedCrossings, loading, refetch } = useRaceData(raceId);
   const [pending, setPending] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
@@ -29,6 +53,8 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const [reopening, setReopening] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [reopenError, setReopenError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<EditState | null>(null);
+  const [restoring, setRestoring] = useState<RestoreState | null>(null);
 
   // Retry offline queue: on reconnect + every 5s
   useEffect(() => {
@@ -69,6 +95,36 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
     refetch();
   };
 
+  const startEdit = (c: { id: string; bib: string; client_recorded_at: string }) => {
+    setEditing({ id: c.id, bib: c.bib, time: toDatetimeLocal(c.client_recorded_at), reason: "", error: null });
+  };
+
+  const saveEdit = async () => {
+    if (!editing) return;
+    const { error } = await supabase.rpc("correct_crossing", {
+      p_crossing_id: editing.id,
+      p_bib: editing.bib,
+      p_client_recorded_at: new Date(editing.time).toISOString(),
+      p_reason: editing.reason,
+    });
+    if (error) return setEditing({ ...editing, error: error.message });
+    setEditing(null);
+    refetch();
+  };
+
+  const startRestore = (id: string) => setRestoring({ id, reason: "", error: null });
+
+  const confirmRestore = async () => {
+    if (!restoring) return;
+    const { error } = await supabase.rpc("restore_crossing", {
+      p_crossing_id: restoring.id,
+      p_reason: restoring.reason,
+    });
+    if (error) return setRestoring({ ...restoring, error: error.message });
+    setRestoring(null);
+    refetch();
+  };
+
   const setRaceStatus = async (status: "active" | "finished") => {
     // started_at/finished_at are set by the races_lifecycle_guard trigger.
     await supabase.from("races").update({ status }).eq("id", raceId);
@@ -104,7 +160,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   }
 
   if (!user || !allowed) {
-    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event owner or an invited organizer/scorer can score this race. Ask the organizer for an invite link.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event owner or an invited organizer/scorer can score this race. Ask the organizer for an invite link.</p><Link href={`/login?next=${encodeURIComponent(`/score/${raceId}`)}`} className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   }
 
   return (
@@ -233,26 +289,143 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         })}
       </div>
 
-      {/* Recent crossings with undo */}
+      {/* Recent crossings with edit/undo */}
       <ul className="mt-4 border-y-2 border-race-ink divide-y divide-zinc-300">
         {recent.map((c) => (
-          <li key={c.id} className="flex items-center justify-between py-2 text-sm">
-            <span className="text-race-ink">
-              <span className="font-bold tabular-nums">#{c.bib}</span>
-              <span className="ml-2 text-race-muted">
-                lap {lapsByBib.get(c.bib) ?? "?"} ·{" "}
-                {new Date(c.client_recorded_at).toLocaleTimeString()}
+          <li key={c.id} className="py-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-race-ink">
+                <span className="font-bold tabular-nums">#{c.bib}</span>
+                <span className="ml-2 text-race-muted">
+                  lap {lapsByBib.get(c.bib) ?? "?"} ·{" "}
+                  {new Date(c.client_recorded_at).toLocaleTimeString()}
+                </span>
               </span>
-            </span>
-            <button
-              onClick={() => undo(c.id)}
-              className="font-black uppercase text-race-ink underline decoration-2 underline-offset-4 hover:no-underline"
-            >
-              Undo
-            </button>
+              <span className="flex gap-3">
+                <button
+                  onClick={() => startEdit(c)}
+                  className="font-black uppercase text-race-ink underline decoration-2 underline-offset-4 hover:no-underline"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => undo(c.id)}
+                  className="font-black uppercase text-race-ink underline decoration-2 underline-offset-4 hover:no-underline"
+                >
+                  Undo
+                </button>
+              </span>
+            </div>
+
+            {editing?.id === c.id && (
+              <div className="race-panel mt-2 p-3">
+                <label className="block text-xs font-bold uppercase tracking-wide text-race-muted">
+                  Bib
+                  <input
+                    value={editing.bib}
+                    onChange={(e) => setEditing({ ...editing, bib: e.target.value })}
+                    className="mt-1 w-full border-2 border-race-ink bg-white p-2 text-sm tabular-nums"
+                  />
+                </label>
+                <label className="mt-2 block text-xs font-bold uppercase tracking-wide text-race-muted">
+                  Crossing time
+                  <input
+                    type="datetime-local"
+                    step="0.001"
+                    value={editing.time}
+                    onChange={(e) => setEditing({ ...editing, time: e.target.value })}
+                    className="mt-1 w-full border-2 border-race-ink bg-white p-2 text-sm tabular-nums"
+                  />
+                </label>
+                <label className="mt-2 block text-xs font-bold uppercase tracking-wide text-race-muted">
+                  Reason (required)
+                  <textarea
+                    value={editing.reason}
+                    onChange={(e) => setEditing({ ...editing, reason: e.target.value })}
+                    placeholder="Why is this crossing being corrected?"
+                    className="mt-1 w-full border-2 border-race-ink bg-white p-2 text-sm"
+                    rows={2}
+                  />
+                </label>
+                {editing.error && <p className="mt-2 text-sm font-bold text-race-red">{editing.error}</p>}
+                <div className="mt-3 flex gap-3">
+                  <button
+                    onClick={saveEdit}
+                    disabled={!editing.reason.trim() || !editing.bib.trim()}
+                    className="race-action--muted race-action--yellow disabled:opacity-40"
+                  >
+                    Save correction
+                  </button>
+                  <button
+                    onClick={() => setEditing(null)}
+                    className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </li>
         ))}
       </ul>
+
+      {/* Recently removed crossings, restorable with a reason */}
+      {deletedCrossings.length > 0 && (
+        <div className="mt-4">
+          <p className="race-kicker--muted">Recently removed</p>
+          <ul className="mt-2 border-y-2 border-race-ink divide-y divide-zinc-300">
+            {deletedCrossings.map((c) => (
+              <li key={c.id} className="py-2 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-race-ink">
+                    <span className="font-bold tabular-nums">#{c.bib}</span>
+                    <span className="ml-2 text-race-muted">
+                      {new Date(c.client_recorded_at).toLocaleTimeString()}
+                    </span>
+                  </span>
+                  <button
+                    onClick={() => startRestore(c.id)}
+                    className="font-black uppercase text-race-ink underline decoration-2 underline-offset-4 hover:no-underline"
+                  >
+                    Restore
+                  </button>
+                </div>
+
+                {restoring?.id === c.id && (
+                  <div className="race-panel mt-2 p-3">
+                    <label className="block text-xs font-bold uppercase tracking-wide text-race-muted">
+                      Reason (required)
+                      <textarea
+                        value={restoring.reason}
+                        onChange={(e) => setRestoring({ ...restoring, reason: e.target.value })}
+                        placeholder="Why is this crossing being restored?"
+                        className="mt-1 w-full border-2 border-race-ink bg-white p-2 text-sm"
+                        rows={2}
+                      />
+                    </label>
+                    {restoring.error && <p className="mt-2 text-sm font-bold text-race-red">{restoring.error}</p>}
+                    <div className="mt-3 flex gap-3">
+                      <button
+                        onClick={confirmRestore}
+                        disabled={!restoring.reason.trim()}
+                        className="race-action--muted race-action--yellow disabled:opacity-40"
+                      >
+                        Confirm restore
+                      </button>
+                      <button
+                        onClick={() => setRestoring(null)}
+                        className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       </div>
     </main>
   );

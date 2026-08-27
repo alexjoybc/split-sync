@@ -5,7 +5,7 @@
 1. Confirm `https://splitsync.org` loads on mobile data.
 2. Sign in as the event organizer on web and mobile tracker.
 3. Confirm the event roster and every race assignment. For large CX fields, build the roster ahead of time with the CSV importer on the event setup page rather than entering riders one at a time on race morning.
-4. If volunteers are helping (scoring, check-in, officiating), open the event setup page's Volunteers section and generate one invite link per person with the role they need (see `apps/web/src/app/help/organizer/volunteers`). Have them accept it and confirm they can open the web scorer before race day.
+4. If volunteers are helping (scoring, check-in, officiating), open the event setup page's Volunteers section and generate one invite link per person with the role they need (see `apps/web/src/app/help/organizer/volunteers`). Have them accept it and confirm they can open the web scorer or check-in section before race day.
 5. Publish the event and open the event QR code.
 6. Scan the QR code with a second phone; confirm public results load.
 7. Charge the tracker phone and bring a backup battery.
@@ -13,15 +13,17 @@
 
 ## At The Event
 
-1. Open the race in the web scorer or native tracker. Volunteer scorers use the web scorer with their invite-based sign-in; the mobile tracker remains owner-only for now.
-2. Verify the bib grid matches the riders on the start line.
-3. Mark any no-show as **DNS** before the start — the tile stays visible but greys out and can't record crossings.
-4. Start the race at the start gun. This locks the roster.
-5. Tap each assigned bib once when that rider crosses the line.
-6. Watch the pending-sync indicator. It should be zero when connected.
-7. Use web scorer undo for an accidental crossing; soft deletion updates spectators immediately.
-8. If a rider crashes, abandons, or is pulled from the race, mark them **DNF** or **DSQ** on the scorer screen — they stay on the live board with that badge instead of a misleading lap count.
-9. Finish the race only after the final crossing sequence is recorded.
+1. As racers arrive, check them in from the event setup page's Check-in section (or have a check-in volunteer do it from their own phone/tablet). This works from any device with a browser — no app install needed.
+2. Open each race's Start list (linked next to Score) to confirm entries and check-in status before the gun. Print it if you want a paper copy at the start line.
+3. Open the race in the web scorer or native tracker. Volunteer scorers use the web scorer with their invite-based sign-in; the mobile tracker remains owner-only for now.
+4. Verify the bib grid matches the riders on the start line.
+5. Mark any no-show as **DNS** before the start — the tile stays visible but greys out and can't record crossings.
+6. Start the race at the start gun. This locks the roster.
+7. Tap each assigned bib once when that rider crosses the line.
+8. Watch the pending-sync indicator. It should be zero when connected.
+9. Use web scorer undo for an accidental crossing; soft deletion updates spectators immediately.
+10. If a rider crashes, abandons, or is pulled from the race, mark them **DNF** or **DSQ** on the scorer screen — they stay on the live board with that badge instead of a misleading lap count.
+11. Finish the race only after the final crossing sequence is recorded.
 
 ## If Connectivity Fails
 

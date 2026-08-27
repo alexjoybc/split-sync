@@ -57,6 +57,7 @@ export interface Participant {
   team: string | null;
   category: string | null;
   sex: Sex | null;
+  checked_in_at: string | null;
 }
 
 export interface Crossing {
@@ -67,6 +68,19 @@ export interface Crossing {
   recorded_at: string;
   client_recorded_at: string;
   deleted_at: string | null;
+}
+
+export type CrossingCorrectionField = "bib" | "client_recorded_at" | "deleted_at";
+
+export interface CrossingCorrection {
+  id: string;
+  crossing_id: string;
+  field_changed: CrossingCorrectionField;
+  previous_value: string | null;
+  new_value: string | null;
+  actor: string;
+  reason: string | null;
+  created_at: string;
 }
 
 export type EventMemberRole = "organizer" | "scorer" | "checkin" | "official";

@@ -1,4 +1,27 @@
+import Image from "next/image";
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
+
+const screenshots = [
+  {
+    src: "/screenshots/live-board.webp",
+    alt: "SplitSync public live classification board showing overall standings by rank, bib, rider, laps, last lap time, and gap",
+    label: "Live board",
+    detail: "What spectators watch",
+  },
+  {
+    src: "/screenshots/announcer-view.webp",
+    alt: "SplitSync announcer view highlighting the current race leader and top of the field on a dark screen for track-side displays",
+    label: "Announcer view",
+    detail: "What the mic booth reads",
+  },
+  {
+    src: "/screenshots/event-roster.webp",
+    alt: "SplitSync organizer event roster screen listing racers with bib, name, team, category, and sex",
+    label: "Event roster",
+    detail: "What the organizer sets up",
+  },
+];
 
 const features = [
   {
@@ -83,9 +106,7 @@ export default function Home() {
           aria-label="Primary"
           className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6"
         >
-          <span className="text-lg font-black uppercase tracking-tight text-race-ink">
-            SplitSync
-          </span>
+          <Logo size="lg" />
           <div className="hidden items-center gap-6 md:flex">
             <a href="#features" className="text-[11px] font-black uppercase tracking-wide text-race-muted hover:text-race-red">
               Capabilities
@@ -141,6 +162,50 @@ export default function Home() {
               <li>Works when trackside wifi drops</li>
               <li>Free to run your first event</li>
             </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* Screenshots — sideways diagonal split showing the three surfaces */}
+      <section className="border-b-2 border-race-ink bg-race-ink">
+        <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
+          <div className="max-w-2xl border-b-2 border-white/20 pb-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-yellow">See it live</p>
+            <h2 className="mt-1 text-2xl font-black uppercase text-white sm:text-3xl">
+              This is what actually shows up on race night
+            </h2>
+          </div>
+          <div className="mt-8 flex flex-col">
+            {screenshots.map((shot, i) => (
+              <div
+                key={shot.src}
+                className="group relative h-64 w-full overflow-hidden border-2 border-race-ink sm:h-80"
+                style={{
+                  clipPath:
+                    i === 0
+                      ? "polygon(0 0, 100% 0, 100% calc(100% - 28px), 0 100%)"
+                      : i === screenshots.length - 1
+                        ? "polygon(0 28px, 100% 0, 100% 100%, 0 100%)"
+                        : "polygon(0 28px, 100% 0, 100% calc(100% - 28px), 0 100%)",
+                  marginTop: i === 0 ? 0 : "-28px",
+                }}
+              >
+                <Image
+                  src={shot.src}
+                  alt={shot.alt}
+                  fill
+                  sizes="100vw"
+                  className="object-cover object-top transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+                  priority={i === 0}
+                />
+                <div className="absolute inset-y-0 left-0 flex flex-col justify-center bg-race-ink/90 px-6">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-yellow">
+                    {shot.detail}
+                  </p>
+                  <p className="text-sm font-black uppercase tracking-wide text-white">{shot.label}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -321,8 +386,8 @@ export default function Home() {
       <footer className="border-t-2 border-race-ink bg-race-panel">
         <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
-            <p className="text-sm font-black uppercase tracking-tight">SplitSync</p>
-            <p className="mt-1 max-w-md text-xs font-bold uppercase tracking-wide text-race-muted">
+            <Logo size="md" />
+            <p className="mt-2 max-w-md text-xs font-bold uppercase tracking-wide text-race-muted">
               Live, unofficial race classification for grassroots velodrome and
               cyclocross.
             </p>

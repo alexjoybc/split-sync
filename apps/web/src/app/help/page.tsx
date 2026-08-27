@@ -102,12 +102,36 @@ export default function HelpPage() {
               added one at a time with the regular add-racer form.
             </li>
             <li>
+              Running a recurring series? Use <strong>Clone event</strong> on an
+              existing event to start a new draft with the same details,
+              categories, and race structure. Optionally include a copy of the
+              participant roster. Cloning never copies race-day data — the new
+              event starts as a draft with no entries, crossings, or results,
+              and its races always start <strong>upcoming</strong>.
+            </li>
+            <li>
               A race can only be edited (name, entries) while it is
               <strong> upcoming</strong>. Starting a race locks its entry list.
             </li>
             <li>
               Publish an event before race day so spectators can find its live
               and results pages. Draft events are only visible to you.
+            </li>
+            <li>
+              From your event setup page&apos;s <strong>Check-in</strong>{" "}
+              section, tap <strong>Check in</strong> next to a racer as they
+              arrive and collect their bib. Search or filter by category or
+              check-in status to find them quickly on a busy morning. Check-in
+              is per-event, so it applies across every race a racer is
+              entered in.
+            </li>
+            <li>
+              Each race has a <strong>Start list</strong> link (next to{" "}
+              <strong>Score</strong>) showing its entries — bib, name, team,
+              category, and check-in status — sorted by bib or category. Toggle{" "}
+              <strong>Checked-in only</strong> to see just the racers ready to
+              start, and use <strong>Print</strong> for a paper copy at the
+              start line.
             </li>
             <li>
               Use the scorer screen to record crossings by tapping a rider's
@@ -131,6 +155,19 @@ export default function HelpPage() {
               An accidental crossing can be removed without reopening: use{" "}
               <strong>Undo</strong> next to it in the scorer&apos;s recent list.
               This works whether the race is active or finished.
+            </li>
+            <li>
+              Tapped the wrong bib, or the time looks off? Use{" "}
+              <strong>Edit</strong> next to a recent crossing to correct its
+              bib or time. A reason is required and is kept in the
+              crossing&apos;s audit history; the crossing&apos;s identity
+              (used for offline sync) is never changed, so standings update
+              live from the correction.
+            </li>
+            <li>
+              Undid a crossing by mistake? Find it under{" "}
+              <strong>Recently removed</strong> below the recent list and tap{" "}
+              <strong>Restore</strong>. A reason is required, same as editing.
             </li>
             <li>
               Mark a rider <strong>DNS</strong>, <strong>DNF</strong>, or{" "}
@@ -160,7 +197,7 @@ export default function HelpPage() {
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
             <li><strong>Organizer</strong> — everything you can do except delete the event: roster, races, publishing, and inviting/revoking other volunteers.</li>
             <li><strong>Scorer</strong> — records and undoes crossings, and starts/finishes races. Cannot edit the roster or event details.</li>
-            <li><strong>Check-in</strong> — can view the private roster before publish, to help confirm racers as they arrive.</li>
+            <li><strong>Check-in</strong> — can view the private roster before publish and one-tap check racers in as they arrive, without being able to edit their bib, name, team, or category.</li>
             <li><strong>Read-only official</strong> — can view the event, roster, races, and crossings without changing anything.</li>
           </ul>
           <p className="mt-4 text-sm font-semibold text-zinc-700">
