@@ -21,6 +21,7 @@ export function RaceNav({ links, showAuth = false }: { links?: NavLink[]; showAu
         <Link href="/" className="text-sm font-black uppercase tracking-tight text-race-ink hover:text-race-red">SplitSync</Link>
         <div className="flex items-center gap-4">
           {links && links.length > 0 && links.map((link) => <Link key={link.href} href={link.href} className="text-[11px] font-black uppercase tracking-wide text-race-muted hover:text-race-red">{link.label}</Link>)}
+          <Link href="/help" className="text-[11px] font-black uppercase tracking-wide text-race-muted hover:text-race-red">Help</Link>
           {showAuth && <RaceNavAuth />}
         </div>
       </div>

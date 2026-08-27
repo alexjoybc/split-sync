@@ -30,6 +30,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-3xl items-end justify-between gap-4">
           <div><p className="race-kicker--muted">Grassroots race control</p><h1 className="race-title">SplitSync</h1></div>
           <div className="flex items-center gap-4">
+            <Link href="/help" className="race-action--muted race-action--outline">Help</Link>
             {loading ? null : user ? <><AuthStatus user={user} loading={loading} /><Link href="/new" className="race-action--muted race-action--yellow">+ New event</Link></> : <Link href="/login" className="race-action--muted race-action--yellow">Organizer sign in</Link>}
           </div>
         </div>
