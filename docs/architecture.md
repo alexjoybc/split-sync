@@ -10,6 +10,7 @@
 | `entries` | Roster participants assigned to a specific race; frozen on start |
 | `crossings` | A recorded line crossing: race, bib, client UUID, client/server timestamps, source |
 | `race_status_changes` | Append-only audit log of every race status transition, written by a trigger |
+| `crossing_corrections` | Append-only audit log of every crossing edit/restore, written by a trigger |
 
 `crossings` intentionally does not foreign-key `bib` to `entries`. It keeps a factual audit record and allows future connector ingestion. The current UI only presents assigned entries as tappable inputs.
 
@@ -37,6 +38,18 @@ race:  upcoming -> active -> finished
 - Every race status change (including ordinary start/finish) is recorded in
   `race_status_changes` with the previous/new status, actor, timestamp, and
   optional reason, via an `after update` trigger.
+- Crossings support two correction primitives beyond plain soft-delete:
+  editing a crossing's `bib`/`client_recorded_at` via `correct_crossing()`,
+  and restoring a soft-deleted crossing via `restore_crossing()`. Both are
+  `security definer` Postgres functions requiring event ownership and a
+  non-empty reason, and both preserve the crossing's original `id`/`client_id`
+  (the offline-retry idempotency key) — a correction only ever changes the
+  displayed bib or time, never the crossing's identity. Every such change,
+  plus every plain soft-delete, is recorded in `crossing_corrections` (actor,
+  previous/new value, and — for edits/restores — a required reason) by a
+  `crossings_correction_guard`/`crossings_correction_audit` trigger pair that
+  enforces this regardless of which client performs the underlying `UPDATE`.
+  See ADR 0006.
 
 ## Standings
 
@@ -63,5 +76,6 @@ Supabase RLS enforces the application boundary:
 - Crossings: organizer-only for now. Event-scoped scorer access is future issue #17.
 - Crossings: inserts are permitted only while the parent race is `active`; reads, corrections (soft-delete via update), and deletes remain available to the owning organizer in any race status.
 - Race status transitions: enforced by a trigger regardless of caller, not by RLS alone (RLS still confirms event ownership).
+- Crossing corrections: editing a bib/time or restoring a soft-deleted crossing is gated by a trigger requiring a reason, not by RLS alone; `crossing_corrections` itself is read-only to organizers (owner-scoped) and is only ever written by the `security definer` trigger/functions.
 
-Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy.
+Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_crossing_corrections` adds the `crossing_corrections` audit table, the correction guard/audit triggers, and the `correct_crossing`/`restore_crossing` functions.

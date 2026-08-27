@@ -111,6 +111,19 @@ export default function HelpPage() {
               <strong>Undo</strong> next to it in the scorer&apos;s recent list.
               This works whether the race is active or finished.
             </li>
+            <li>
+              Tapped the wrong bib, or the time looks off? Use{" "}
+              <strong>Edit</strong> next to a recent crossing to correct its
+              bib or time. A reason is required and is kept in the
+              crossing&apos;s audit history; the crossing&apos;s identity
+              (used for offline sync) is never changed, so standings update
+              live from the correction.
+            </li>
+            <li>
+              Undid a crossing by mistake? Find it under{" "}
+              <strong>Recently removed</strong> below the recent list and tap{" "}
+              <strong>Restore</strong>. A reason is required, same as editing.
+            </li>
           </ul>
         </section>
 
