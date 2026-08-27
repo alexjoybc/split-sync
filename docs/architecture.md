@@ -5,7 +5,7 @@
 | Table | Purpose |
 | --- | --- |
 | `events` | Event metadata, publication status, provider-neutral organizer `owner_id` |
-| `participants` | Event-level racer roster: bib, name, team, category, sex |
+| `participants` | Event-level racer roster: bib, first/last name, team, category, sex |
 | `races` | A race/category within an event, planned laps and lifecycle state |
 | `entries` | Roster participants assigned to a specific race; frozen on start |
 | `crossings` | A recorded line crossing: race, bib, client UUID, client/server timestamps, source |

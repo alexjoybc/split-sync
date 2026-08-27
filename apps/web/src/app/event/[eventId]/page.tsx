@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PlusIcon, XMarkIcon } from "@heroicons/react/20/solid";
+import { CheckIcon, PencilIcon, PlusIcon, XMarkIcon } from "@heroicons/react/20/solid";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
@@ -17,16 +17,25 @@ const sexOptions: { value: Sex; label: string }[] = [
 ];
 const inputCls = "race-input--muted";
 
+function fullName(person: { first_name: string; last_name: string | null }) {
+  return [person.first_name, person.last_name].filter(Boolean).join(" ");
+}
+
+type RiderDraft = { bib: string; firstName: string; lastName: string; team: string; category: string; sex: Sex | "" };
+const emptyDraft: RiderDraft = { bib: "", firstName: "", lastName: "", team: "", category: "", sex: "" };
+
 export default function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = use(params);
   const [event, setEvent] = useState<EventRow | null>(null);
   const [races, setRaces] = useState<Race[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [rider, setRider] = useState<{ bib: string; name: string; team: string; category: string; sex: Sex | "" }>({ bib: "", name: "", team: "", category: "", sex: "" });
+  const [rider, setRider] = useState<RiderDraft>(emptyDraft);
   const [newRace, setNewRace] = useState({ name: "", laps: "" });
   const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<RiderDraft>(emptyDraft);
   const bibInputRef = useRef<HTMLInputElement>(null);
   const { user, loading: authLoading } = useAuth();
 
@@ -47,17 +56,18 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   useEffect(() => { setOrigin(window.location.origin); }, []);
 
   const addParticipant = async () => {
-    if (!rider.bib.trim() || !rider.name.trim()) return;
+    if (!rider.bib.trim() || !rider.firstName.trim()) return;
     const { error } = await supabase.from("participants").insert({
       event_id: eventId,
       bib: rider.bib.trim(),
-      name: rider.name.trim(),
+      first_name: rider.firstName.trim(),
+      last_name: rider.lastName.trim() || null,
       team: rider.team.trim() || null,
       category: rider.category || null,
       sex: rider.sex || null,
     });
     if (!error) {
-      setRider({ bib: "", name: "", team: "", category: rider.category, sex: rider.sex });
+      setRider({ ...emptyDraft, category: rider.category, sex: rider.sex });
       refetch();
       bibInputRef.current?.focus();
     }
@@ -70,6 +80,47 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
 
   const handleRiderKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") addParticipant();
+  };
+
+  const startEdit = (participant: Participant) => {
+    setEditingId(participant.id);
+    setEditDraft({
+      bib: participant.bib,
+      firstName: participant.first_name,
+      lastName: participant.last_name ?? "",
+      team: participant.team ?? "",
+      category: participant.category ?? "",
+      sex: participant.sex ?? "",
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft(emptyDraft);
+  };
+
+  const saveEdit = async () => {
+    if (!editingId || !editDraft.bib.trim() || !editDraft.firstName.trim()) return;
+    const { error } = await supabase
+      .from("participants")
+      .update({
+        bib: editDraft.bib.trim(),
+        first_name: editDraft.firstName.trim(),
+        last_name: editDraft.lastName.trim() || null,
+        team: editDraft.team.trim() || null,
+        category: editDraft.category || null,
+        sex: editDraft.sex || null,
+      })
+      .eq("id", editingId);
+    if (!error) {
+      cancelEdit();
+      refetch();
+    }
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") saveEdit();
+    if (e.key === "Escape") cancelEdit();
   };
 
   const addRace = async () => {
@@ -93,7 +144,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       await supabase.from("entries").insert({
         race_id: race.id,
         bib: participant.bib,
-        name: participant.name,
+        name: fullName(participant),
         team: participant.team,
         category: participant.category,
       });
@@ -119,9 +170,10 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       <section className="race-panel mt-8 p-4">
         <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">1. Event roster</h2><span className="text-sm font-bold text-race-muted">{participants.length} racers</span></div>
         <p className="mt-1 text-sm text-race-muted">Add each racer once, then place them in one or more races below.</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_150px_72px_auto]">
+        <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_1fr_150px_72px_auto]">
           <input ref={bibInputRef} value={rider.bib} onChange={(e) => setRider({ ...rider, bib: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Bib" inputMode="numeric" className={inputCls} />
-          <input value={rider.name} onChange={(e) => setRider({ ...rider, name: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Racer name" className={inputCls} />
+          <input value={rider.firstName} onChange={(e) => setRider({ ...rider, firstName: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="First name" className={inputCls} />
+          <input value={rider.lastName} onChange={(e) => setRider({ ...rider, lastName: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Last name" className={inputCls} />
           <input value={rider.team} onChange={(e) => setRider({ ...rider, team: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Team / club" className={inputCls} />
           <input value={rider.category} onChange={(e) => setRider({ ...rider, category: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Category" list="categories" className={inputCls} />
           <select value={rider.sex} onChange={(e) => setRider({ ...rider, sex: e.target.value as Sex | "" })} className={inputCls}>
@@ -138,28 +190,53 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
               <thead>
                 <tr className="border-b border-zinc-300 text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
                   <th className="w-14 py-2">Bib</th>
-                  <th className="py-2">Name</th>
-                  <th className="w-32 py-2">Team</th>
-                  <th className="w-28 py-2">Category</th>
+                  <th className="py-2">First</th>
+                  <th className="py-2">Last</th>
+                  <th className="w-28 py-2">Team</th>
+                  <th className="w-24 py-2">Category</th>
                   <th className="w-12 py-2">Sex</th>
-                  <th className="w-8 py-2" />
+                  <th className="w-16 py-2" />
                 </tr>
               </thead>
               <tbody>
-                {participants.map((participant) => (
-                  <tr key={participant.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
-                    <td className="py-2 font-black tabular-nums">#{participant.bib}</td>
-                    <td className="truncate py-2 font-bold">{participant.name}</td>
-                    <td className="truncate py-2 text-race-muted">{participant.team ?? "—"}</td>
-                    <td className="truncate py-2 text-race-muted">{participant.category ?? "—"}</td>
-                    <td className="py-2 text-race-muted">{participant.sex ?? "—"}</td>
-                    <td className="py-2 text-right">
-                      <button onClick={() => removeParticipant(participant)} aria-label={`Remove #${participant.bib} ${participant.name}`} className="text-race-muted hover:text-race-ink">
-                        <XMarkIcon className="size-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {participants.map((participant) => {
+                  const editing = editingId === participant.id;
+                  if (editing) {
+                    return (
+                      <tr key={participant.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                        <td className="py-1 pr-1"><input value={editDraft.bib} onChange={(e) => setEditDraft({ ...editDraft, bib: e.target.value })} onKeyDown={handleEditKeyDown} inputMode="numeric" className={`${inputCls} !py-1`} /></td>
+                        <td className="py-1 pr-1"><input value={editDraft.firstName} onChange={(e) => setEditDraft({ ...editDraft, firstName: e.target.value })} onKeyDown={handleEditKeyDown} className={`${inputCls} !py-1`} /></td>
+                        <td className="py-1 pr-1"><input value={editDraft.lastName} onChange={(e) => setEditDraft({ ...editDraft, lastName: e.target.value })} onKeyDown={handleEditKeyDown} className={`${inputCls} !py-1`} /></td>
+                        <td className="py-1 pr-1"><input value={editDraft.team} onChange={(e) => setEditDraft({ ...editDraft, team: e.target.value })} onKeyDown={handleEditKeyDown} className={`${inputCls} !py-1`} /></td>
+                        <td className="py-1 pr-1"><input value={editDraft.category} onChange={(e) => setEditDraft({ ...editDraft, category: e.target.value })} onKeyDown={handleEditKeyDown} list="categories" className={`${inputCls} !py-1`} /></td>
+                        <td className="py-1 pr-1">
+                          <select value={editDraft.sex} onChange={(e) => setEditDraft({ ...editDraft, sex: e.target.value as Sex | "" })} className={`${inputCls} !py-1`}>
+                            <option value="">—</option>
+                            {sexOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                          </select>
+                        </td>
+                        <td className="py-1 text-right whitespace-nowrap">
+                          <button onClick={saveEdit} aria-label="Save" className="text-race-muted hover:text-race-ink"><CheckIcon className="size-4" /></button>
+                          <button onClick={cancelEdit} aria-label="Cancel" className="ml-2 text-race-muted hover:text-race-ink"><XMarkIcon className="size-4" /></button>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={participant.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                      <td className="py-2 font-black tabular-nums">#{participant.bib}</td>
+                      <td className="truncate py-2 font-bold">{participant.first_name}</td>
+                      <td className="truncate py-2 font-bold">{participant.last_name ?? "—"}</td>
+                      <td className="truncate py-2 text-race-muted">{participant.team ?? "—"}</td>
+                      <td className="truncate py-2 text-race-muted">{participant.category ?? "—"}</td>
+                      <td className="py-2 text-race-muted">{participant.sex ?? "—"}</td>
+                      <td className="py-2 text-right whitespace-nowrap">
+                        <button onClick={() => startEdit(participant)} aria-label={`Edit #${participant.bib} ${fullName(participant)}`} className="text-race-muted hover:text-race-ink"><PencilIcon className="size-4" /></button>
+                        <button onClick={() => removeParticipant(participant)} aria-label={`Remove #${participant.bib} ${fullName(participant)}`} className="ml-2 text-race-muted hover:text-race-ink"><XMarkIcon className="size-4" /></button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -174,7 +251,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
             const open = assigningRaceId === race.id;
             return <section key={race.id} className="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
               <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}</p></div><div className="flex gap-2">{race.status === "upcoming" ? <button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button> : <span className="px-2 py-2 text-xs font-black uppercase text-race-muted">Roster locked</span>}<Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link></div></div>
-              {open && <div className="mt-4 grid gap-1 border-t border-gray-200 pt-3 dark:border-white/10 sm:grid-cols-2">{participants.map((participant) => { const assigned = raceEntries.some((entry) => entry.bib === participant.bib); return <label key={participant.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600" /><span className="text-sm text-gray-900 dark:text-white"><b>#{participant.bib}</b> {participant.name}</span>{participant.category && <span className="ml-auto text-xs text-gray-500">{participant.category}</span>}</label>; })}</div>}
+              {open && <div className="mt-4 grid gap-1 border-t border-gray-200 pt-3 dark:border-white/10 sm:grid-cols-2">{participants.map((participant) => { const assigned = raceEntries.some((entry) => entry.bib === participant.bib); return <label key={participant.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600" /><span className="text-sm text-gray-900 dark:text-white"><b>#{participant.bib}</b> {fullName(participant)}</span>{participant.category && <span className="ml-auto text-xs text-gray-500">{participant.category}</span>}</label>; })}</div>}
               {raceEntries.length > 0 && !open && <div className="mt-3 flex flex-wrap gap-1.5">{raceEntries.map((entry) => <span key={entry.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{entry.bib}</b> {entry.name}</span>)}</div>}
             </section>;
           })}
