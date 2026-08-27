@@ -9,6 +9,8 @@
 | `races` | A race/category within an event, planned laps and lifecycle state |
 | `entries` | Roster participants assigned to a specific race; frozen on start |
 | `crossings` | A recorded line crossing: race, bib, client UUID, client/server timestamps, source |
+| `event_members` | Accepted volunteer grant: event, JWT-subject `user_id`, role |
+| `event_invites` | Single-use, time-limited invite link: event, role, token, expiry |
 
 `crossings` intentionally does not foreign-key `bib` to `entries`. It keeps a factual audit record and allows future connector ingestion. The current UI only presents assigned entries as tappable inputs.
 
@@ -46,6 +48,11 @@ Supabase RLS enforces the application boundary:
 - Anonymous: select published event/race/entry/crossing data only.
 - Authenticated organizer: manage only rows belonging to events where `owner_id` matches the JWT subject.
 - Entries: organizer writes are permitted only while the corresponding race is `upcoming`.
-- Crossings: organizer-only for now. Event-scoped scorer access is future issue #17.
+- Authenticated volunteer: an accepted row in `event_members` grants role-scoped access to one event, independent of `owner_id` (see ADR 0004). `organizer` members can manage roster/races/participants/invites like the owner (but not delete the event); `scorer` members can record/undo crossings and start/finish races; `checkin` and `official` members get read-only access to the private (draft) event.
+- Invite links (`event_invites`) are single-use and expire after 14 days. Looking up or accepting one goes through the `preview_event_invite` / `accept_event_invite` security-definer functions rather than a direct SELECT policy, so tokens are never listable.
 
-Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock.
+Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration 20260827000004 adds volunteer roles and invite links.
+
+### Resolving a user's access to an event
+
+`apps/web/src/lib/useEventAccess.ts` resolves, for the signed-in user and one event, whether they are the `owner`, an `event_members` role, or have no access — this drives both the event setup page and the scorer page. It is a UX convenience only; the RLS policies above are the actual enforcement boundary.

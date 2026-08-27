@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useRaceData } from "@/lib/useRaceData";
 import { recordCrossing, flushQueue, pendingCount } from "@/lib/crossingQueue";
 import { useAuth } from "@/lib/useAuth";
+import { canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
 
 export default function Scorer({ params }: { params: Promise<{ raceId: string }> }) {
@@ -13,14 +14,9 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const { race, entries, crossings, loading, refetch } = useRaceData(raceId);
   const [pending, setPending] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
-  const [isOwner, setIsOwner] = useState(false);
   const { user, loading: authLoading } = useAuth();
-
-  useEffect(() => {
-    if (!race || !user) return setIsOwner(false);
-    supabase.from("events").select("owner_id").eq("id", race.event_id).single()
-      .then(({ data }) => setIsOwner(data?.owner_id === user.id));
-  }, [race, user]);
+  const { role, loading: roleLoading } = useEventAccess(race?.event_id, user);
+  const allowed = canScore(role);
 
   // Retry offline queue: on reconnect + every 5s
   useEffect(() => {
@@ -69,7 +65,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
     refetch();
   };
 
-  if (loading || authLoading || !race) {
+  if (loading || authLoading || roleLoading || !race) {
     return (
       <main className="race-page flex items-center justify-center text-race-muted">
         {loading ? "Loading…" : "Race not found"}
@@ -77,8 +73,8 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
     );
   }
 
-  if (!user || !isOwner) {
-    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Organizer sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event organizer can score this race until volunteer scorer access is configured.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+  if (!user || !allowed) {
+    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event owner or an invited organizer/scorer can score this race. Ask the organizer for an invite link.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   }
 
   return (
