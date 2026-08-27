@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, FlatList, Pressable, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -23,6 +23,11 @@ function Header({ title, onBack, onSignOut }: { title: string; onBack?: () => vo
 function Tracker() {
   const [session, setSession] = useState<Session | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [recovering, setRecovering] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [races, setRaces] = useState<Race[]>([]);
@@ -33,11 +38,13 @@ function Tracker() {
   const [pending, setPending] = useState(0);
 
   const consumeLink = useCallback(async (url: string) => {
+    const isRecovery = url.includes("auth/reset-password");
     const { queryParams } = Linking.parse(url);
     const code = typeof queryParams?.code === "string" ? queryParams.code : undefined;
     if (code) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) setMessage(error.message);
+      else if (isRecovery) setRecovering(true);
       return;
     }
     const fragment = url.split("#")[1];
@@ -45,7 +52,10 @@ function Tracker() {
     const params = new URLSearchParams(fragment);
     const accessToken = params.get("access_token");
     const refreshToken = params.get("refresh_token");
-    if (accessToken && refreshToken) await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    if (accessToken && refreshToken) {
+      await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      if (isRecovery) setRecovering(true);
+    }
   }, []);
 
   const incomingUrl = Linking.useLinkingURL();
@@ -81,6 +91,37 @@ function Tracker() {
     if (result.type === "success") await consumeLink(result.url);
     else if (result.type !== "cancel") setMessage("Google sign-in was interrupted. Try again.");
   };
+  const submitPassword = async () => {
+    setMessage(null);
+    if (authMode === "signin") {
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (error) setMessage(error.message);
+      return;
+    }
+    const { data, error } = await supabase.auth.signUp({
+      email: authEmail,
+      password: authPassword,
+      options: { emailRedirectTo: Linking.createURL("auth/callback") },
+    });
+    if (error) return setMessage(error.message);
+    if (!data.session) setMessage("Check your inbox to confirm your address, then sign in.");
+  };
+  const sendPasswordReset = async () => {
+    if (!authEmail) return setMessage("Enter your email above first, then tap forgot password.");
+    setMessage(null);
+    const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
+      redirectTo: Linking.createURL("auth/reset-password"),
+    });
+    setMessage(error ? error.message : "Reset link sent. Open it on this phone.");
+  };
+  const updatePassword = async () => {
+    if (newPassword.length < 8) return setMessage("Password must be at least 8 characters.");
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return setMessage(error.message);
+    setNewPassword("");
+    setRecovering(false);
+    setMessage("Password updated.");
+  };
   const chooseEvent = async (event: Event) => {
     const { data } = await supabase.from("races").select("id,event_id,name,laps_planned,status").eq("event_id", event.id).order("sequence_order");
     setSelectedEvent(event);
@@ -114,7 +155,9 @@ function Tracker() {
     setMessage(`Bib ${value} recorded`);
   };
 
-  if (!session) return <SafeAreaView style={styles.screen}><Header title="Organizer sign in" /><View style={styles.content}><View style={styles.panel}><Text style={styles.copy}>Sign in with your Google account to manage your events.</Text><View style={styles.space} /><Button title="Continue with Google" onPress={signInWithGoogle} variant="red" />{message && <Text style={styles.message}>{message}</Text>}</View></View><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
+  if (recovering) return <SafeAreaView style={styles.screen}><Header title="Reset password" /><View style={styles.content}><View style={styles.panel}><Text style={styles.copy}>Choose a new password for your account.</Text><Text style={styles.label}>NEW PASSWORD</Text><TextInput value={newPassword} onChangeText={setNewPassword} secureTextEntry autoCapitalize="none" placeholder="••••••••" placeholderTextColor={colors.muted} style={styles.input} /><View style={styles.space} /><Button title="Update password" onPress={updatePassword} variant="red" disabled={!newPassword} />{message && <Text style={styles.message}>{message}</Text>}</View></View><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
+
+  if (!session) return <SafeAreaView style={styles.screen}><Header title="Organizer sign in" /><View style={styles.content}><View style={styles.panel}><Text style={styles.copy}>Sign in with your Google account to manage your events.</Text><View style={styles.space} /><Button title="Continue with Google" onPress={signInWithGoogle} variant="red" /><View style={styles.space} /><Text style={styles.divider}>OR</Text><View style={styles.space} /><View style={styles.authToggle}><Pressable onPress={() => setAuthMode("signin")}><Text style={[styles.authToggleText, authMode === "signin" && styles.authToggleTextActive]}>SIGN IN</Text></Pressable><Text style={styles.authToggleText}>/</Text><Pressable onPress={() => setAuthMode("signup")}><Text style={[styles.authToggleText, authMode === "signup" && styles.authToggleTextActive]}>CREATE ACCOUNT</Text></Pressable></View><Text style={styles.label}>EMAIL</Text><TextInput value={authEmail} onChangeText={setAuthEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" placeholder="you@example.com" placeholderTextColor={colors.muted} style={styles.input} /><Text style={styles.label}>PASSWORD</Text><TextInput value={authPassword} onChangeText={setAuthPassword} secureTextEntry autoCapitalize="none" autoComplete={authMode === "signin" ? "password" : "password-new"} placeholder="••••••••" placeholderTextColor={colors.muted} style={styles.input} />{authMode === "signin" && <Pressable onPress={sendPasswordReset}><Text style={styles.forgot}>Forgot password?</Text></Pressable>}<View style={styles.space} /><Button title={authMode === "signin" ? "Sign in" : "Create account"} onPress={submitPassword} variant="dark" disabled={!authEmail || !authPassword} />{message && <Text style={styles.message}>{message}</Text>}</View></View><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
 
   if (!selectedEvent) return <SafeAreaView style={styles.screen}><Header title="My events" onSignOut={() => supabase.auth.signOut()} /><FlatList contentContainerStyle={styles.list} data={events} keyExtractor={(event) => event.id} onRefresh={loadEvents} refreshing={false} ListEmptyComponent={<Text style={styles.empty}>No events yet. Create an event on splitsync.org first.</Text>} renderItem={({ item }) => <Pressable onPress={() => chooseEvent(item)} style={styles.eventRow}><View><Text style={styles.eventTitle}>{item.title}</Text><Text style={styles.muted}>{item.location ?? "Location TBC"}</Text></View><Text style={styles.arrow}>›</Text></Pressable>} /><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
 
@@ -132,5 +175,5 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.paper }, redLine: { height: 7, backgroundColor: colors.red }, header: { backgroundColor: colors.panel, borderBottomWidth: 2, borderColor: colors.ink, padding: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }, navigation: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 22, paddingHorizontal: 20, backgroundColor: colors.paper, borderBottomWidth: 1, borderColor: colors.line }, navLink: { color: colors.red, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, kicker: { fontSize: 10, fontWeight: "900", letterSpacing: 2, color: colors.red, marginTop: 6 }, headerTitle: { fontSize: 25, fontWeight: "900", textTransform: "uppercase", color: colors.ink, marginTop: 2 }, back: { fontSize: 11, fontWeight: "900", letterSpacing: 1, color: colors.red }, content: { padding: 20 }, panel: { borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.panel, padding: 18 }, copy: { color: colors.muted, fontSize: 15, lineHeight: 22 }, label: { color: colors.ink, fontSize: 11, fontWeight: "900", letterSpacing: 1, marginTop: 22, marginBottom: 6 }, input: { borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.panel, color: colors.ink, padding: 13, fontWeight: "700", fontSize: 16 }, button: { minHeight: 52, alignItems: "center", justifyContent: "center", borderWidth: 2 }, button_dark: { borderColor: colors.ink, backgroundColor: colors.ink }, button_red: { borderColor: colors.red, backgroundColor: colors.red }, button_yellow: { borderColor: colors.ink, backgroundColor: colors.yellow }, button_outline: { borderColor: colors.ink, backgroundColor: "transparent" }, buttonText: { color: "white", fontWeight: "900", textTransform: "uppercase", fontSize: 13, letterSpacing: 1 }, buttonTextDark: { color: colors.ink }, disabled: { opacity: 0.4 }, space: { height: 12 }, message: { marginTop: 16, color: colors.red, fontWeight: "700", lineHeight: 20 }, list: { padding: 20, gap: 10 }, eventRow: { borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.panel, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, eventTitle: { color: colors.ink, fontSize: 17, fontWeight: "900", textTransform: "uppercase" }, muted: { color: colors.muted, fontSize: 13, fontWeight: "700", marginTop: 5 }, arrow: { color: colors.red, fontSize: 32, fontWeight: "300" }, empty: { color: colors.muted, textAlign: "center", fontSize: 15, fontWeight: "700", lineHeight: 22, padding: 32 }, statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 2, borderColor: colors.ink, paddingBottom: 14, marginBottom: 18 }, status: { color: colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 1 }, pending: { color: colors.red, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, instruction: { color: colors.muted, textAlign: "center", fontSize: 11, fontWeight: "900", letterSpacing: 1, marginBottom: 10 }, riderGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 }, riderTile: { width: "48.5%", minHeight: 118, borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.panel, padding: 12, justifyContent: "space-between" }, riderTileRecorded: { backgroundColor: colors.red, borderColor: colors.red }, riderBib: { color: colors.ink, fontSize: 28, fontWeight: "900" }, riderName: { color: colors.ink, fontSize: 14, fontWeight: "900", textTransform: "uppercase" }, riderLap: { color: colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, riderTileRecordedText: { color: "white" },
+  screen: { flex: 1, backgroundColor: colors.paper }, redLine: { height: 7, backgroundColor: colors.red }, header: { backgroundColor: colors.panel, borderBottomWidth: 2, borderColor: colors.ink, padding: 20, flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }, navigation: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 22, paddingHorizontal: 20, backgroundColor: colors.paper, borderBottomWidth: 1, borderColor: colors.line }, navLink: { color: colors.red, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, kicker: { fontSize: 10, fontWeight: "900", letterSpacing: 2, color: colors.red, marginTop: 6 }, headerTitle: { fontSize: 25, fontWeight: "900", textTransform: "uppercase", color: colors.ink, marginTop: 2 }, back: { fontSize: 11, fontWeight: "900", letterSpacing: 1, color: colors.red }, content: { padding: 20 }, panel: { borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.panel, padding: 18 }, copy: { color: colors.muted, fontSize: 15, lineHeight: 22 }, label: { color: colors.ink, fontSize: 11, fontWeight: "900", letterSpacing: 1, marginTop: 22, marginBottom: 6 }, input: { borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.panel, color: colors.ink, padding: 13, fontWeight: "700", fontSize: 16 }, button: { minHeight: 52, alignItems: "center", justifyContent: "center", borderWidth: 2 }, button_dark: { borderColor: colors.ink, backgroundColor: colors.ink }, button_red: { borderColor: colors.red, backgroundColor: colors.red }, button_yellow: { borderColor: colors.ink, backgroundColor: colors.yellow }, button_outline: { borderColor: colors.ink, backgroundColor: "transparent" }, buttonText: { color: "white", fontWeight: "900", textTransform: "uppercase", fontSize: 13, letterSpacing: 1 }, buttonTextDark: { color: colors.ink }, disabled: { opacity: 0.4 }, space: { height: 12 }, message: { marginTop: 16, color: colors.red, fontWeight: "700", lineHeight: 20 }, divider: { textAlign: "center", color: colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, authToggle: { flexDirection: "row", justifyContent: "center", gap: 10 }, authToggleText: { color: colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, authToggleTextActive: { color: colors.red }, forgot: { marginTop: 10, color: colors.muted, fontSize: 12, fontWeight: "700" }, list: { padding: 20, gap: 10 }, eventRow: { borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.panel, padding: 16, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, eventTitle: { color: colors.ink, fontSize: 17, fontWeight: "900", textTransform: "uppercase" }, muted: { color: colors.muted, fontSize: 13, fontWeight: "700", marginTop: 5 }, arrow: { color: colors.red, fontSize: 32, fontWeight: "300" }, empty: { color: colors.muted, textAlign: "center", fontSize: 15, fontWeight: "700", lineHeight: 22, padding: 32 }, statusRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomWidth: 2, borderColor: colors.ink, paddingBottom: 14, marginBottom: 18 }, status: { color: colors.ink, fontSize: 13, fontWeight: "900", letterSpacing: 1 }, pending: { color: colors.red, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, instruction: { color: colors.muted, textAlign: "center", fontSize: 11, fontWeight: "900", letterSpacing: 1, marginBottom: 10 }, riderGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 }, riderTile: { width: "48.5%", minHeight: 118, borderWidth: 2, borderColor: colors.ink, backgroundColor: colors.panel, padding: 12, justifyContent: "space-between" }, riderTileRecorded: { backgroundColor: colors.red, borderColor: colors.red }, riderBib: { color: colors.ink, fontSize: 28, fontWeight: "900" }, riderName: { color: colors.ink, fontSize: 14, fontWeight: "900", textTransform: "uppercase" }, riderLap: { color: colors.muted, fontSize: 11, fontWeight: "900", letterSpacing: 1 }, riderTileRecordedText: { color: "white" },
 });

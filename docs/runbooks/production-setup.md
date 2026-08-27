@@ -23,7 +23,9 @@ Auth URL configuration:
 Site URL: https://splitsync.org
 Redirect URLs:
 https://splitsync.org/auth/callback
+https://splitsync.org/auth/reset-password
 http://localhost:3000/auth/callback
+http://localhost:3000/auth/reset-password
 org.splitsync.tracker://**
 ```
 
@@ -38,7 +40,7 @@ Google OAuth is the organizer sign-in method. Set it up once:
 4. Configure the OAuth consent screen with the SplitSync name/logo and add `splitsync.org` as an authorized domain.
 5. The web login (`/login`) and mobile tracker both call `supabase.auth.signInWithOAuth({ provider: "google" })`; the redirect URLs above already cover the final app-side hop back to `/auth/callback`.
 
-Magic link is no longer used for organizer sign-in as of this setup; Resend SMTP below is retained only if email-based flows are reintroduced later.
+Email/password is a second organizer sign-in option, offered alongside Google. Sign-up confirmation and "forgot password" emails go through the Resend SMTP config below. Magic link (OTP) is no longer used.
 
 ## Resend And DNS
 
@@ -49,6 +51,7 @@ Sender: `noreply@splitsync.org`.
 - Add DMARC: `_dmarc` TXT `v=DMARC1; p=none`.
 - Configure Supabase Authentication SMTP with host `smtp.resend.com`, port `465`, username `resend`, and a Resend sending API key as the password.
 - Never put the Resend API key in web/mobile source, Vercel public variables, or GitHub repository variables.
+- In the Supabase dashboard, under Authentication -> Sign In / Providers -> Email, keep "Confirm email" enabled for production so `owner_id` always maps to a verified address.
 
 ## Migrations
 
