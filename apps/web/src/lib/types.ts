@@ -25,7 +25,8 @@ export interface Participant {
   id: string;
   event_id: string;
   bib: string;
-  name: string;
+  first_name: string;
+  last_name: string | null;
   team: string | null;
   category: string | null;
   sex: Sex | null;
