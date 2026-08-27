@@ -3,6 +3,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { setPendingAuthRedirect } from "@/lib/authRedirect";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -15,9 +16,10 @@ function LoginContent() {
 
   const signInWithGoogle = async () => {
     setError(null);
+    setPendingAuthRedirect(next);
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (authError) setError(authError.message);
   };
@@ -31,10 +33,11 @@ function LoginContent() {
       else window.location.assign(next);
       return;
     }
+    setPendingAuthRedirect(next);
     const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     if (authError) return setError(authError.message);
     if (data.session) window.location.assign(next);

@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { consumePendingAuthRedirect } from "@/lib/authRedirect";
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -11,7 +12,13 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     let active = true;
-    const next = params.get("next") || "/events";
+    // `next` was carried via sessionStorage (set on /login before redirecting
+    // to Google/email), not a `?next=` query string — Supabase's Redirect
+    // URL allow-list only permits the bare /auth/callback URL, so any query
+    // string on redirectTo fails validation and Supabase bounces to the
+    // Site URL instead of here. Fall back to the query param for any old
+    // links still in flight, then a sane default.
+    const next = consumePendingAuthRedirect(params.get("next") || "/events");
     const complete = () => router.replace(next);
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) complete();
