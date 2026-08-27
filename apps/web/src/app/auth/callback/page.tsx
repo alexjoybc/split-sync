@@ -11,7 +11,7 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     let active = true;
-    const complete = () => router.replace("/");
+    const complete = () => router.replace("/events");
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_IN" && session) complete();
     });

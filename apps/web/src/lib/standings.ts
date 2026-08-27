@@ -27,6 +27,87 @@ export function fmtLapTime(ms: number | null): string {
   return fmtDuration(ms);
 }
 
+/** Distinct, sorted category names present on a race's entries. */
+export function getCategories(entries: Entry[]): string[] {
+  const set = new Set<string>();
+  for (const e of entries) {
+    if (e.category && e.category.trim() !== "") set.add(e.category);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Narrow entries + crossings down to a single category before handing them
+ * to computeStandings, so rank/gap/last-lap are computed within that group
+ * only. Unregistered (unknown-bib) crossings have no category and are
+ * excluded from category views but remain visible in the overall view.
+ */
+export function filterByCategory(
+  crossings: Crossing[],
+  entries: Entry[],
+  category: string | null
+): { crossings: Crossing[]; entries: Entry[] } {
+  if (!category) return { crossings, entries };
+  const filteredEntries = entries.filter((e) => e.category === category);
+  const bibs = new Set(filteredEntries.map((e) => e.bib));
+  const filteredCrossings = crossings.filter((c) => bibs.has(c.bib));
+  return { crossings: filteredCrossings, entries: filteredEntries };
+}
+
+export interface RecentCrossing {
+  bib: string;
+  name: string;
+  team: string | null;
+  lap: number;
+  atMs: number;
+  lapMs: number | null;
+  isUnknownBib: boolean;
+}
+
+/**
+ * Flattens every non-deleted crossing (across all riders) into a single
+ * feed, newest first — used by the announcer/TV view to show "who just
+ * crossed the line" independent of per-rider standings order.
+ */
+export function getRecentCrossings(
+  crossings: Crossing[],
+  entries: Entry[],
+  raceStartMs?: number | null,
+  limit = 5
+): RecentCrossing[] {
+  const entryByBib = new Map(entries.map((e) => [e.bib, e]));
+  const byBib = new Map<string, number[]>();
+
+  for (const c of crossings) {
+    if (c.deleted_at) continue;
+    const t = new Date(c.client_recorded_at).getTime();
+    const arr = byBib.get(c.bib);
+    if (arr) arr.push(t);
+    else byBib.set(c.bib, [t]);
+  }
+
+  const all: RecentCrossing[] = [];
+  for (const [bib, timesRaw] of byBib) {
+    const times = [...timesRaw].sort((a, b) => a - b);
+    const entry = entryByBib.get(bib);
+    times.forEach((t, idx) => {
+      const lapMs = idx >= 1 ? t - times[idx - 1] : raceStartMs != null ? t - raceStartMs : null;
+      all.push({
+        bib,
+        name: entry?.name ?? `Bib ${bib}`,
+        team: entry?.team ?? null,
+        lap: idx + 1,
+        atMs: t,
+        lapMs,
+        isUnknownBib: !entry,
+      });
+    });
+  }
+
+  all.sort((a, b) => b.atMs - a.atMs);
+  return all.slice(0, limit);
+}
+
 /**
  * Derive live standings from raw crossings (mass-start lap racing).
  * Each non-deleted crossing = the rider completing a lap.

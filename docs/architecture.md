@@ -29,7 +29,7 @@ race:  upcoming -> active -> finished
   `finished -> active` reopen are legal transitions. Every other transition
   (e.g. skipping straight to `finished`, or reopening without a reason) is
   rejected at the database level by the `races_lifecycle_guard` trigger, not
-  just hidden in the UI. See ADR 0004.
+  just hidden in the UI. See ADR 0005.
 - Reopening a finished race is done through the `reopen_race(race_id, reason)`
   Postgres function, which requires a non-empty reason, checks event
   ownership, clears `finished_at`, and returns the race to `active`. Direct

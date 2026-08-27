@@ -1,4 +1,4 @@
-# ADR 0004: Race Lifecycle Enforcement At The Database Level
+# ADR 0005: Race Lifecycle Enforcement At The Database Level
 
 ## Status
 

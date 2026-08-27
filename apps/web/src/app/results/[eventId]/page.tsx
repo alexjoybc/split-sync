@@ -36,7 +36,7 @@ export default function EventResults({ params }: { params: Promise<{ eventId: st
   const when = formatWhen(event);
   const hasDetails = event.description || event.venue_address || when || event.contact_email || event.registration_url;
 
-  return <main className="race-page"><div className="race-topline" /><RaceNav links={[{ href: "/", label: "All events" }, { href: "/help/spectator", label: "Help" }]} /><header className="race-masthead"><div className="mx-auto max-w-2xl"><p className="race-kicker">SplitSync // event results</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header><div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
+  return <main className="race-page"><div className="race-topline" /><RaceNav links={[{ href: "/events", label: "All events" }, { href: "/help", label: "Help" }]} /><header className="race-masthead"><div className="mx-auto max-w-2xl"><p className="race-kicker">SplitSync // event results</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header><div className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
     {hasDetails && <div className="race-panel mb-6 overflow-hidden">
       {event.banner_image_url && <img src={event.banner_image_url} alt="" className="h-40 w-full object-cover" />}
       <div className="p-4">
