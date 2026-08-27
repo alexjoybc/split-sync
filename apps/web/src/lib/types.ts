@@ -19,6 +19,8 @@ export interface Entry {
   category: string | null;
 }
 
+export type Sex = "M" | "F" | "X";
+
 export interface Participant {
   id: string;
   event_id: string;
@@ -26,6 +28,7 @@ export interface Participant {
   name: string;
   team: string | null;
   category: string | null;
+  sex: Sex | null;
 }
 
 export interface Crossing {
