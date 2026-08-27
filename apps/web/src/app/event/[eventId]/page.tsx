@@ -80,6 +80,8 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const [rider, setRider] = useState<RiderDraft>(emptyDraft);
   const [newRace, setNewRace] = useState({ name: "", laps: "" });
   const [newRaceTemplateId, setNewRaceTemplateId] = useState("");
+  const [newRacePointsRace, setNewRacePointsRace] = useState(false);
+  const [newRaceSprintInterval, setNewRaceSprintInterval] = useState("5");
   const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
   const [details, setDetails] = useState<EventDetailsForm>(emptyDetails);
@@ -296,9 +298,13 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       name: newRace.name.trim(),
       sequence_order: races.length + 1,
       laps_planned: newRace.laps ? parseInt(newRace.laps, 10) : null,
+      is_points_race: newRacePointsRace,
+      ...(newRacePointsRace ? { sprint_interval_laps: newRaceSprintInterval ? parseInt(newRaceSprintInterval, 10) : 5 } : {}),
     });
     setNewRace({ name: "", laps: "" });
     setNewRaceTemplateId("");
+    setNewRacePointsRace(false);
+    setNewRaceSprintInterval("5");
     refetch();
   };
 
@@ -307,6 +313,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     const template = raceTemplates.find((t) => t.id === templateId);
     if (!template) return;
     setNewRace({ name: template.suggestedName, laps: template.defaultLaps ? String(template.defaultLaps) : "" });
+    setNewRacePointsRace(templateId === "velodrome-points");
   };
 
   const toggleAssignment = async (race: Race, participant: Participant, assigned: boolean) => {
@@ -545,7 +552,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
             const raceEntries = entries.filter((entry) => entry.race_id === race.id);
             const open = assigningRaceId === race.id;
             return <section key={race.id} className="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
-              <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}</p></div><div className="flex gap-2">{manage && (race.status === "upcoming" ? <button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button> : <span className="px-2 py-2 text-xs font-black uppercase text-race-muted">Roster locked</span>)}{role && <Link href={`/startlist/${race.id}`} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Start list</Link>}{canScore(role) && <Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link>}</div></div>
+              <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}{race.is_points_race && <span className="ml-2 rounded bg-race-yellow px-1.5 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide text-race-ink">Points race</span>}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}{race.is_points_race && ` · sprint every ${race.sprint_interval_laps} laps`}</p></div><div className="flex gap-2">{manage && (race.status === "upcoming" ? <button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button> : <span className="px-2 py-2 text-xs font-black uppercase text-race-muted">Roster locked</span>)}{role && <Link href={`/startlist/${race.id}`} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Start list</Link>}{canScore(role) && <Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link>}</div></div>
               {open && <div className="mt-4 grid gap-1 border-t border-gray-200 pt-3 dark:border-white/10 sm:grid-cols-2">{participants.map((participant) => { const assigned = raceEntries.some((entry) => entry.bib === participant.bib); return <label key={participant.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600" /><span className="text-sm text-gray-900 dark:text-white"><b>#{participant.bib}</b> {fullName(participant)}</span>{participant.category && <span className="ml-auto text-xs text-gray-500">{participant.category}</span>}</label>; })}</div>}
               {raceEntries.length > 0 && !open && <div className="mt-3 flex flex-wrap gap-1.5">{raceEntries.map((entry) => <span key={entry.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{entry.bib}</b> {entry.name}{entry.status !== "ok" && <b className="ml-1 uppercase text-race-red">{entry.status}</b>}</span>)}</div>}
             </section>;
@@ -570,6 +577,18 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
               })()}
             </div>
             <div className="mt-2 flex gap-2"><input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} /><input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} /><button onClick={addRace} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button></div>
+            <label className="mt-2 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-race-muted">
+              <input type="checkbox" checked={newRacePointsRace} onChange={(e) => setNewRacePointsRace(e.target.checked)} className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600" />
+              Points race — sprint every
+              <input
+                value={newRaceSprintInterval}
+                onChange={(e) => setNewRaceSprintInterval(e.target.value.replace(/\D/g, ""))}
+                disabled={!newRacePointsRace}
+                inputMode="numeric"
+                className={`${inputCls} !w-14 !py-1 disabled:opacity-40`}
+              />
+              laps, sprint points 5/3/2/1, final sprint doubled
+            </label>
           </section>}
         </div>
       </section>

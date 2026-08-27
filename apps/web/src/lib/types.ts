@@ -9,6 +9,14 @@ export interface Race {
   status: RaceStatus;
   started_at: string | null;
   finished_at: string | null;
+  // Velodrome points race scoring config (see apps/web/src/lib/pointsRace.ts).
+  // Meaningless when is_points_race is false.
+  is_points_race: boolean;
+  sprint_interval_laps: number;
+  sprint_points: number[];
+  final_sprint_multiplier: number;
+  lap_gain_bonus: number;
+  lap_loss_penalty: number;
 }
 
 export interface RaceStatusChange {
