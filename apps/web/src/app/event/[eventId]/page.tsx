@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckIcon, PencilIcon, PlusIcon, XMarkIcon } from "@heroicons/react/20/solid";
+import { CheckIcon, MagnifyingGlassIcon, PencilIcon, PlusIcon, XMarkIcon } from "@heroicons/react/20/solid";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
@@ -29,6 +29,11 @@ const sexOptions: { value: Sex; label: string }[] = [
 ];
 const timezones = ["America/Vancouver", "America/Edmonton", "America/Winnipeg", "America/Toronto", "America/Halifax", "UTC"];
 const inputCls = "race-input--muted";
+const raceStatusStyle: Record<string, string> = {
+  upcoming: "bg-zinc-200 text-zinc-700",
+  active: "bg-race-yellow text-race-ink",
+  finished: "bg-zinc-950 text-white",
+};
 
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return "";
@@ -84,6 +89,8 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const [newRace, setNewRace] = useState({ name: "", laps: "" });
   const [newRaceTemplateId, setNewRaceTemplateId] = useState("");
   const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
+  const [assignQuery, setAssignQuery] = useState("");
+  const [assignCategory, setAssignCategory] = useState("");
   const [origin, setOrigin] = useState("");
   const [details, setDetails] = useState<EventDetailsForm>(emptyDetails);
   const [savingDetails, setSavingDetails] = useState(false);
@@ -332,6 +339,32 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
         category: participant.category,
       });
     }
+    refetch();
+  };
+
+  const toggleAssigningRace = (raceId: string) => {
+    setAssigningRaceId((current) => (current === raceId ? null : raceId));
+    setAssignQuery("");
+    setAssignCategory("");
+  };
+
+  const assignCategoryToRace = async (race: Race, category: string) => {
+    if (race.status !== "upcoming" || !category) return;
+    const raceEntries = entries.filter((entry) => entry.race_id === race.id);
+    const toAssign = participants.filter((p) => p.category === category && !raceEntries.some((entry) => entry.bib === p.bib));
+    if (toAssign.length === 0) return;
+    await supabase.from("entries").insert(
+      toAssign.map((p) => ({ race_id: race.id, bib: p.bib, name: fullName(p), team: p.team, category: p.category }))
+    );
+    refetch();
+  };
+
+  const unassignCategoryFromRace = async (race: Race, category: string) => {
+    if (race.status !== "upcoming" || !category) return;
+    const raceEntries = entries.filter((entry) => entry.race_id === race.id);
+    const toRemove = raceEntries.filter((entry) => entry.category === category);
+    if (toRemove.length === 0) return;
+    await supabase.from("entries").delete().in("id", toRemove.map((entry) => entry.id));
     refetch();
   };
 
@@ -599,39 +632,140 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
         )}
       </section>}
 
-      <section className="mt-6">
-        <div className="race-section-heading flex items-baseline justify-between"><h2 className="text-base font-black uppercase">4. Races</h2><span className="text-sm font-bold text-race-muted">{manage ? "Create then assign racers" : "Open a race to score it"}</span></div>
-        <div className="mt-3 space-y-3">
+      <section className="race-panel mt-6 p-4">
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">4. Races</h2><span className="text-sm font-bold text-race-muted">{manage ? "Create then assign racers" : "Open a race to score it"}</span></div>
+        <p className="mt-1 text-sm text-race-muted">{manage ? "Create a race, then assign roster racers to it. Assignment locks once a race starts." : "Open a race below to score or view its start list."}</p>
+        <div className="mt-4 space-y-3">
           {races.map((race) => {
             const raceEntries = entries.filter((entry) => entry.race_id === race.id);
             const open = assigningRaceId === race.id;
-            return <section key={race.id} className="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800/75 dark:inset-ring dark:inset-ring-white/10">
-              <div className="flex items-center justify-between gap-3"><div><h3 className="text-sm font-semibold text-gray-900 dark:text-white">{race.name}</h3><p className="text-xs text-gray-500 dark:text-gray-400">{race.laps_planned ? `${race.laps_planned} laps` : "open-ended"} · {raceEntries.length} racers · {race.status}</p></div><div className="flex gap-2">{manage && (race.status === "upcoming" ? <button onClick={() => setAssigningRaceId(open ? null : race.id)} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Assign</button> : <span className="px-2 py-2 text-xs font-black uppercase text-race-muted">Roster locked</span>)}{role && <Link href={`/startlist/${race.id}`} className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-xs inset-ring inset-ring-gray-300 hover:bg-gray-50 dark:bg-white/10 dark:text-white dark:inset-ring-white/15">Start list</Link>}{canScore(role) && <Link href={`/score/${race.id}`} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Score</Link>}</div></div>
-              {open && <div className="mt-4 grid gap-1 border-t border-gray-200 pt-3 dark:border-white/10 sm:grid-cols-2">{participants.map((participant) => { const assigned = raceEntries.some((entry) => entry.bib === participant.bib); return <label key={participant.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600" /><span className="text-sm text-gray-900 dark:text-white"><b>#{participant.bib}</b> {fullName(participant)}</span>{participant.category && <span className="ml-auto text-xs text-gray-500">{participant.category}</span>}</label>; })}</div>}
-              {raceEntries.length > 0 && !open && <div className="mt-3 flex flex-wrap gap-1.5">{raceEntries.map((entry) => <span key={entry.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{entry.bib}</b> {entry.name}{entry.status !== "ok" && <b className="ml-1 uppercase text-race-red">{entry.status}</b>}</span>)}</div>}
-            </section>;
+            const assignable = manage && race.status === "upcoming";
+            const assignList = open
+              ? participants.filter((participant) => {
+                  if (assignCategory && participant.category !== assignCategory) return false;
+                  if (assignQuery.trim()) {
+                    const q = assignQuery.trim().toLowerCase();
+                    const haystack = `${participant.bib} ${fullName(participant)} ${participant.category ?? ""}`.toLowerCase();
+                    if (!haystack.includes(q)) return false;
+                  }
+                  return true;
+                })
+              : [];
+            const categoryUnassignedCount = assignCategory
+              ? participants.filter((p) => p.category === assignCategory && !raceEntries.some((entry) => entry.bib === p.bib)).length
+              : 0;
+            const categoryAssignedCount = assignCategory ? raceEntries.filter((entry) => entry.category === assignCategory).length : 0;
+            return (
+              <div key={race.id} className="border-2 border-race-ink">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div>
+                    <h3 className="text-sm font-black uppercase">{race.name}</h3>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-race-muted">
+                      <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${raceStatusStyle[race.status]}`}>{race.status}</span>
+                      <span>{race.laps_planned ? `${race.laps_planned} laps` : "Open-ended"}</span>
+                      <span>· {raceEntries.length}/{participants.length} assigned</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {manage && (assignable ? (
+                      <button onClick={() => toggleAssigningRace(race.id)} className="race-action--muted">{open ? "Close" : "Assign"}</button>
+                    ) : (
+                      <span className="self-center px-2 text-xs font-black uppercase text-race-muted">Roster locked</span>
+                    ))}
+                    {role && <Link href={`/startlist/${race.id}`} className="race-action--muted race-action--outline">Start list</Link>}
+                    {canScore(role) && <Link href={`/score/${race.id}`} className="race-action--muted race-action--yellow">Score</Link>}
+                  </div>
+                </div>
+
+                {open && (
+                  <div className="border-t-2 border-race-ink bg-race-panel-alt p-4">
+                    <div className="grid gap-2 sm:grid-cols-[1fr_160px]">
+                      <div className="relative">
+                        <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-race-muted" />
+                        <input value={assignQuery} onChange={(e) => setAssignQuery(e.target.value)} placeholder="Search bib, name, or category" className={`${inputCls} pl-9`} />
+                      </div>
+                      <select value={assignCategory} onChange={(e) => setAssignCategory(e.target.value)} className={inputCls}>
+                        <option value="">All categories</option>
+                        {checkinCategories.map((category) => <option key={category} value={category}>{category}</option>)}
+                      </select>
+                    </div>
+
+                    {assignCategory && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-race-muted">
+                        <span>{categoryAssignedCount}/{categoryAssignedCount + categoryUnassignedCount} of {assignCategory} assigned</span>
+                        <button
+                          onClick={() => assignCategoryToRace(race, assignCategory)}
+                          disabled={categoryUnassignedCount === 0}
+                          className="race-action--muted !px-2 !py-1 disabled:opacity-40"
+                        >
+                          Assign all in {assignCategory}
+                        </button>
+                        <button
+                          onClick={() => unassignCategoryFromRace(race, assignCategory)}
+                          disabled={categoryAssignedCount === 0}
+                          className="text-xs font-black uppercase text-race-ink underline decoration-2 underline-offset-4 disabled:opacity-40 disabled:no-underline"
+                        >
+                          Unassign all in {assignCategory}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="mt-3 max-h-80 overflow-y-auto border-t-2 border-race-ink">
+                      {assignList.length === 0 && <p className="py-3 text-sm text-race-muted">No racers match this search or filter.</p>}
+                      {assignList.map((participant) => {
+                        const assigned = raceEntries.some((entry) => entry.bib === participant.bib);
+                        return (
+                          <label key={participant.id} className="flex cursor-pointer items-center gap-2 border-b border-zinc-300 bg-race-panel px-2 py-2 even:bg-race-panel-alt hover:bg-race-yellow/30">
+                            <input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 border-2 border-race-ink accent-race-ink" />
+                            <span className="text-sm font-bold text-race-ink"><b className="tabular-nums">#{participant.bib}</b> {fullName(participant)}</span>
+                            {participant.category && <span className="ml-auto text-xs font-bold uppercase text-race-muted">{participant.category}</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {raceEntries.length > 0 && !open && (
+                  <div className="flex flex-wrap gap-1.5 border-t-2 border-race-ink p-4">
+                    {raceEntries.map((entry) => (
+                      <span key={entry.id} className="bg-race-panel-alt px-2.5 py-0.5 text-xs font-bold text-race-ink">
+                        <b>#{entry.bib}</b> {entry.name}
+                        {entry.status !== "ok" && <b className="ml-1 uppercase text-race-red">{entry.status}</b>}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
           })}
-          {manage && <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Add race</h3>
-            <div className="mt-2">
-              <label className="block text-xs font-black uppercase tracking-wide text-race-muted">Template (optional)</label>
-              <select value={newRaceTemplateId} onChange={(e) => applyRaceTemplate(e.target.value)} className={`mt-1 ${inputCls}`}>
-                <option value="">No template — custom race</option>
-                {raceTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
-              </select>
-              {newRaceTemplateId && (() => {
-                const template = raceTemplates.find((t) => t.id === newRaceTemplateId);
-                if (!template) return null;
-                return (
-                  <p className="mt-1 text-xs text-race-muted">
-                    {template.description} Suggested categories: {template.suggestedCategories.join(", ")}
-                    {template.suggestedDurationMinutes ? ` · ~${template.suggestedDurationMinutes} min` : ""}.
-                  </p>
-                );
-              })()}
+          {manage && (
+            <div className="border-2 border-dashed border-race-ink p-4">
+              <h3 className="text-sm font-black uppercase">Add race</h3>
+              <div className="mt-2">
+                <label className="block text-xs font-black uppercase tracking-wide text-race-muted">Template (optional)</label>
+                <select value={newRaceTemplateId} onChange={(e) => applyRaceTemplate(e.target.value)} className={`mt-1 ${inputCls}`}>
+                  <option value="">No template — custom race</option>
+                  {raceTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
+                </select>
+                {newRaceTemplateId && (() => {
+                  const template = raceTemplates.find((t) => t.id === newRaceTemplateId);
+                  if (!template) return null;
+                  return (
+                    <p className="mt-1 text-xs text-race-muted">
+                      {template.description} Suggested categories: {template.suggestedCategories.join(", ")}
+                      {template.suggestedDurationMinutes ? ` · ~${template.suggestedDurationMinutes} min` : ""}.
+                    </p>
+                  );
+                })()}
+              </div>
+              <div className="mt-2 flex gap-2">
+                <input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} />
+                <input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} />
+                <button onClick={addRace} className="race-action--muted shrink-0">Add</button>
+              </div>
             </div>
-            <div className="mt-2 flex gap-2"><input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} /><input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} /><button onClick={addRace} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button></div>
-          </section>}
+          )}
         </div>
       </section>
 
