@@ -1,0 +1,64 @@
+# SplitSync Agent Guide
+
+## Product Context
+
+SplitSync is live classification software for grassroots mass-start lap racing. The current MVP serves velodrome and cyclocross. It is not an official certified timing system; it provides live situational awareness and unofficial results.
+
+The product has three deliberate surfaces. Do not blend their permissions or goals.
+
+| Surface | Location | Audience | Rules |
+| --- | --- | --- | --- |
+| Spectator | `apps/web/src/app/live`, `apps/web/src/app/results` | Public | No sign-in, read-only, mobile-first, must never expose organizer controls |
+| Organizer admin | `apps/web/src/app`, `new`, `event`, `login`, `auth` | Event owner | Creates roster/races, publishes event, owns all writes through RLS |
+| Mobile tracker | `apps/mobile` | Event owner now, volunteers later | Start/finish and one-tap crossings only; no roster edits during a race |
+
+## Domain Invariants
+
+1. A crossing is the source of truth: `bib` crossed the line at `client_recorded_at`.
+2. Positions, lap counts, gaps, and last-lap times are derived from crossings. Never persist a calculated standing.
+3. Event roster (`participants`) is created once. A race's `entries` are selected from that roster.
+4. A race is editable only while `status = 'upcoming'`. Starting a race locks its entries at both UI and RLS levels.
+5. Spectators may read published events only. Draft events and all organizer writes are protected by Supabase RLS.
+6. `crossings.client_id` is a UUID idempotency key. Offline queue retries must preserve it to avoid duplicate laps.
+7. Unknown/free-form bib entry is intentionally not part of the current scorer UX. Assigned bib tiles are the scorer input.
+
+## Architecture
+
+- `apps/web`: Next.js 16 app. Uses direct browser Supabase client and Supabase Realtime.
+- `apps/mobile`: Expo SDK 57 React Native tracker. Uses AsyncStorage for auth persistence and pending crossings.
+- `supabase/migrations`: only place for database changes. Never edit an already-deployed migration; add the next migration.
+- `supabase/seed.sql`: local dry-run data only. Never run it against hosted production.
+- Hosted Supabase project ref: `bsihlrzncucrglqltjrc`.
+- Web production domain: `https://splitsync.org`.
+
+## Authentication And Authorization
+
+- Organizer web login uses Supabase magic links at `/login` and `/auth/callback`.
+- Mobile callback scheme is `org.splitsync.tracker://auth/callback`.
+- `events.owner_id` holds a JWT subject as text, not an `auth.users` foreign key. This intentionally supports current Supabase Auth and future OAuth/Auth0/OIDC providers.
+- Never use a Supabase `service_role`/secret key in web or mobile code.
+- Public URL and publishable key are allowed only through `NEXT_PUBLIC_*` (web) and `EXPO_PUBLIC_*` (mobile) variables.
+
+## UI System
+
+- The visual language is professional cycling classification: race-paper background, black rules, red actions, yellow leader emphasis, dense square tables.
+- Web theme tokens and reusable component classes live in `apps/web/src/app/globals.css`. Reuse `race-*` tokens/classes rather than introducing arbitrary hex values.
+- The spectator board may use a stronger black masthead. Organizer screens stay predominantly light and editorial.
+- Mobile uses the same palette in `apps/mobile/App.tsx`; centralize new colors in its `colors` object.
+
+## Working Rules
+
+- Create a GitHub issue and branch for non-trivial work. Use PRs; merge only after verification.
+- Reference issues in commits. Use `Closes #N` only when the work completes the issue.
+- Do not overwrite user/uncommitted changes. The live board may be concurrently edited.
+- Verify web work with `pnpm --filter web build`.
+- Verify mobile TypeScript with `pnpm --filter mobile exec tsc --noEmit`.
+- For native Android changes, rebuild with `pnpm --filter mobile exec expo run:android` and test on the connected device when available.
+
+## Operational Docs
+
+- `docs/architecture.md`: schema, realtime and security model.
+- `docs/runbooks/race-day.md`: organizer workflow at an event.
+- `docs/runbooks/production-setup.md`: Vercel, Supabase, DNS, Resend, migrations.
+- `docs/runbooks/mobile-development.md`: Android/iOS tracker build setup.
+- `docs/adr/`: architectural decisions and rationale.
