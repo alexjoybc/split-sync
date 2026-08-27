@@ -8,6 +8,17 @@ export interface Race {
   laps_planned: number | null;
   status: RaceStatus;
   started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface RaceStatusChange {
+  id: string;
+  race_id: string;
+  previous_status: RaceStatus;
+  new_status: RaceStatus;
+  reason: string | null;
+  actor: string;
+  created_at: string;
 }
 
 export interface Entry {

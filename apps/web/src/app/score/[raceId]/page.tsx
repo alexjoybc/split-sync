@@ -17,6 +17,9 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const { user, loading: authLoading } = useAuth();
   const { role, loading: roleLoading } = useEventAccess(race?.event_id, user);
   const allowed = canScore(role);
+  const [reopening, setReopening] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [reopenError, setReopenError] = useState<string | null>(null);
 
   // Retry offline queue: on reconnect + every 5s
   useEffect(() => {
@@ -58,10 +61,17 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   };
 
   const setRaceStatus = async (status: "active" | "finished") => {
-    await supabase
-      .from("races")
-      .update({ status, ...(status === "active" ? { started_at: new Date().toISOString() } : {}) })
-      .eq("id", raceId);
+    // started_at/finished_at are set by the races_lifecycle_guard trigger.
+    await supabase.from("races").update({ status }).eq("id", raceId);
+    refetch();
+  };
+
+  const reopenRace = async () => {
+    setReopenError(null);
+    const { error } = await supabase.rpc("reopen_race", { p_race_id: raceId, p_reason: reopenReason });
+    if (error) return setReopenError(error.message);
+    setReopening(false);
+    setReopenReason("");
     refetch();
   };
 
@@ -80,7 +90,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   return (
     <main className="race-page">
       <div className="race-topline--muted" />
-      <RaceNav links={[{ href: `/event/${race.event_id}`, label: "Event setup" }, { href: `/results/${race.event_id}`, label: "Spectator results" }]} showAuth />
+      <RaceNav links={[{ href: `/event/${race.event_id}`, label: "Event setup" }, { href: `/results/${race.event_id}`, label: "Spectator results" }, { href: "/help", label: "Help" }]} showAuth />
       <div className="mx-auto flex min-h-[calc(100dvh-0.5rem)] max-w-lg flex-col px-4 py-5">
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -113,11 +123,52 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
           </button>
         )}
         {race.status === "finished" && (
-          <Link href={`/live/${raceId}`} className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4">
-            View results
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href={`/live/${raceId}`} className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4">
+              View results
+            </Link>
+            <button onClick={() => setReopening(true)} className="race-action--muted">
+              Reopen race
+            </button>
+          </div>
         )}
       </div>
+
+      {reopening && (
+        <div className="race-panel mt-4 p-4">
+          <p className="race-kicker--muted">Reopen race</p>
+          <p className="mt-2 text-sm text-race-muted">
+            Reopening returns this race to active and clears its finish time. A reason is required and is kept in the
+            race&apos;s audit log.
+          </p>
+          <textarea
+            value={reopenReason}
+            onChange={(e) => setReopenReason(e.target.value)}
+            placeholder="Why does this race need to reopen?"
+            className="mt-3 w-full border-2 border-race-ink bg-white p-2 text-sm"
+            rows={2}
+          />
+          {reopenError && <p className="mt-2 text-sm font-bold text-race-red">{reopenError}</p>}
+          <div className="mt-3 flex gap-3">
+            <button
+              onClick={reopenRace}
+              disabled={!reopenReason.trim()}
+              className="race-action--muted race-action--yellow disabled:opacity-40"
+            >
+              Confirm reopen
+            </button>
+            <button
+              onClick={() => {
+                setReopening(false);
+                setReopenError(null);
+              }}
+              className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">Tap a rider as they cross the line</p>
       {race.status === "active" ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">

@@ -195,10 +195,14 @@ create policy "member read participants" on participants for select to authentic
   using (has_event_role(event_id, array['organizer', 'scorer', 'checkin', 'official']::event_member_role[]));
 
 -- Scorer (and organizer) volunteers record/undo crossings.
+-- Matches the owner-facing "organizer insert active race crossings" policy
+-- (see 20260827000004_race_lifecycle.sql): crossings may only be recorded
+-- while the race is active, regardless of who is recording them.
 create policy "member insert crossings" on crossings for insert to authenticated
   with check (exists (
     select 1 from races
     where races.id = crossings.race_id
+      and races.status = 'active'
       and has_event_role(races.event_id, array['organizer', 'scorer']::event_member_role[])
   ));
 
@@ -242,3 +246,39 @@ create policy "member manage upcoming race entries" on entries for all to authen
       and races.status = 'upcoming'
       and has_event_role(races.event_id, array['organizer']::event_member_role[])
   ));
+
+-- Extend reopen_race() (20260827000004_race_lifecycle.sql) so an
+-- organizer-role volunteer has the same lifecycle authority as the owner.
+create or replace function reopen_race(p_race_id uuid, p_reason text)
+returns races
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_race races;
+begin
+  if btrim(coalesce(p_reason, '')) = '' then
+    raise exception 'a reason is required to reopen a race';
+  end if;
+
+  select * into v_race from races where id = p_race_id;
+  if v_race is null then
+    raise exception 'race not found';
+  end if;
+
+  if not (is_event_owner(v_race.event_id) or has_event_role(v_race.event_id, array['organizer']::event_member_role[])) then
+    raise exception 'not authorized to reopen this race';
+  end if;
+
+  if v_race.status <> 'finished' then
+    raise exception 'only a finished race can be reopened';
+  end if;
+
+  perform set_config('splitsync.reopen_reason', btrim(p_reason), true);
+
+  update races set status = 'active' where id = p_race_id returning * into v_race;
+
+  return v_race;
+end;
+$$;

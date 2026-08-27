@@ -1,10 +1,12 @@
 "use client";
 
 import { use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
-import { computeStandings, fmtLapTime } from "@/lib/standings";
+import { computeStandings, filterByCategory, fmtLapTime, getCategories, type StandingRow } from "@/lib/standings";
 import { RaceNav } from "@/components/RaceNav";
+import type { Crossing, Entry } from "@/lib/types";
 
 function classNames(...classes: (string | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -23,15 +25,42 @@ function RaceClock({ startedAt }: { startedAt: string }) {
   return <span className="tabular-nums">{hours > 0 ? `${hours}:` : ""}{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>;
 }
 
+function computePodiums(
+  crossings: Crossing[],
+  entries: Entry[],
+  raceStartMs: number | null,
+  categories: string[]
+): { category: string; rows: StandingRow[] }[] {
+  const groups = categories.length > 0 ? categories : ["Overall"];
+  return groups.map((category) => {
+    const { crossings: c, entries: e } =
+      categories.length > 0 ? filterByCategory(crossings, entries, category) : { crossings, entries };
+    const rows = computeStandings(c, e, raceStartMs).filter((r) => r.laps > 0).slice(0, 3);
+    return { category, rows };
+  });
+}
+
 export default function LiveBoard({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
   const { race, entries, crossings, loading } = useRaceData(raceId);
   const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<string | null>(null);
+  const [showPodium, setShowPodium] = useState(false);
+
+  const categories = useMemo(() => getCategories(entries), [entries]);
+  const { crossings: scopedCrossings, entries: scopedEntries } = useMemo(
+    () => filterByCategory(crossings, entries, category),
+    [crossings, entries, category]
+  );
 
   const raceStartMs = race?.started_at ? new Date(race.started_at).getTime() : null;
   const standings = useMemo(
-    () => computeStandings(crossings, entries, raceStartMs),
-    [crossings, entries, raceStartMs]
+    () => computeStandings(scopedCrossings, scopedEntries, raceStartMs),
+    [scopedCrossings, scopedEntries, raceStartMs]
+  );
+  const podiums = useMemo(
+    () => (showPodium ? computePodiums(crossings, entries, raceStartMs, categories) : []),
+    [showPodium, crossings, entries, raceStartMs, categories]
   );
   const leader = standings[0];
   const leaderLaps = leader?.laps ?? 0;
@@ -86,7 +115,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
   return (
     <main className="min-h-dvh bg-race-paper pb-12 font-sans text-race-ink">
       <div className="race-topline" />
-      <RaceNav links={[{ href: `/results/${race.event_id}`, label: "All event races" }]} />
+      <RaceNav links={[{ href: `/results/${race.event_id}`, label: "All event races" }, { href: "/help", label: "Help" }]} />
       <header className="bg-race-ink px-4 py-4 text-white sm:px-6">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
           <div className="min-w-0">
@@ -122,16 +151,79 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
       </section>
 
       <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
-        <div className="flex items-end justify-between gap-4 border-b-2 border-zinc-950 pb-3">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-zinc-950 pb-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ec1c24]">Official live standings</p>
             <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Classification</h2>
           </div>
-          <div className="relative w-48 sm:w-60">
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find bib / rider" className="w-full border-2 border-zinc-950 bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-zinc-400 focus:border-[#ec1c24]" />
-            <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500" />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowPodium((v) => !v)}
+              className={classNames(
+                "border-2 border-zinc-950 px-3 py-2 text-xs font-black uppercase tracking-[0.1em]",
+                showPodium ? "bg-zinc-950 text-white" : "bg-white text-zinc-950 hover:bg-zinc-100"
+              )}
+            >
+              Podium
+            </button>
+            <div className="relative w-48 sm:w-60">
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find bib / rider" className="w-full border-2 border-zinc-950 bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-zinc-400 focus:border-[#ec1c24]" />
+              <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500" />
+            </div>
           </div>
         </div>
+
+        {categories.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setCategory(null)}
+              className={classNames(
+                "border-2 border-zinc-950 px-3 py-1.5 text-xs font-black uppercase tracking-[0.08em]",
+                category === null ? "bg-zinc-950 text-white" : "bg-white text-zinc-950 hover:bg-zinc-100"
+              )}
+            >
+              Overall
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setCategory(cat)}
+                className={classNames(
+                  "border-2 border-zinc-950 px-3 py-1.5 text-xs font-black uppercase tracking-[0.08em]",
+                  category === cat ? "bg-zinc-950 text-white" : "bg-white text-zinc-950 hover:bg-zinc-100"
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {showPodium && (
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            {podiums.map(({ category: cat, rows }) => (
+              <div key={cat} className="border-2 border-zinc-950 bg-white">
+                <p className="border-b-2 border-zinc-950 bg-zinc-950 px-3 py-1.5 text-xs font-black uppercase tracking-[0.1em] text-[#f6d428]">{cat}</p>
+                {rows.length === 0 ? (
+                  <p className="px-3 py-3 text-xs font-bold uppercase tracking-wide text-zinc-500">No finishers yet</p>
+                ) : (
+                  <ol className="divide-y divide-zinc-200">
+                    {rows.map((row) => (
+                      <li key={row.bib} className="flex items-center gap-3 px-3 py-2">
+                        <span className="w-5 shrink-0 text-lg font-black tabular-nums text-zinc-700">{row.position}</span>
+                        <span className="inline-flex min-w-8 shrink-0 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black tabular-nums text-white">{row.bib}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-black uppercase">{row.name}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="overflow-hidden border-b-2 border-zinc-950">
           <table className="w-full table-fixed border-collapse">
@@ -174,7 +266,12 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">Live unofficial classification · Updates automatically</p>
+        <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+          Live unofficial classification · Updates automatically ·{" "}
+          <Link href={`/announce/${raceId}`} className="underline hover:text-zinc-800">
+            Announcer / TV view
+          </Link>
+        </p>
       </div>
     </main>
   );

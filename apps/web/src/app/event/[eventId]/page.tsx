@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { canManageEvent, canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
+import { raceTemplates } from "@/lib/raceTemplates";
 import type { Entry, EventInvite, EventMember, EventMemberRole, EventRow, Participant, Race, Sex } from "@/lib/types";
 
 const roleOptions: { value: EventMemberRole; label: string; hint: string }[] = [
@@ -78,6 +79,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [rider, setRider] = useState<RiderDraft>(emptyDraft);
   const [newRace, setNewRace] = useState({ name: "", laps: "" });
+  const [newRaceTemplateId, setNewRaceTemplateId] = useState("");
   const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
   const [details, setDetails] = useState<EventDetailsForm>(emptyDetails);
@@ -271,7 +273,15 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       laps_planned: newRace.laps ? parseInt(newRace.laps, 10) : null,
     });
     setNewRace({ name: "", laps: "" });
+    setNewRaceTemplateId("");
     refetch();
+  };
+
+  const applyRaceTemplate = (templateId: string) => {
+    setNewRaceTemplateId(templateId);
+    const template = raceTemplates.find((t) => t.id === templateId);
+    if (!template) return;
+    setNewRace({ name: template.suggestedName, laps: template.defaultLaps ? String(template.defaultLaps) : "" });
   };
 
   const toggleAssignment = async (race: Race, participant: Participant, assigned: boolean) => {
@@ -437,13 +447,33 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
               {raceEntries.length > 0 && !open && <div className="mt-3 flex flex-wrap gap-1.5">{raceEntries.map((entry) => <span key={entry.id} className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{entry.bib}</b> {entry.name}</span>)}</div>}
             </section>;
           })}
-          {manage && <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15"><h3 className="text-sm font-semibold text-gray-900 dark:text-white">Add race</h3><div className="mt-2 flex gap-2"><input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} /><input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} /><button onClick={addRace} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button></div></section>}
+          {manage && <section className="rounded-lg border-2 border-dashed border-gray-300 p-4 dark:border-white/15">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Add race</h3>
+            <div className="mt-2">
+              <label className="block text-xs font-black uppercase tracking-wide text-race-muted">Template (optional)</label>
+              <select value={newRaceTemplateId} onChange={(e) => applyRaceTemplate(e.target.value)} className={`mt-1 ${inputCls}`}>
+                <option value="">No template — custom race</option>
+                {raceTemplates.map((template) => <option key={template.id} value={template.id}>{template.label}</option>)}
+              </select>
+              {newRaceTemplateId && (() => {
+                const template = raceTemplates.find((t) => t.id === newRaceTemplateId);
+                if (!template) return null;
+                return (
+                  <p className="mt-1 text-xs text-race-muted">
+                    {template.description} Suggested categories: {template.suggestedCategories.join(", ")}
+                    {template.suggestedDurationMinutes ? ` · ~${template.suggestedDurationMinutes} min` : ""}.
+                  </p>
+                );
+              })()}
+            </div>
+            <div className="mt-2 flex gap-2"><input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} /><input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} /><button onClick={addRace} className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500 dark:bg-indigo-500">Add</button></div>
+          </section>}
         </div>
       </section>
 
       {manage && <section className="race-panel mt-6 p-4">
         <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">4. Volunteers</h2><span className="text-sm font-bold text-race-muted">{members.length} active</span></div>
-        <p className="mt-1 text-sm text-race-muted">Generate a role-scoped invite link for people helping you run the event. <Link href="/help/organizer/volunteers" className="underline decoration-2 underline-offset-4">What can each role do?</Link></p>
+        <p className="mt-1 text-sm text-race-muted">Generate a role-scoped invite link for people helping you run the event. <Link href="/help" className="underline decoration-2 underline-offset-4">What can each role do?</Link></p>
 
         <div className="mt-4 flex flex-wrap items-end gap-2">
           <div>

@@ -1,4 +1,4 @@
-# ADR 0004: Event-Scoped Volunteer Roles Via Invite Links
+# ADR 0006: Event-Scoped Volunteer Roles Via Invite Links
 
 ## Status
 
