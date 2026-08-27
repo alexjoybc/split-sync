@@ -1,15 +1,20 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PlusIcon } from "@heroicons/react/20/solid";
+import { PlusIcon, XMarkIcon } from "@heroicons/react/20/solid";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { RaceNav } from "@/components/RaceNav";
-import type { Entry, EventRow, Participant, Race } from "@/lib/types";
+import type { Entry, EventRow, Participant, Race, Sex } from "@/lib/types";
 
 const categories = ["U13", "U15", "U17", "Junior", "U23", "Senior", "Master 35+", "Master 40+", "Master 50+", "Open"];
+const sexOptions: { value: Sex; label: string }[] = [
+  { value: "M", label: "M" },
+  { value: "F", label: "F" },
+  { value: "X", label: "X" },
+];
 const inputCls = "race-input--muted";
 
 export default function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
@@ -18,10 +23,11 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const [races, setRaces] = useState<Race[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [participants, setParticipants] = useState<Participant[]>([]);
-  const [rider, setRider] = useState({ bib: "", name: "", team: "", category: "" });
+  const [rider, setRider] = useState<{ bib: string; name: string; team: string; category: string; sex: Sex | "" }>({ bib: "", name: "", team: "", category: "", sex: "" });
   const [newRace, setNewRace] = useState({ name: "", laps: "" });
   const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
+  const bibInputRef = useRef<HTMLInputElement>(null);
   const { user, loading: authLoading } = useAuth();
 
   const refetch = useCallback(async () => {
@@ -48,11 +54,22 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       name: rider.name.trim(),
       team: rider.team.trim() || null,
       category: rider.category || null,
+      sex: rider.sex || null,
     });
     if (!error) {
-      setRider({ bib: "", name: "", team: "", category: rider.category });
+      setRider({ bib: "", name: "", team: "", category: rider.category, sex: rider.sex });
       refetch();
+      bibInputRef.current?.focus();
     }
+  };
+
+  const removeParticipant = async (participant: Participant) => {
+    await supabase.from("participants").delete().eq("id", participant.id);
+    refetch();
+  };
+
+  const handleRiderKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") addParticipant();
   };
 
   const addRace = async () => {
@@ -102,15 +119,51 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       <section className="race-panel mt-8 p-4">
         <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">1. Event roster</h2><span className="text-sm font-bold text-race-muted">{participants.length} racers</span></div>
         <p className="mt-1 text-sm text-race-muted">Add each racer once, then place them in one or more races below.</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_150px_auto]">
-          <input value={rider.bib} onChange={(e) => setRider({ ...rider, bib: e.target.value })} placeholder="Bib" inputMode="numeric" className={inputCls} />
-          <input value={rider.name} onChange={(e) => setRider({ ...rider, name: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addParticipant()} placeholder="Racer name" className={inputCls} />
-          <input value={rider.team} onChange={(e) => setRider({ ...rider, team: e.target.value })} placeholder="Team / club" className={inputCls} />
-          <input value={rider.category} onChange={(e) => setRider({ ...rider, category: e.target.value })} placeholder="Category" list="categories" className={inputCls} />
+        <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_150px_72px_auto]">
+          <input ref={bibInputRef} value={rider.bib} onChange={(e) => setRider({ ...rider, bib: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Bib" inputMode="numeric" className={inputCls} />
+          <input value={rider.name} onChange={(e) => setRider({ ...rider, name: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Racer name" className={inputCls} />
+          <input value={rider.team} onChange={(e) => setRider({ ...rider, team: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Team / club" className={inputCls} />
+          <input value={rider.category} onChange={(e) => setRider({ ...rider, category: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Category" list="categories" className={inputCls} />
+          <select value={rider.sex} onChange={(e) => setRider({ ...rider, sex: e.target.value as Sex | "" })} className={inputCls}>
+            <option value="">Sex</option>
+            {sexOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
           <button onClick={addParticipant} className="race-action--muted flex items-center justify-center"><PlusIcon className="size-5" /></button>
         </div>
         <datalist id="categories">{categories.map((category) => <option key={category} value={category} />)}</datalist>
-        {participants.length > 0 && <div className="mt-4 flex flex-wrap gap-1.5">{participants.map((participant) => <span key={participant.id} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{participant.bib}</b> {participant.name}{participant.category && <span className="ml-1 text-gray-500 dark:text-gray-400">· {participant.category}</span>}</span>)}</div>}
+
+        {participants.length > 0 && (
+          <div className="mt-4 overflow-hidden border-t-2 border-race-ink">
+            <table className="w-full table-fixed border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-zinc-300 text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
+                  <th className="w-14 py-2">Bib</th>
+                  <th className="py-2">Name</th>
+                  <th className="w-32 py-2">Team</th>
+                  <th className="w-28 py-2">Category</th>
+                  <th className="w-12 py-2">Sex</th>
+                  <th className="w-8 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {participants.map((participant) => (
+                  <tr key={participant.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                    <td className="py-2 font-black tabular-nums">#{participant.bib}</td>
+                    <td className="truncate py-2 font-bold">{participant.name}</td>
+                    <td className="truncate py-2 text-race-muted">{participant.team ?? "—"}</td>
+                    <td className="truncate py-2 text-race-muted">{participant.category ?? "—"}</td>
+                    <td className="py-2 text-race-muted">{participant.sex ?? "—"}</td>
+                    <td className="py-2 text-right">
+                      <button onClick={() => removeParticipant(participant)} aria-label={`Remove #${participant.bib} ${participant.name}`} className="text-race-muted hover:text-race-ink">
+                        <XMarkIcon className="size-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="mt-6">
