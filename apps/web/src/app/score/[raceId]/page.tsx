@@ -376,7 +376,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                           type="button"
                           onClick={() => removePenalty(p.id)}
                           aria-label={`Remove ${penaltySummary(p.type, p.value)} penalty`}
-                          className="inline-flex min-h-[44px] shrink-0 items-center font-black underline decoration-2 underline-offset-2 active:opacity-70"
+                          className="race-inline-action shrink-0"
                         >
                           Remove
                         </button>
