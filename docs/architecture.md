@@ -41,6 +41,25 @@ race:  upcoming -> active -> finished
   `race_status_changes` with the previous/new status, actor, timestamp, and
   optional reason, via an `after update` trigger.
 
+## Cloning
+
+An organizer can clone an event's structure into a new draft event via the
+`clone_event(event_id, include_roster, title)` Postgres function:
+
+- Copies event metadata (title, sport, location, and the detail fields) into
+  a new `events` row, always forcing `status = 'draft'` and a fresh
+  `owner_id`; `starts_at`/`ends_at` are never copied.
+- Copies every `races` row (name, sequence order, planned laps) into the new
+  event; cloned races always start `upcoming` with no `started_at`/
+  `finished_at`.
+- Optionally copies `participants` rows (a fresh roster snapshot) into the
+  new event when `include_roster` is true.
+- Never copies `entries`, `crossings`, or any race-day state.
+
+Like `reopen_race`, this is a `security definer` function that re-checks
+ownership of the *source* event against the caller's JWT subject before
+writing anything. See ADR 0009.
+
 ## Standings
 
 `apps/web/src/lib/standings.ts` derives standings from non-deleted crossings:
@@ -74,7 +93,7 @@ Supabase RLS enforces the application boundary:
 - Invite links (`event_invites`) are single-use and expire after 14 days. Looking up or accepting one goes through the `preview_event_invite` / `accept_event_invite` security-definer functions rather than a direct SELECT policy, so tokens are never listable.
 - Check-in: `participants.checked_in_at` is writable, at any race status, only through the `set_participant_checked_in(participant_id, checked_in)` security-definer function, which checks event ownership or an `organizer`/`checkin` `event_members` role. This is the same pattern as `reopen_race` — a `checkin` volunteer is not granted a blanket `UPDATE` on `participants`, so they cannot edit bib/name/team/category, only the check-in flag. See ADR 0008.
 
-Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_volunteer_roles` adds volunteer roles and invite links. Migration `20260827000006_race_entry_statuses` adds rider status, its audit log, and splits the entries write policy into insert/delete (upcoming-only) and update (owner/organizer-member, field-level lock via trigger). Migration `20260827000007_participant_checkin` adds `checked_in_at` and the `set_participant_checked_in` function.
+Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_volunteer_roles` adds volunteer roles and invite links. Migration `20260827000006_race_entry_statuses` adds rider status, its audit log, and splits the entries write policy into insert/delete (upcoming-only) and update (owner/organizer-member, field-level lock via trigger). Migration `20260827000007_participant_checkin` adds `checked_in_at` and the `set_participant_checked_in` function. Migration `20260827000008_clone_event` adds the `clone_event` function.
 
 ### Resolving a user's access to an event
 

@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { CheckIcon, PencilIcon, PlusIcon, XMarkIcon } from "@heroicons/react/20/solid";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
@@ -73,6 +74,7 @@ const emptyDraft: RiderDraft = { bib: "", firstName: "", lastName: "", team: "",
 
 export default function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = use(params);
+  const router = useRouter();
   const [event, setEvent] = useState<EventRow | null>(null);
   const [races, setRaces] = useState<Race[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
@@ -148,6 +150,12 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       window.prompt("Copy invite link", link);
     }
   };
+
+  const [cloning, setCloning] = useState(false);
+  const [cloneTitle, setCloneTitle] = useState("");
+  const [cloneRoster, setCloneRoster] = useState(false);
+  const [cloneSaving, setCloneSaving] = useState(false);
+  const [cloneError, setCloneError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
     const [ev, rs, en, ps] = await Promise.all([
@@ -345,6 +353,29 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     return true;
   });
 
+  const openClone = () => {
+    setCloneTitle(event ? `${event.title} (copy)` : "");
+    setCloneRoster(false);
+    setCloneError(null);
+    setCloning(true);
+  };
+
+  const cloneEvent = async () => {
+    setCloneSaving(true);
+    setCloneError(null);
+    const { data, error } = await supabase.rpc("clone_event", {
+      p_event_id: eventId,
+      p_include_roster: cloneRoster,
+      p_title: cloneTitle.trim() || null,
+    });
+    setCloneSaving(false);
+    if (error || !data) {
+      setCloneError(error?.message ?? "Failed to clone event");
+      return;
+    }
+    router.push(`/event/${data.id}`);
+  };
+
   if (authLoading || roleLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
   if (!user || !role) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email, or use a volunteer invite link, to access this event.</p><Link href={`/login?next=${encodeURIComponent(`/event/${eventId}`)}`} className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   if (!event) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
@@ -353,10 +384,37 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     <main className="race-page">
       <div className="race-topline--muted" />
       <RaceNav links={[{ href: `/results/${eventId}`, label: "Spectator results" }]} showAuth />
-      <header className="race-masthead"><div className="mx-auto max-w-3xl"><p className="race-kicker--muted">Event setup{role && role !== "owner" && ` · Signed in as ${roleLabel(role)}`}</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header>
+      <header className="race-masthead"><div className="mx-auto flex max-w-3xl items-end justify-between gap-4"><div><p className="race-kicker--muted">Event setup{role && role !== "owner" && ` · Signed in as ${roleLabel(role)}`}</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div>{manage && <button onClick={openClone} className="race-action--muted race-action--outline shrink-0">Clone event</button>}</div></header>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
       {!manage && <section className="race-panel mt-8 p-4"><p className="race-kicker--muted">Volunteer access</p><p className="mt-1 text-sm text-race-muted">You have <b>{roleLabel(role)}</b> access to this event. {canScore(role) ? "Open a race below to score it." : checkin ? "Use the Check-in section below to confirm racers as they arrive." : "Roster and race setup are read-only for your role."}</p></section>}
+
+      {manage && cloning && (
+        <section className="race-panel mt-8 p-4">
+          <p className="race-kicker--muted">Clone event</p>
+          <p className="mt-2 text-sm text-race-muted">
+            Creates a new draft event with the same details, categories, and race structure. Race-day data
+            (entries, crossings, race status) is never copied — new races always start upcoming.
+          </p>
+          <div className="mt-3">
+            <label className="block text-xs font-black uppercase tracking-wide">New event title</label>
+            <input value={cloneTitle} onChange={(e) => setCloneTitle(e.target.value)} className={`mt-1 ${inputCls}`} />
+          </div>
+          <label className="mt-3 flex cursor-pointer items-center gap-2">
+            <input type="checkbox" checked={cloneRoster} onChange={(e) => setCloneRoster(e.target.checked)} className="size-4 border-2 border-race-ink accent-race-ink" />
+            <span className="text-sm font-bold">Include participant roster</span>
+          </label>
+          {cloneError && <p className="mt-2 text-sm font-bold text-race-red">{cloneError}</p>}
+          <div className="mt-3 flex gap-3">
+            <button onClick={cloneEvent} disabled={cloneSaving || !cloneTitle.trim()} className="race-action--muted race-action--yellow disabled:opacity-40">
+              {cloneSaving ? "Cloning…" : "Confirm clone"}
+            </button>
+            <button onClick={() => { setCloning(false); setCloneError(null); }} className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4">
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
 
       {manage && <section className="race-panel mt-8 p-4">
         <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">1. Event details</h2>{detailsSaved && <span className="text-xs font-bold text-race-muted">Saved</span>}</div>
