@@ -12,6 +12,22 @@ function classNames(...classes: (string | false)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
+const STATUS_LABEL: Record<string, string> = { dns: "DNS", dnf: "DNF", dsq: "DSQ" };
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "ok") return null;
+  return (
+    <span
+      className={classNames(
+        "inline-flex px-1.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-white",
+        status === "dsq" ? "bg-[#ec1c24]" : "bg-zinc-500"
+      )}
+    >
+      {STATUS_LABEL[status] ?? status}
+    </span>
+  );
+}
+
 function RaceClock({ startedAt }: { startedAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -35,7 +51,9 @@ function computePodiums(
   return groups.map((category) => {
     const { crossings: c, entries: e } =
       categories.length > 0 ? filterByCategory(crossings, entries, category) : { crossings, entries };
-    const rows = computeStandings(c, e, raceStartMs).filter((r) => r.laps > 0).slice(0, 3);
+    const rows = computeStandings(c, e, raceStartMs)
+      .filter((r) => r.status === "ok" && r.laps > 0)
+      .slice(0, 3);
     return { category, rows };
   });
 }
@@ -241,7 +259,8 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
               {standings.map((row, index) => {
                 const hit = matches(row);
                 const isLeader = row.position === 1 && row.laps > 0;
-                const podium = row.position > 1 && row.position <= 3 && row.laps > 0;
+                const podium = row.position != null && row.position > 1 && row.position <= 3 && row.laps > 0;
+                const statused = row.status !== "ok";
                 return (
                   <tr
                     key={row.bib}
@@ -249,16 +268,16 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                       if (el) rowRefs.current.set(row.bib, el);
                       else rowRefs.current.delete(row.bib);
                     }}
-                    className={classNames("relative border-t border-zinc-300 transition-opacity", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", hit && !isLeader && "bg-[#ffdfdf] ring-2 ring-inset ring-[#ec1c24]", !hit && q !== "" && "opacity-35")}>
+                    className={classNames("relative border-t border-zinc-300 transition-opacity", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", hit && !isLeader && "bg-[#ffdfdf] ring-2 ring-inset ring-[#ec1c24]", !hit && q !== "" && "opacity-35", statused && "opacity-70")}>
                     <td className={classNames("py-3 text-center text-lg font-black tabular-nums", isLeader ? "bg-zinc-950 text-[#f6d428]" : podium ? "text-[#ec1c24]" : "text-zinc-700")}>
-                      {row.laps > 0 ? row.position : "—"}
+                      {statused ? <StatusBadge status={row.status} /> : row.laps > 0 ? row.position : "—"}
                     </td>
                     <td className="border-l border-zinc-300 py-3 text-center"><span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black tabular-nums text-white">{row.bib}</span></td>
                     <td className="border-l border-zinc-300 px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
                     <td className="border-l border-zinc-300 py-3 text-center text-base font-black tabular-nums">{row.laps}</td>
                     <td className="hidden border-l border-zinc-300 py-3 text-center text-sm font-bold tabular-nums sm:table-cell">{fmtLapTime(row.lastLapMs)}</td>
                     <td className={classNames("border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black tabular-nums", row.gapText.startsWith("-") ? "text-[#ec1c24]" : "text-zinc-900")}>
-                      {isLeader ? "Leader" : row.gapText}
+                      {statused ? "" : isLeader ? "Leader" : row.gapText}
                     </td>
                   </tr>
                 );

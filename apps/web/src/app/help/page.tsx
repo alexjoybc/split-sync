@@ -63,6 +63,13 @@ export default function HelpPage() {
               organizer reopens it to fix a scoring mistake. Standings refresh
               automatically once it is corrected and finished again.
             </li>
+            <li>
+              A rider marked <strong>DNS</strong> (did not start),{" "}
+              <strong>DNF</strong> (did not finish), or <strong>DSQ</strong>{" "}
+              (disqualified) by the organizer stays listed with that badge
+              instead of a rank, rather than showing a misleading &quot;0
+              laps&quot;.
+            </li>
           </ul>
         </section>
 
@@ -110,6 +117,16 @@ export default function HelpPage() {
               An accidental crossing can be removed without reopening: use{" "}
               <strong>Undo</strong> next to it in the scorer&apos;s recent list.
               This works whether the race is active or finished.
+            </li>
+            <li>
+              Mark a rider <strong>DNS</strong>, <strong>DNF</strong>, or{" "}
+              <strong>DSQ</strong> from the scorer screen at any time —
+              before the race starts (DNS), mid-race (DNF/DSQ), or even after
+              it finishes to correct a mistake. Statused riders are excluded
+              from ranked position on the live/results boards but stay
+              visible with their badge, and can&apos;t record further
+              crossings. You&apos;ll be asked for an optional reason, which is
+              kept with the change.
             </li>
           </ul>
         </section>

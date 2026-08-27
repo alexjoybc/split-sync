@@ -13,6 +13,8 @@ function classNames(...classes: (string | false)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
+const STATUS_LABEL: Record<string, string> = { dns: "DNS", dnf: "DNF", dsq: "DSQ" };
+
 function RaceClock({ startedAt }: { startedAt: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -143,8 +145,8 @@ function AnnouncerBody({
   now: number;
 }) {
   const [query, setQuery] = useState("");
-  const leader = standings.find((row) => row.laps > 0);
-  const podium = standings.filter((row) => row.laps > 0).slice(0, 3);
+  const leader = standings.find((row) => row.status === "ok" && row.laps > 0);
+  const podium = standings.filter((row) => row.status === "ok" && row.laps > 0).slice(0, 3);
 
   const q = query.trim().toLowerCase();
   const match = q === "" ? null : standings.find((row) => row.bib === q || row.name.toLowerCase().includes(q)) ?? null;
@@ -226,7 +228,9 @@ function AnnouncerBody({
             <dl className="mt-4 grid grid-cols-2 gap-4 border-t-2 border-white/10 pt-4">
               <div>
                 <dt className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Standing</dt>
-                <dd className="mt-1 text-2xl font-black tabular-nums text-white">{match.laps > 0 ? `${match.position}${match.position === 1 ? "st" : ""}` : "—"}</dd>
+                <dd className="mt-1 text-2xl font-black tabular-nums text-white">
+                  {match.status !== "ok" ? STATUS_LABEL[match.status] ?? match.status : match.laps > 0 ? `${match.position}${match.position === 1 ? "st" : ""}` : "—"}
+                </dd>
               </div>
               <div>
                 <dt className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Laps</dt>
@@ -238,7 +242,7 @@ function AnnouncerBody({
               </div>
               <div>
                 <dt className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Gap</dt>
-                <dd className="mt-1 text-lg font-black tabular-nums text-white">{match.position === 1 ? "Leader" : match.gapText || "—"}</dd>
+                <dd className="mt-1 text-lg font-black tabular-nums text-white">{match.status !== "ok" ? "—" : match.position === 1 ? "Leader" : match.gapText || "—"}</dd>
               </div>
             </dl>
           </div>
@@ -266,15 +270,18 @@ function TvBody({ standings }: { standings: ReturnType<typeof computeStandings> 
           <tbody>
             {standings.map((row, index) => {
               const isLeader = row.position === 1 && row.laps > 0;
+              const statused = row.status !== "ok";
               return (
-                <tr key={row.bib} className={classNames("border-t border-white/10", isLeader ? "bg-race-yellow text-race-ink" : index % 2 === 0 ? "bg-white/5" : "bg-transparent")}>
-                  <td className="py-4 text-center text-2xl font-black tabular-nums">{row.laps > 0 ? row.position : "—"}</td>
+                <tr key={row.bib} className={classNames("border-t border-white/10", isLeader ? "bg-race-yellow text-race-ink" : index % 2 === 0 ? "bg-white/5" : "bg-transparent", statused && "opacity-60")}>
+                  <td className="py-4 text-center text-2xl font-black tabular-nums">
+                    {statused ? STATUS_LABEL[row.status] ?? row.status : row.laps > 0 ? row.position : "—"}
+                  </td>
                   <td className="border-l border-white/10 py-4 text-center">
                     <span className={classNames("inline-flex min-w-12 justify-center px-2 py-1 text-xl font-black tabular-nums", isLeader ? "bg-race-ink text-race-yellow" : "bg-white/10 text-white")}>{row.bib}</span>
                   </td>
                   <td className="border-l border-white/10 px-4 py-4 text-xl font-black uppercase">{row.name}</td>
                   <td className="border-l border-white/10 py-4 text-center text-xl font-black tabular-nums">{row.laps}</td>
-                  <td className="border-l border-white/10 py-4 pr-4 text-right text-xl font-black tabular-nums">{isLeader ? "Leader" : row.gapText}</td>
+                  <td className="border-l border-white/10 py-4 pr-4 text-right text-xl font-black tabular-nums">{statused ? "" : isLeader ? "Leader" : row.gapText}</td>
                 </tr>
               );
             })}

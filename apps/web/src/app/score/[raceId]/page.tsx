@@ -6,8 +6,16 @@ import { supabase } from "@/lib/supabase";
 import { useRaceData } from "@/lib/useRaceData";
 import { recordCrossing, flushQueue, pendingCount } from "@/lib/crossingQueue";
 import { useAuth } from "@/lib/useAuth";
-import { canScore, useEventAccess } from "@/lib/useEventAccess";
+import { canManageEvent, canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
+import type { Entry, EntryStatus } from "@/lib/types";
+
+const STATUS_OPTIONS: { value: EntryStatus; label: string }[] = [
+  { value: "ok", label: "OK" },
+  { value: "dns", label: "DNS" },
+  { value: "dnf", label: "DNF" },
+  { value: "dsq", label: "DSQ" },
+];
 
 export default function Scorer({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
@@ -17,6 +25,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const { user, loading: authLoading } = useAuth();
   const { role, loading: roleLoading } = useEventAccess(race?.event_id, user);
   const allowed = canScore(role);
+  const canManageStatus = canManageEvent(role);
   const [reopening, setReopening] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [reopenError, setReopenError] = useState<string | null>(null);
@@ -63,6 +72,17 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const setRaceStatus = async (status: "active" | "finished") => {
     // started_at/finished_at are set by the races_lifecycle_guard trigger.
     await supabase.from("races").update({ status }).eq("id", raceId);
+    refetch();
+  };
+
+  const setEntryStatus = async (entry: Entry, status: EntryStatus) => {
+    let reason: string | null = null;
+    if (status !== "ok") {
+      const input = window.prompt(`Reason for ${status.toUpperCase()} — #${entry.bib} ${entry.name} (optional):`, entry.status_reason ?? "");
+      if (input === null) return; // cancelled
+      reason = input.trim() === "" ? null : input.trim();
+    }
+    await supabase.from("entries").update({ status, status_reason: reason }).eq("id", entry.id);
     refetch();
   };
 
@@ -170,14 +190,48 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         </div>
       )}
 
-      <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">Tap a rider as they cross the line</p>
-      {race.status === "active" ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {entries.map((entry) => <button key={entry.id} onClick={() => submit(entry.bib)} className={`min-h-28 border-2 p-3 text-left transition-colors active:bg-race-yellow ${flash === entry.bib ? "border-race-ink bg-race-ink text-white" : "border-race-ink bg-race-panel text-race-ink"}`}>
-          <span className="block text-3xl font-black tabular-nums">#{entry.bib}</span>
-          <span className="mt-2 block truncate text-sm font-black uppercase">{entry.name}</span>
-          <span className={`mt-1 block text-xs font-bold ${flash === entry.bib ? "text-white" : "text-race-muted"}`}>Lap {lapsByBib.get(entry.bib) ?? 0}</span>
-        </button>)}
-      </div> : <div className="race-panel mt-3 p-4 text-center text-sm font-bold text-race-muted">{entries.length} rostered riders ready. Start the race to enable crossing capture.</div>}
+      <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">
+        {race.status === "active" ? "Tap a rider as they cross the line" : `${entries.length} rostered riders — set DNS before the start, tap Start race to enable crossing capture`}
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {entries.map((entry) => {
+          const statused = entry.status !== "ok";
+          const canScore = race.status === "active" && !statused;
+          return (
+            <div
+              key={entry.id}
+              className={`min-h-28 border-2 p-3 text-left transition-colors ${flash === entry.bib ? "border-race-ink bg-race-ink text-white" : statused ? "border-race-muted bg-race-panel-alt text-race-muted" : "border-race-ink bg-race-panel text-race-ink"}`}
+            >
+              <button
+                type="button"
+                onClick={() => canScore && submit(entry.bib)}
+                disabled={!canScore}
+                className="block w-full text-left disabled:cursor-not-allowed"
+              >
+                <span className="block text-3xl font-black tabular-nums">#{entry.bib}</span>
+                <span className="mt-2 block truncate text-sm font-black uppercase">{entry.name}</span>
+                <span className={`mt-1 block text-xs font-bold ${flash === entry.bib ? "text-white" : "text-race-muted"}`}>
+                  {statused ? entry.status.toUpperCase() : `Lap ${lapsByBib.get(entry.bib) ?? 0}`}
+                </span>
+              </button>
+              {canManageStatus && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {STATUS_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setEntryStatus(entry, opt.value)}
+                      className={`border px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${entry.status === opt.value ? "border-race-ink bg-race-ink text-white" : "border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink"}`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
       {/* Recent crossings with undo */}
       <ul className="mt-4 border-y-2 border-race-ink divide-y divide-zinc-300">
