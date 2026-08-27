@@ -36,6 +36,8 @@ function Tracker() {
   const [lapCounts, setLapCounts] = useState<Record<string, number>>({});
   const [lastBib, setLastBib] = useState<string | null>(null);
   const [pending, setPending] = useState(0);
+  const [reopenReason, setReopenReason] = useState("");
+  const [reopening, setReopening] = useState(false);
 
   const consumeLink = useCallback(async (url: string) => {
     const isRecovery = url.includes("auth/reset-password");
@@ -137,14 +139,27 @@ function Tracker() {
     setEntries(entriesResult.data ?? []);
     setLapCounts(counts);
     setLastBib(null);
+    setReopening(false);
+    setReopenReason("");
     setSelectedRace(race);
   };
   const updateRace = async (status: "active" | "finished") => {
     if (!selectedRace) return;
-    const { error } = await supabase.from("races").update({ status, ...(status === "active" ? { started_at: new Date().toISOString() } : {}) }).eq("id", selectedRace.id);
+    // started_at/finished_at are set by the races_lifecycle_guard trigger.
+    const { error } = await supabase.from("races").update({ status }).eq("id", selectedRace.id);
     if (error) return Alert.alert("Could not update race", error.message);
     setSelectedRace({ ...selectedRace, status });
     setRaces(races.map((race) => race.id === selectedRace.id ? { ...race, status } : race));
+  };
+  const reopenRace = async () => {
+    if (!selectedRace) return;
+    if (!reopenReason.trim()) return Alert.alert("Reason required", "Enter why this race needs to reopen.");
+    const { error } = await supabase.rpc("reopen_race", { p_race_id: selectedRace.id, p_reason: reopenReason.trim() });
+    if (error) return Alert.alert("Could not reopen race", error.message);
+    setSelectedRace({ ...selectedRace, status: "active" });
+    setRaces(races.map((race) => race.id === selectedRace.id ? { ...race, status: "active" } : race));
+    setReopening(false);
+    setReopenReason("");
   };
   const recordBib = async (value: string) => {
     if (!selectedRace) return;
@@ -163,7 +178,7 @@ function Tracker() {
 
   if (!selectedRace) return <SafeAreaView style={styles.screen}><Header title={selectedEvent.title} onBack={() => setSelectedEvent(null)} /><Navigation onEvents={() => setSelectedEvent(null)} onResults={() => Linking.openURL(`https://splitsync.org/results/${selectedEvent.id}`)} /><FlatList contentContainerStyle={styles.list} data={races} keyExtractor={(race) => race.id} ListEmptyComponent={<Text style={styles.empty}>No races yet. Add them on the event setup page.</Text>} renderItem={({ item }) => <Pressable onPress={() => chooseRace(item)} style={styles.eventRow}><View><Text style={styles.eventTitle}>{item.name}</Text><Text style={styles.muted}>{item.laps_planned ? `${item.laps_planned} laps` : "Timed race"} · {item.status}</Text></View><Text style={styles.arrow}>›</Text></Pressable>} /><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
 
-  return <SafeAreaView style={styles.screen}><Header title={selectedRace.name} onBack={() => setSelectedRace(null)} /><Navigation onEvents={() => { setSelectedRace(null); setSelectedEvent(null); }} onRaces={() => setSelectedRace(null)} onResults={() => Linking.openURL(`https://splitsync.org/results/${selectedRace.event_id}`)} /><ScrollView contentContainerStyle={styles.content}><View style={styles.statusRow}><Text style={styles.status}>{selectedRace.status.toUpperCase()}</Text>{pending > 0 && <Text style={styles.pending}>{pending} PENDING</Text>}</View>{selectedRace.status === "upcoming" && <View style={styles.panel}><Text style={styles.copy}>{entries.length} assigned riders. The grid locks when you start the race.</Text><View style={styles.space} /><Button title="Start race" onPress={() => updateRace("active")} variant="yellow" /></View>}{selectedRace.status === "active" && <><Text style={styles.instruction}>TAP A RIDER AS THEY CROSS THE LINE</Text><View style={styles.riderGrid}>{entries.map((entry) => <Pressable key={entry.id} onPress={() => recordBib(entry.bib)} style={[styles.riderTile, lastBib === entry.bib && styles.riderTileRecorded]}><Text style={[styles.riderBib, lastBib === entry.bib && styles.riderTileRecordedText]}>#{entry.bib}</Text><Text numberOfLines={1} style={[styles.riderName, lastBib === entry.bib && styles.riderTileRecordedText]}>{entry.name}</Text><Text style={[styles.riderLap, lastBib === entry.bib && styles.riderTileRecordedText]}>LAP {lapCounts[entry.bib] ?? 0}</Text></Pressable>)}</View><View style={styles.space} /><Button title="Finish race" onPress={() => updateRace("finished")} variant="outline" /></>}{selectedRace.status === "finished" && <View style={styles.panel}><Text style={styles.copy}>Race finished. View the public classification at splitsync.org.</Text></View>}{message && <Text style={styles.message}>{message}</Text>}</ScrollView><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
+  return <SafeAreaView style={styles.screen}><Header title={selectedRace.name} onBack={() => setSelectedRace(null)} /><Navigation onEvents={() => { setSelectedRace(null); setSelectedEvent(null); }} onRaces={() => setSelectedRace(null)} onResults={() => Linking.openURL(`https://splitsync.org/results/${selectedRace.event_id}`)} /><ScrollView contentContainerStyle={styles.content}><View style={styles.statusRow}><Text style={styles.status}>{selectedRace.status.toUpperCase()}</Text>{pending > 0 && <Text style={styles.pending}>{pending} PENDING</Text>}</View>{selectedRace.status === "upcoming" && <View style={styles.panel}><Text style={styles.copy}>{entries.length} assigned riders. The grid locks when you start the race.</Text><View style={styles.space} /><Button title="Start race" onPress={() => updateRace("active")} variant="yellow" /></View>}{selectedRace.status === "active" && <><Text style={styles.instruction}>TAP A RIDER AS THEY CROSS THE LINE</Text><View style={styles.riderGrid}>{entries.map((entry) => <Pressable key={entry.id} onPress={() => recordBib(entry.bib)} style={[styles.riderTile, lastBib === entry.bib && styles.riderTileRecorded]}><Text style={[styles.riderBib, lastBib === entry.bib && styles.riderTileRecordedText]}>#{entry.bib}</Text><Text numberOfLines={1} style={[styles.riderName, lastBib === entry.bib && styles.riderTileRecordedText]}>{entry.name}</Text><Text style={[styles.riderLap, lastBib === entry.bib && styles.riderTileRecordedText]}>LAP {lapCounts[entry.bib] ?? 0}</Text></Pressable>)}</View><View style={styles.space} /><Button title="Finish race" onPress={() => updateRace("finished")} variant="outline" /></>}{selectedRace.status === "finished" && <View style={styles.panel}><Text style={styles.copy}>Race finished. View the public classification at splitsync.org.</Text><View style={styles.space} />{reopening ? <><Text style={styles.label}>REASON FOR REOPENING</Text><TextInput value={reopenReason} onChangeText={setReopenReason} placeholder="Why does this race need to reopen?" placeholderTextColor={colors.muted} style={styles.input} multiline /><View style={styles.space} /><Button title="Confirm reopen" onPress={reopenRace} variant="yellow" disabled={!reopenReason.trim()} /><View style={styles.space} /><Button title="Cancel" onPress={() => { setReopening(false); setReopenReason(""); }} variant="outline" /></> : <Button title="Reopen race" onPress={() => setReopening(true)} variant="outline" />}</View>}{message && <Text style={styles.message}>{message}</Text>}</ScrollView><StatusBar barStyle="dark-content" backgroundColor={colors.panel} translucent={false} /></SafeAreaView>;
 }
 
 function Navigation({ onEvents, onRaces, onResults }: { onEvents: () => void; onRaces?: () => void; onResults: () => void }) {

@@ -13,6 +13,8 @@ export type Race = {
   name: string;
   laps_planned: number | null;
   status: RaceStatus;
+  started_at?: string | null;
+  finished_at?: string | null;
 };
 
 export type Entry = {

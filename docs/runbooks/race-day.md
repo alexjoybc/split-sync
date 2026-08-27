@@ -26,6 +26,13 @@
 - Do not reload or clear browser/app storage.
 - Restore connectivity and keep the scorer open until the pending counter returns to zero.
 
+## If A Finished Race Needs Correcting
+
+- A race can only accept new crossings while it is active; a finished or not-yet-started race rejects crossing taps even if attempted.
+- To fix a finished race (e.g. a missed or wrong crossing), tap "Reopen race" in the web scorer or tracker, enter a reason, and confirm. The race returns to active and its finish time clears.
+- Make the correction (record the missing crossing, or undo an incorrect one), then finish the race again.
+- Every reopen is timestamped with the reason and organizer in the race's audit log.
+
 ## After The Event
 
 1. Open the public event results hub and validate the final order.

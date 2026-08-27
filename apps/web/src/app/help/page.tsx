@@ -58,6 +58,11 @@ export default function HelpPage() {
               be corrected as more crossings are recorded. Treat all results as
               unofficial.
             </li>
+            <li>
+              A finished race can briefly return to <strong>live</strong> if the
+              organizer reopens it to fix a scoring mistake. Standings refresh
+              automatically once it is corrected and finished again.
+            </li>
           </ul>
         </section>
 
@@ -87,6 +92,24 @@ export default function HelpPage() {
               Use the scorer screen to record crossings by tapping a rider's
               bib as they cross the line. Free-form bib entry is intentionally
               not supported — only assigned entries appear as tiles.
+            </li>
+            <li>
+              Crossings can only be recorded while a race is <strong>active</strong>.
+              Tap <strong>Start race</strong> once riders are on the line, and{" "}
+              <strong>Finish</strong> once the final crossing is recorded — this
+              is enforced by the database, not just the screen.
+            </li>
+            <li>
+              Finished a race too early, or need to add a missed crossing? Tap{" "}
+              <strong>Reopen race</strong> on the finished race screen and enter
+              a reason — this is required and kept in the race&apos;s audit
+              history. Reopening clears the finish time and returns the race to
+              active so you can correct it, then finish it again.
+            </li>
+            <li>
+              An accidental crossing can be removed without reopening: use{" "}
+              <strong>Undo</strong> next to it in the scorer&apos;s recent list.
+              This works whether the race is active or finished.
             </li>
           </ul>
         </section>
