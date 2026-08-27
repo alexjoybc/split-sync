@@ -8,7 +8,7 @@ The product has three deliberate surfaces. Do not blend their permissions or goa
 
 | Surface | Location | Audience | Rules |
 | --- | --- | --- | --- |
-| Spectator | `apps/web/src/app/live`, `apps/web/src/app/results` | Public | No sign-in, read-only, mobile-first, must never expose organizer controls |
+| Spectator | `apps/web/src/app/live`, `apps/web/src/app/results`, `apps/web/src/app/announce` | Public | No sign-in, read-only, mobile-first, must never expose organizer controls |
 | Organizer admin | `apps/web/src/app`, `new`, `event`, `login`, `auth` | Event owner | Creates roster/races, publishes event, owns all writes through RLS |
 | Mobile tracker | `apps/mobile` | Event owner now, volunteers later | Start/finish and one-tap crossings only; no roster edits during a race |
 

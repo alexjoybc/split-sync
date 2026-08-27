@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
 import { computeStandings, filterByCategory, fmtLapTime, getCategories, type StandingRow } from "@/lib/standings";
@@ -265,7 +266,12 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">Live unofficial classification · Updates automatically</p>
+        <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+          Live unofficial classification · Updates automatically ·{" "}
+          <Link href={`/announce/${raceId}`} className="underline hover:text-zinc-800">
+            Announcer / TV view
+          </Link>
+        </p>
       </div>
     </main>
   );
