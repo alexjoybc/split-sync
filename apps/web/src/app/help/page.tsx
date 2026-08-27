@@ -96,6 +96,22 @@ export default function HelpPage() {
               and results pages. Draft events are only visible to you.
             </li>
             <li>
+              From your event setup page&apos;s <strong>Check-in</strong>{" "}
+              section, tap <strong>Check in</strong> next to a racer as they
+              arrive and collect their bib. Search or filter by category or
+              check-in status to find them quickly on a busy morning. Check-in
+              is per-event, so it applies across every race a racer is
+              entered in.
+            </li>
+            <li>
+              Each race has a <strong>Start list</strong> link (next to{" "}
+              <strong>Score</strong>) showing its entries — bib, name, team,
+              category, and check-in status — sorted by bib or category. Toggle{" "}
+              <strong>Checked-in only</strong> to see just the racers ready to
+              start, and use <strong>Print</strong> for a paper copy at the
+              start line.
+            </li>
+            <li>
               Use the scorer screen to record crossings by tapping a rider's
               bib as they cross the line. Free-form bib entry is intentionally
               not supported — only assigned entries appear as tiles.
@@ -146,7 +162,7 @@ export default function HelpPage() {
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
             <li><strong>Organizer</strong> — everything you can do except delete the event: roster, races, publishing, and inviting/revoking other volunteers.</li>
             <li><strong>Scorer</strong> — records and undoes crossings, and starts/finishes races. Cannot edit the roster or event details.</li>
-            <li><strong>Check-in</strong> — can view the private roster before publish, to help confirm racers as they arrive.</li>
+            <li><strong>Check-in</strong> — can view the private roster before publish and one-tap check racers in as they arrive, without being able to edit their bib, name, team, or category.</li>
             <li><strong>Read-only official</strong> — can view the event, roster, races, and crossings without changing anything.</li>
           </ul>
           <p className="mt-4 text-sm font-semibold text-zinc-700">
