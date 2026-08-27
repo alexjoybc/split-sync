@@ -106,8 +106,12 @@ function RiderDetailSheet({
       setPenaltyForm({ ...penaltyForm, error: "A reason is required" });
       return;
     }
-    await onAddPenalty(penaltyForm);
-    setPenaltyForm(null);
+    try {
+      await onAddPenalty(penaltyForm);
+      setPenaltyForm(null);
+    } catch (e) {
+      setPenaltyForm({ ...penaltyForm, error: (e as Error).message });
+    }
   };
 
   const statused = entry.status !== "ok";
