@@ -24,6 +24,7 @@
 9. Use web scorer undo for an accidental crossing; soft deletion updates spectators immediately.
 10. If a rider crashes, abandons, or is pulled from the race, mark them **DNF** or **DSQ** on the scorer screen — they stay on the live board with that badge instead of a misleading lap count.
 11. Finish the race only after the final crossing sequence is recorded.
+12. For a points race, nothing extra happens at the scorer screen — sprints and lap-gain bonuses score automatically from the crossings you're already recording. Watch the live board or announcer view to call out each sprint result to spectators as it appears.
 
 ## If Connectivity Fails
 

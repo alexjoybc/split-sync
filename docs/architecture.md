@@ -6,7 +6,7 @@
 | --- | --- |
 | `events` | Event metadata, publication status, provider-neutral organizer `owner_id` |
 | `participants` | Event-level racer roster: bib, first/last name, team, category, sex, check-in timestamp |
-| `races` | A race/category within an event, planned laps and lifecycle state |
+| `races` | A race/category within an event, planned laps, lifecycle state, and optional velodrome points race scoring config |
 | `entries` | Roster participants assigned to a specific race; roster identity frozen on start, status settable throughout |
 | `crossings` | A recorded line crossing: race, bib, client UUID, client/server timestamps, source |
 | `race_status_changes` | Append-only audit log of every race status transition, written by a trigger |
@@ -89,6 +89,17 @@ The same logic should be shared with mobile before mobile begins presenting stan
 
 `entries.status` (`ok` | `dns` | `dnf` | `dsq`) is an organizer-asserted fact, not derived from crossings — it sits alongside crossings as an input to `computeStandings`, which never persists a calculated standing itself (ADR 0001). `computeStandings` excludes non-`ok` entries from ranked position (`position: null`) but still returns them, sorted after all ranked riders, so the UI shows a status badge instead of dropping or misranking them. Every status change is timestamped and attributed (`status_set_by`/`status_set_at`, set by a trigger, not the client) and logged to `entry_status_changes`. See ADR 0007.
 
+## Velodrome Points Race
+
+A points race is scored entirely as an overlay on the same crossings/entries that drive overall standings — no new fact table (ADR 0011). `races` carries the scoring config (`is_points_race`, `sprint_interval_laps`, `sprint_points`, `final_sprint_multiplier`, `lap_gain_bonus`, `lap_loss_penalty`), all defaulted so non-points races are unaffected. `apps/web/src/lib/pointsRace.ts` derives, purely from crossings + that config:
+
+1. Sprint laps: every `sprint_interval_laps` laps, plus the final lap always (never double-counted if it coincides with an interval).
+2. Sprint result: the arrival order at a given lap, read directly off each rider's existing crossing sequence (their Nth crossing) — the same facts, no separate capture step.
+3. Points: sprint placings (at `final_sprint_multiplier` on the last lap) plus a lap-gain bonus each time a rider's completed-lap count pulls more than one lap ahead of the best of the rest of the field.
+4. Ranking: points desc, then laps desc, then final-sprint placing, then earliest final crossing.
+
+The live board and announcer view render a sprint-lap banner, that sprint's own mini-result, and the cumulative points leaderboard only when `race.is_points_race` is true; the mini-result folds back into the leaderboard automatically once any rider crosses to the next lap, driven by live crossings rather than a UI timer.
+
 ## Realtime
 
 Supabase Realtime publishes changes from `crossings` and `races`. Web clients use `useRaceData` to refetch current race data on a change, then recompute the pure standings function. This favors correctness and simple recovery over incremental client state.
@@ -108,7 +119,7 @@ Supabase RLS enforces the application boundary:
 - Invite links (`event_invites`) are single-use and expire after 14 days. Looking up or accepting one goes through the `preview_event_invite` / `accept_event_invite` security-definer functions rather than a direct SELECT policy, so tokens are never listable.
 - Check-in: `participants.checked_in_at` is writable, at any race status, only through the `set_participant_checked_in(participant_id, checked_in)` security-definer function, which checks event ownership or an `organizer`/`checkin` `event_members` role. This is the same pattern as `reopen_race` — a `checkin` volunteer is not granted a blanket `UPDATE` on `participants`, so they cannot edit bib/name/team/category, only the check-in flag. See ADR 0008.
 
-Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_volunteer_roles` adds volunteer roles and invite links. Migration `20260827000006_race_entry_statuses` adds rider status, its audit log, and splits the entries write policy into insert/delete (upcoming-only) and update (owner/organizer-member, field-level lock via trigger). Migration `20260827000007_participant_checkin` adds `checked_in_at` and the `set_participant_checked_in` function. Migration `20260827000008_clone_event` adds the `clone_event` function. Migration `20260827000009_crossing_corrections` adds the `crossing_corrections` audit table, the correction guard/audit triggers, and the `correct_crossing`/`restore_crossing` functions.
+Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_volunteer_roles` adds volunteer roles and invite links. Migration `20260827000006_race_entry_statuses` adds rider status, its audit log, and splits the entries write policy into insert/delete (upcoming-only) and update (owner/organizer-member, field-level lock via trigger). Migration `20260827000007_participant_checkin` adds `checked_in_at` and the `set_participant_checked_in` function. Migration `20260827000008_clone_event` adds the `clone_event` function. Migration `20260827000009_crossing_corrections` adds the `crossing_corrections` audit table, the correction guard/audit triggers, and the `correct_crossing`/`restore_crossing` functions. Migration `20260827000010_velodrome_points_race` adds the points-race scoring config columns on `races`; no RLS changes were needed since they're covered by the existing races policies.
 
 ### Resolving a user's access to an event
 

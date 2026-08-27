@@ -70,6 +70,16 @@ export default function HelpPage() {
               instead of a rank, rather than showing a misleading &quot;0
               laps&quot;.
             </li>
+            <li>
+              A <strong>points race</strong> shows a second board below the
+              main classification: a sprint-lap banner when the field reaches
+              a scoring sprint (the final sprint is called out separately, at
+              double points), that sprint&apos;s own 1st&ndash;4th result, and
+              a cumulative <strong>points classification</strong> ranked by
+              total points, not laps. A rider who breaks away and completes
+              an extra lap on the rest of the field also picks up a lap-gain
+              bonus.
+            </li>
           </ul>
         </section>
 
@@ -140,6 +150,16 @@ export default function HelpPage() {
               <strong>Checked-in only</strong> to see just the racers ready to
               start, and use <strong>Print</strong> for a paper copy at the
               start line.
+            </li>
+            <li>
+              To run a <strong>velodrome points race</strong>, check{" "}
+              <strong>Points race</strong> when adding it (the &quot;Velodrome
+              points race&quot; template turns this on by default) and set how
+              many laps between sprints. Sprints are scored automatically from
+              the same crossings you&apos;re already recording — there&apos;s
+              nothing extra to tap at a sprint lap. The final lap is always a
+              scoring sprint at double points, even if it doesn&apos;t land on
+              your sprint interval.
             </li>
             <li>
               Use the scorer screen to record crossings by tapping a rider's

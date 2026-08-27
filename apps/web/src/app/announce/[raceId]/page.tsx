@@ -6,6 +6,16 @@ import { useSearchParams } from "next/navigation";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
 import { computeStandings, filterByCategory, fmtLapTime, getCategories, getRecentCrossings } from "@/lib/standings";
+import {
+  computePointsStandings,
+  getCurrentLap,
+  getNextSprintText,
+  getPointsRaceConfig,
+  getSprintAtLap,
+  getSprintLaps,
+  getSprintResult,
+} from "@/lib/pointsRace";
+import type { Crossing, Entry, Race } from "@/lib/types";
 
 type Mode = "announcer" | "tv";
 
@@ -292,6 +302,60 @@ function TvBody({ standings }: { standings: ReturnType<typeof computeStandings> 
   );
 }
 
+/**
+ * Compact points-race overlay for the announcer/TV view: a sprint-lap
+ * banner + that sprint's mini-result while the field is on the sprint lap
+ * (folding back once anyone crosses to the next lap), plus the cumulative
+ * points leaderboard.
+ */
+function PointsOverlay({ race, crossings, entries }: { race: Race; crossings: Crossing[]; entries: Entry[] }) {
+  const config = useMemo(() => getPointsRaceConfig(race), [race]);
+  const sprintLaps = useMemo(() => getSprintLaps(config), [config]);
+  const currentLap = useMemo(() => getCurrentLap(crossings), [crossings]);
+  const activeSprint = useMemo(() => getSprintAtLap(sprintLaps, currentLap), [sprintLaps, currentLap]);
+  const sprintResult = useMemo(
+    () => (activeSprint ? getSprintResult(crossings, entries, activeSprint.lap).slice(0, config.sprintPoints.length) : []),
+    [activeSprint, crossings, entries, config.sprintPoints.length]
+  );
+  const pointsStandings = useMemo(() => computePointsStandings(crossings, entries, race), [crossings, entries, race]);
+  const nextSprintText = getNextSprintText(currentLap, sprintLaps);
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
+      {activeSprint && (
+        <div className={classNames("border-2 border-race-yellow px-4 py-3", activeSprint.isFinal ? "bg-[#ec1c24]" : "bg-race-yellow text-race-ink")}>
+          <p className="text-xs font-black uppercase tracking-[0.24em]">
+            {activeSprint.isFinal ? `Final sprint — lap ${activeSprint.lap} — double points` : `Sprint lap ${activeSprint.lap}`}
+          </p>
+          {sprintResult.length > 0 && (
+            <ol className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+              {sprintResult.map((row) => (
+                <li key={row.bib} className="text-sm font-black uppercase tabular-nums">
+                  {row.place}. #{row.bib} {row.name}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+      <div className="mt-4 flex items-baseline justify-between border-b-2 border-white/20 pb-2">
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-white/50">Points classification</p>
+        <p className="text-xs font-black uppercase tracking-[0.1em] text-race-yellow">{nextSprintText}</p>
+      </div>
+      <ol className="mt-2 divide-y-2 divide-white/10 border-y-2 border-white/10">
+        {pointsStandings.slice(0, 8).map((row) => (
+          <li key={row.bib} className="flex items-center gap-4 py-2">
+            <span className="w-8 text-center text-lg font-black tabular-nums text-race-yellow">{row.position ?? "—"}</span>
+            <span className="inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-base font-black tabular-nums text-white">{row.bib}</span>
+            <span className="min-w-0 flex-1 truncate text-base font-black uppercase text-white">{row.name}</span>
+            <span className="shrink-0 text-base font-bold tabular-nums text-white/70">{row.points} pts</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function AnnouncerView({ raceId }: { raceId: string }) {
   const { race, entries, crossings, loading } = useRaceData(raceId);
   const searchParams = useSearchParams();
@@ -357,6 +421,8 @@ function AnnouncerView({ raceId }: { raceId: string }) {
       <CategoryTabs categories={categories} category={category} onChange={setCategory} />
 
       {mode === "announcer" ? <AnnouncerBody standings={standings} recent={recent} now={now} /> : <TvBody standings={standings} />}
+
+      {race.is_points_race && <PointsOverlay race={race} crossings={scopedCrossings} entries={scopedEntries} />}
 
       <p className="mx-auto max-w-5xl px-4 pb-6 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-white/30 sm:px-6">
         Live unofficial classification · Updates automatically ·{" "}

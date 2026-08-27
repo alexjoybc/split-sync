@@ -5,8 +5,17 @@ import Link from "next/link";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
 import { computeStandings, filterByCategory, fmtLapTime, getCategories, type StandingRow } from "@/lib/standings";
+import {
+  computePointsStandings,
+  getCurrentLap,
+  getNextSprintText,
+  getPointsRaceConfig,
+  getSprintAtLap,
+  getSprintLaps,
+  getSprintResult,
+} from "@/lib/pointsRace";
 import { RaceNav } from "@/components/RaceNav";
-import type { Crossing, Entry } from "@/lib/types";
+import type { Crossing, Entry, Race } from "@/lib/types";
 
 function classNames(...classes: (string | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -56,6 +65,85 @@ function computePodiums(
       .slice(0, 3);
     return { category, rows };
   });
+}
+
+/**
+ * Cumulative points-race leaderboard, plus a sprint-lap banner + that
+ * sprint's own mini-result that surfaces for as long as the field is on the
+ * sprint lap, then folds back into the leaderboard once anyone crosses to
+ * the next lap — driven by live crossings rather than a timer.
+ */
+function PointsClassification({ race, crossings, entries }: { race: Race; crossings: Crossing[]; entries: Entry[] }) {
+  const config = useMemo(() => getPointsRaceConfig(race), [race]);
+  const sprintLaps = useMemo(() => getSprintLaps(config), [config]);
+  const currentLap = useMemo(() => getCurrentLap(crossings), [crossings]);
+  const activeSprint = useMemo(() => getSprintAtLap(sprintLaps, currentLap), [sprintLaps, currentLap]);
+  const sprintResult = useMemo(
+    () => (activeSprint ? getSprintResult(crossings, entries, activeSprint.lap).slice(0, config.sprintPoints.length) : []),
+    [activeSprint, crossings, entries, config.sprintPoints.length]
+  );
+  const pointsStandings = useMemo(() => computePointsStandings(crossings, entries, race), [crossings, entries, race]);
+  const nextSprintText = getNextSprintText(currentLap, sprintLaps);
+
+  return (
+    <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
+      {activeSprint && (
+        <div className={classNames("border-2 border-zinc-950 px-4 py-3", activeSprint.isFinal ? "bg-[#ec1c24] text-white" : "bg-race-yellow text-race-ink")}>
+          <p className="text-xs font-black uppercase tracking-[0.2em]">
+            {activeSprint.isFinal ? `Final sprint — lap ${activeSprint.lap} — double points` : `Sprint lap ${activeSprint.lap}`}
+          </p>
+          {sprintResult.length > 0 && (
+            <ol className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
+              {sprintResult.map((row) => (
+                <li key={row.bib} className="text-sm font-black uppercase tabular-nums">
+                  {row.place}. #{row.bib} {row.name}
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-b-2 border-zinc-950 pb-3">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ec1c24]">Sprint points overlay</p>
+          <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Points classification</h2>
+        </div>
+        <p className="text-xs font-black uppercase tracking-[0.1em] text-zinc-600">{nextSprintText}</p>
+      </div>
+
+      <div className="mt-4 overflow-hidden border-b-2 border-zinc-950">
+        <table className="w-full table-fixed border-collapse">
+          <thead>
+            <tr className="bg-zinc-950 text-left text-[10px] font-black uppercase tracking-[0.14em] text-white">
+              <th className="w-12 py-2 text-center sm:w-16">Rank</th>
+              <th className="w-14 border-l border-zinc-700 py-2 text-center sm:w-16">Bib</th>
+              <th className="border-l border-zinc-700 px-3 py-2">Rider</th>
+              <th className="w-16 border-l border-zinc-700 py-2 text-center">Points</th>
+              <th className="w-12 border-l border-zinc-700 py-2 text-center">Laps</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pointsStandings.map((row, index) => {
+              const isLeader = row.position === 1;
+              const statused = row.status !== "ok";
+              return (
+                <tr key={row.bib} className={classNames("border-t border-zinc-300", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", statused && "opacity-70")}>
+                  <td className={classNames("py-3 text-center text-lg font-black tabular-nums", isLeader ? "bg-zinc-950 text-[#f6d428]" : "text-zinc-700")}>
+                    {statused ? <StatusBadge status={row.status} /> : row.position ?? "—"}
+                  </td>
+                  <td className="border-l border-zinc-300 py-3 text-center"><span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black tabular-nums text-white">{row.bib}</span></td>
+                  <td className="border-l border-zinc-300 px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
+                  <td className="border-l border-zinc-300 py-3 text-center text-base font-black tabular-nums">{row.points}</td>
+                  <td className="border-l border-zinc-300 py-3 text-center text-base font-black tabular-nums">{row.laps}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 export default function LiveBoard({ params }: { params: Promise<{ raceId: string }> }) {
@@ -292,6 +380,8 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
           </Link>
         </p>
       </div>
+
+      {race.is_points_race && <PointsClassification race={race} crossings={scopedCrossings} entries={scopedEntries} />}
     </main>
   );
 }
