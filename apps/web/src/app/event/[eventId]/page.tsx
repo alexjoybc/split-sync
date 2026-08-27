@@ -94,7 +94,17 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     if (ps.data) setParticipants(ps.data);
   }, [eventId]);
 
-  useEffect(() => { refetch(); }, [refetch]);
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      setEvent(null);
+      setRaces([]);
+      setEntries([]);
+      setParticipants([]);
+      return;
+    }
+    refetch();
+  }, [refetch, authLoading, user]);
   useEffect(() => { setOrigin(window.location.origin); }, []);
   useEffect(() => {
     if (!event) return;
@@ -243,8 +253,10 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     refetch();
   };
 
-  if (!event || authLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
-  if (!user || event.owner_id !== user.id) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email to manage this event.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+  if (authLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
+  if (!user) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email to manage this event.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+  if (!event) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
+  if (event.owner_id !== user.id) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email to manage this event.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
 
   return (
     <main className="race-page">
