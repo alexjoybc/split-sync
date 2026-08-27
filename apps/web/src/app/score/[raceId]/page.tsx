@@ -8,13 +8,9 @@ import { useRaceData } from "@/lib/useRaceData";
 import { recordCrossing, flushQueue, pendingCount } from "@/lib/crossingQueue";
 import { useAuth } from "@/lib/useAuth";
 
-function classNames(...classes: (string | false)[]) {
-  return classes.filter(Boolean).join(" ");
-}
-
 export default function Scorer({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
-  const { race, entries, crossings, loading, refetch } = useRaceData(raceId);
+  const { race, crossings, loading, refetch } = useRaceData(raceId);
   const [bib, setBib] = useState("");
   const [pending, setPending] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
@@ -139,29 +135,9 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         )}
       </div>
 
-      {/* Quick-tap chips for known bibs (small velodrome fields) */}
-      <div className="mt-4 flex flex-wrap gap-2">
-        {entries.map((e) => (
-          <button
-            key={e.id}
-            onClick={() => submit(e.bib)}
-            className={classNames(
-              "border-2 border-race-ink px-3.5 py-2.5 text-lg font-black tabular-nums transition-colors",
-              flash === e.bib
-                ? "border-race-red bg-race-red text-white"
-                : "bg-race-panel text-race-ink active:bg-race-yellow"
-            )}
-          >
-            {e.bib}
-            <span className="ml-1.5 text-xs font-bold text-race-muted">
-              {lapsByBib.get(e.bib) ?? 0}
-            </span>
-          </button>
-        ))}
-      </div>
-
       {/* Bib display */}
-      <div className="mt-4 flex h-16 items-center justify-center border-2 border-race-ink bg-race-panel">
+      <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">Enter the bib as the rider crosses the line</p>
+      <div className="mt-2 flex h-16 items-center justify-center border-2 border-race-ink bg-race-panel">
         <span className="text-4xl font-black tabular-nums tracking-widest text-race-ink">
           {flash && !bib ? (
             <span className="text-race-red">#{flash} ✓</span>
