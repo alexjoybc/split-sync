@@ -38,3 +38,4 @@ export function useEventAccess(eventId: string | null | undefined, user: User | 
 
 export const canManageEvent = (role: EventAccessRole) => role === "owner" || role === "organizer";
 export const canScore = (role: EventAccessRole) => role === "owner" || role === "organizer" || role === "scorer";
+export const canCheckIn = (role: EventAccessRole) => role === "owner" || role === "organizer" || role === "checkin";

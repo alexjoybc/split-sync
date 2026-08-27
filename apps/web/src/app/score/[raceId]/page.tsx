@@ -160,7 +160,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   }
 
   if (!user || !allowed) {
-    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event owner or an invited organizer/scorer can score this race. Ask the organizer for an invite link.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event owner or an invited organizer/scorer can score this race. Ask the organizer for an invite link.</p><Link href={`/login?next=${encodeURIComponent(`/score/${raceId}`)}`} className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   }
 
   return (
