@@ -66,8 +66,8 @@ function ResetPasswordContent() {
   if (error) {
     return (
       <div className="text-center">
-        <p className="text-sm font-black uppercase tracking-wide text-race-red">{error}</p>
-        <a href="/auth/forgot-password" className="race-action mt-5 inline-block">
+        <p className="text-sm font-black uppercase tracking-wide text-race-ink">{error}</p>
+        <a href="/auth/forgot-password" className="race-action--muted mt-5 inline-block">
           Request a new link
         </a>
       </div>
@@ -87,7 +87,7 @@ function ResetPasswordContent() {
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         placeholder="••••••••"
-        className="race-input mt-1"
+        className="race-input--muted mt-1"
         autoComplete="new-password"
       />
       <label className="mt-4 block text-xs font-black uppercase tracking-wide">Confirm password</label>
@@ -97,10 +97,10 @@ function ResetPasswordContent() {
         onChange={(event) => setConfirmPassword(event.target.value)}
         onKeyDown={(event) => event.key === "Enter" && updatePassword()}
         placeholder="••••••••"
-        className="race-input mt-1"
+        className="race-input--muted mt-1"
         autoComplete="new-password"
       />
-      <button onClick={updatePassword} disabled={!password || !confirmPassword} className="race-action mt-4 w-full disabled:opacity-50">
+      <button onClick={updatePassword} disabled={!password || !confirmPassword} className="race-action--muted mt-4 w-full disabled:opacity-50">
         Update password
       </button>
     </div>

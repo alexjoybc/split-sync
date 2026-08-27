@@ -76,3 +76,23 @@ body {
 .race-panel {
   @apply border-b-2 border-race-ink bg-race-panel;
 }
+
+/* Muted variants: used on organizer/admin and scorer screens only, never on
+   the spectator surfaces (apps/web/src/app/live, apps/web/src/app/results),
+   which keep the full race-red treatment untouched. These reserve red for
+   genuinely live/active state instead of generic actions, labels, or errors. */
+.race-topline--muted {
+  @apply h-2 bg-race-ink;
+}
+
+.race-kicker--muted {
+  @apply text-[10px] font-black uppercase tracking-[0.2em] text-race-ink;
+}
+
+.race-action--muted {
+  @apply border-2 border-race-ink bg-race-ink px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-white hover:border-zinc-700 hover:bg-zinc-700;
+}
+
+.race-input--muted {
+  @apply w-full border-2 border-race-ink bg-race-panel px-3 py-2 text-sm font-bold text-race-ink outline-none placeholder:text-race-muted focus:border-race-ink;
+}

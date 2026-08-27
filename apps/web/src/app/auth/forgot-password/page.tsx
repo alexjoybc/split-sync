@@ -19,10 +19,10 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="race-page">
-      <div className="race-topline" />
+      <div className="race-topline--muted" />
       <header className="race-masthead">
         <div className="mx-auto max-w-lg">
-          <p className="race-kicker">Organizer access</p>
+          <p className="race-kicker--muted">Organizer access</p>
           <h1 className="race-title">Reset password</h1>
         </div>
       </header>
@@ -44,14 +44,14 @@ export default function ForgotPasswordPage() {
               onChange={(event) => setEmail(event.target.value)}
               onKeyDown={(event) => event.key === "Enter" && sendReset()}
               placeholder="you@example.com"
-              className="race-input mt-1"
+              className="race-input--muted mt-1"
               autoComplete="email"
             />
-            {error && <p className="mt-3 text-sm font-bold text-race-red">{error}</p>}
-            <button onClick={sendReset} disabled={!email} className="race-action mt-4 w-full disabled:opacity-50">
+            {error && <p className="mt-3 border-l-4 border-race-ink pl-2 text-sm font-bold text-race-ink">{error}</p>}
+            <button onClick={sendReset} disabled={!email} className="race-action--muted mt-4 w-full disabled:opacity-50">
               Send reset link
             </button>
-            <a href="/login" className="mt-4 inline-block text-xs font-bold text-race-muted hover:text-race-red">
+            <a href="/login" className="mt-4 inline-block text-xs font-bold text-race-muted hover:text-race-ink">
               Back to sign in
             </a>
           </div>
