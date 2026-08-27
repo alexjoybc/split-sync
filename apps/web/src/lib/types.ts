@@ -21,6 +21,8 @@ export interface RaceStatusChange {
   created_at: string;
 }
 
+export type EntryStatus = "ok" | "dns" | "dnf" | "dsq";
+
 export interface Entry {
   id: string;
   race_id: string;
@@ -28,6 +30,20 @@ export interface Entry {
   name: string;
   team: string | null;
   category: string | null;
+  status: EntryStatus;
+  status_reason: string | null;
+  status_set_by: string | null;
+  status_set_at: string | null;
+}
+
+export interface EntryStatusChange {
+  id: string;
+  entry_id: string;
+  previous_status: EntryStatus;
+  new_status: EntryStatus;
+  reason: string | null;
+  actor: string;
+  created_at: string;
 }
 
 export type Sex = "M" | "F" | "X";
