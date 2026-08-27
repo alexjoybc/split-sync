@@ -18,6 +18,20 @@
 
 `crossings` intentionally does not foreign-key `bib` to `entries`. It keeps a factual audit record and allows future connector ingestion. The current UI only presents assigned entries as tappable inputs.
 
+## Backend API
+
+`apps/web/src/app/api` contains server-side Next.js route handlers deployed as
+Vercel Functions in the existing `split-sync-web` project. This is SplitSync's
+HTTP API surface; it is hosted at `https://splitsync.org/api/...` rather than
+in a separate backend deployment. `GET /api/health` is unauthenticated for
+deployment health checks.
+
+Authenticated handlers require a Supabase access JWT in `Authorization:
+Bearer <token>`. `apps/web/src/lib/server/supabaseApi.ts` validates the token
+with Supabase and sends the same token on its downstream Supabase request.
+RLS remains the authorization boundary, so API handlers never use a
+`service_role` key or reimplement event-role checks. See ADR 0013.
+
 ## Lifecycle
 
 ```text
@@ -112,6 +126,10 @@ Supabase Realtime publishes changes from `crossings`, `races`, `entries`, and `r
 ## Security
 
 Supabase RLS enforces the application boundary:
+
+- API routes verify the caller's Supabase JWT then forward it to Supabase for
+  each downstream call; they do not bypass these policies with a service-role
+  credential (ADR 0013).
 
 - Anonymous: select published event/race/entry/crossing data only.
 - Authenticated organizer: manage only rows belonging to events where `owner_id` matches the JWT subject.

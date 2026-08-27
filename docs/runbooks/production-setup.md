@@ -11,6 +11,22 @@ NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
 ```
 
+The same project also deploys backend API route handlers from
+`apps/web/src/app/api` as Vercel Functions. They are available at
+`https://splitsync.org/api/...`; no second Vercel project, API subdomain, or
+CORS configuration is needed for web clients. Mobile calls this HTTPS origin
+directly and sends the signed-in user's Supabase access token as a bearer
+token. Do not add `SUPABASE_SERVICE_ROLE_KEY` to Vercel: API routes verify and
+forward the caller's JWT so Supabase RLS remains authoritative.
+
+Verify a production deployment with:
+
+```text
+GET https://splitsync.org/api/health
+```
+
+It must return HTTP 200 with `{ "status": "ok" }`.
+
 Set `splitsync.org` and `www.splitsync.org` to DNS-only CNAME records pointing to the Vercel target shown in the Vercel domain settings. Redirect `www` to the apex domain.
 
 ## Supabase
