@@ -25,7 +25,7 @@ export default function LoginPage() {
     if (mode === "signin") {
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) setError(authError.message);
-      else window.location.assign("/");
+      else window.location.assign("/events");
       return;
     }
     const { data, error: authError } = await supabase.auth.signUp({
@@ -34,7 +34,7 @@ export default function LoginPage() {
       options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     if (authError) return setError(authError.message);
-    if (data.session) window.location.assign("/");
+    if (data.session) window.location.assign("/events");
     else setNotice("Check your inbox to confirm your address, then sign in.");
   };
 
