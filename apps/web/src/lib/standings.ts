@@ -27,6 +27,33 @@ export function fmtLapTime(ms: number | null): string {
   return fmtDuration(ms);
 }
 
+/** Distinct, sorted category names present on a race's entries. */
+export function getCategories(entries: Entry[]): string[] {
+  const set = new Set<string>();
+  for (const e of entries) {
+    if (e.category && e.category.trim() !== "") set.add(e.category);
+  }
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Narrow entries + crossings down to a single category before handing them
+ * to computeStandings, so rank/gap/last-lap are computed within that group
+ * only. Unregistered (unknown-bib) crossings have no category and are
+ * excluded from category views but remain visible in the overall view.
+ */
+export function filterByCategory(
+  crossings: Crossing[],
+  entries: Entry[],
+  category: string | null
+): { crossings: Crossing[]; entries: Entry[] } {
+  if (!category) return { crossings, entries };
+  const filteredEntries = entries.filter((e) => e.category === category);
+  const bibs = new Set(filteredEntries.map((e) => e.bib));
+  const filteredCrossings = crossings.filter((c) => bibs.has(c.bib));
+  return { crossings: filteredCrossings, entries: filteredEntries };
+}
+
 /**
  * Derive live standings from raw crossings (mass-start lap racing).
  * Each non-deleted crossing = the rider completing a lap.
