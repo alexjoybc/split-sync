@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
 import { computeStandings, fmtLapTime } from "@/lib/standings";
@@ -38,6 +38,46 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
   const lapsToGo = race?.laps_planned == null ? null : Math.max(race.laps_planned - leaderLaps, 0);
   const q = query.trim().toLowerCase();
   const matches = (row: (typeof standings)[number]) => q !== "" && (row.bib === q || row.name.toLowerCase().includes(q));
+
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
+  const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
+
+  // FLIP animation: whenever the standings order changes, smoothly slide each
+  // row from its previous position to its new position instead of snapping.
+  useLayoutEffect(() => {
+    const nextRects = new Map<string, DOMRect>();
+    rowRefs.current.forEach((el, bib) => {
+      nextRects.set(bib, el.getBoundingClientRect());
+    });
+
+    rowRefs.current.forEach((el, bib) => {
+      const prevRect = prevRectsRef.current.get(bib);
+      const nextRect = nextRects.get(bib);
+      if (!prevRect || !nextRect) return;
+      const deltaY = prevRect.top - nextRect.top;
+      if (Math.abs(deltaY) < 1) return;
+
+      el.style.transition = "none";
+      el.style.transform = `translateY(${deltaY}px)`;
+      el.style.zIndex = "1";
+      // Force a reflow so the browser registers the starting position
+      // before we transition back to the resting position.
+      el.getBoundingClientRect();
+
+      requestAnimationFrame(() => {
+        el.style.transition = "transform 500ms cubic-bezier(0.22, 1, 0.36, 1)";
+        el.style.transform = "";
+      });
+
+      const clearZIndex = () => {
+        el.style.zIndex = "";
+        el.removeEventListener("transitionend", clearZIndex);
+      };
+      el.addEventListener("transitionend", clearZIndex);
+    });
+
+    prevRectsRef.current = nextRects;
+  }, [standings]);
 
   if (loading || !race) {
     return <main className="grid min-h-dvh place-items-center bg-race-paper font-sans text-sm font-bold uppercase tracking-widest text-race-muted">{loading ? "Loading classification" : "Race not found"}</main>;
@@ -111,7 +151,13 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                 const isLeader = row.position === 1 && row.laps > 0;
                 const podium = row.position > 1 && row.position <= 3 && row.laps > 0;
                 return (
-                  <tr key={row.bib} className={classNames("border-t border-zinc-300 transition-opacity", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", hit && !isLeader && "bg-[#ffdfdf] ring-2 ring-inset ring-[#ec1c24]", !hit && q !== "" && "opacity-35")}>
+                  <tr
+                    key={row.bib}
+                    ref={(el) => {
+                      if (el) rowRefs.current.set(row.bib, el);
+                      else rowRefs.current.delete(row.bib);
+                    }}
+                    className={classNames("relative border-t border-zinc-300 transition-opacity", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", hit && !isLeader && "bg-[#ffdfdf] ring-2 ring-inset ring-[#ec1c24]", !hit && q !== "" && "opacity-35")}>
                     <td className={classNames("py-3 text-center text-lg font-black tabular-nums", isLeader ? "bg-zinc-950 text-[#f6d428]" : podium ? "text-[#ec1c24]" : "text-zinc-700")}>
                       {row.laps > 0 ? row.position : "—"}
                     </td>
