@@ -4,7 +4,7 @@
 
 1. Confirm `https://splitsync.org` loads on mobile data.
 2. Sign in as the event organizer on web and mobile tracker.
-3. Confirm the event roster and every race assignment.
+3. Confirm the event roster and every race assignment. For large CX fields, build the roster ahead of time with the CSV importer on the event setup page rather than entering riders one at a time on race morning.
 4. If volunteers are helping (scoring, check-in, officiating), open the event setup page's Volunteers section and generate one invite link per person with the role they need (see `apps/web/src/app/help/organizer/volunteers`). Have them accept it and confirm they can open the web scorer before race day.
 5. Publish the event and open the event QR code.
 6. Scan the QR code with a second phone; confirm public results load.

@@ -88,6 +88,20 @@ export default function HelpPage() {
               same roster.
             </li>
             <li>
+              For fields with many riders (like a CX event), use{" "}
+              <strong>Import from CSV</strong> in the roster section instead of
+              entering racers one at a time. Columns: <code>bib</code>,{" "}
+              <code>first_name</code>/<code>last_name</code> (or a single{" "}
+              <code>name</code> column), <code>team</code>,{" "}
+              <code>category</code>, and optional <code>sex</code>. The
+              preview shows which rows are ready and which are skipped
+              (missing bib/name, duplicate bib in the file, or a bib already
+              on the roster). You can optionally map each category in the
+              file to an upcoming race so imported riders are assigned to
+              their race in the same step. Day-of registrations can still be
+              added one at a time with the regular add-racer form.
+            </li>
+            <li>
               A race can only be edited (name, entries) while it is
               <strong> upcoming</strong>. Starting a race locks its entry list.
             </li>

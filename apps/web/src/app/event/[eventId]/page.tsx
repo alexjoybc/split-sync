@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { canManageEvent, canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
+import { RosterCsvImport } from "@/components/RosterCsvImport";
 import { raceTemplates } from "@/lib/raceTemplates";
 import type { Entry, EventInvite, EventMember, EventMemberRole, EventRow, Participant, Race, Sex } from "@/lib/types";
 
@@ -444,6 +445,8 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
             </table>
           </div>
         )}
+
+        <RosterCsvImport eventId={eventId} participants={participants} races={races} onImported={refetch} />
       </section>}
 
       <section className="mt-6">
