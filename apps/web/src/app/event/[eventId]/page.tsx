@@ -6,6 +6,7 @@ import { PlusIcon } from "@heroicons/react/20/solid";
 import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
+import { RaceNav } from "@/components/RaceNav";
 import type { Entry, EventRow, Participant, Race } from "@/lib/types";
 
 const categories = ["U13", "U15", "U17", "Junior", "U23", "Senior", "Master 35+", "Master 40+", "Master 50+", "Open"];
@@ -94,7 +95,8 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   return (
     <main className="race-page">
       <div className="race-topline" />
-      <header className="race-masthead"><div className="mx-auto max-w-3xl"><Link href="/" className="text-xs font-black uppercase tracking-wide text-race-yellow hover:text-white">← All events</Link><p className="race-kicker mt-4">Event setup</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-zinc-400">{event.location}</p></div></header>
+      <RaceNav links={[{ href: `/results/${eventId}`, label: "Spectator results" }]} />
+      <header className="race-masthead"><div className="mx-auto max-w-3xl"><p className="race-kicker">Event setup</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
       <section className="race-panel mt-8 p-4">

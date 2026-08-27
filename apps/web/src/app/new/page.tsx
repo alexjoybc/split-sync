@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
+import { RaceNav } from "@/components/RaceNav";
 
 export default function NewEvent() {
   const router = useRouter();
@@ -40,6 +41,7 @@ export default function NewEvent() {
   return (
     <main className="race-page">
       <div className="race-topline" />
+      <RaceNav links={[{ href: "/", label: "All events" }]} />
       <header className="race-masthead"><div className="mx-auto max-w-lg"><p className="race-kicker">Race calendar</p><h1 className="race-title">New event</h1></div></header>
       <div className="mx-auto max-w-lg px-4 py-8 sm:px-6">
 
