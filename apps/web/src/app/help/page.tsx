@@ -206,24 +206,28 @@ export default function HelpPage() {
             </li>
             <li>
               Mark a rider <strong>DNS</strong>, <strong>DNF</strong>, or{" "}
-              <strong>DSQ</strong> from the scorer screen at any time —
-              before the race starts (DNS), mid-race (DNF/DSQ), or even after
-              it finishes to correct a mistake. Statused riders are excluded
-              from ranked position on the live/results boards but stay
-              visible with their badge, and can&apos;t record further
-              crossings. You&apos;ll be asked for an optional reason, which is
-              kept with the change.
+              <strong>DSQ</strong> from the rider detail sheet — tap the{" "}
+              <strong>•••</strong> button on a rider&apos;s tile to open it.
+              You can do this at any time: before the race starts (DNS),
+              mid-race (DNF/DSQ), or even after it finishes to correct a
+              mistake. Statused riders are excluded from ranked position on
+              the live/results boards but stay visible with their badge, and
+              can&apos;t record further crossings. You&apos;ll be asked for
+              an optional reason, which is kept with the change.
             </li>
             <li>
-              Tap <strong>+ Penalty</strong> under a rider&apos;s tile on the
-              scorer screen to apply a <strong>time penalty</strong> (added
-              seconds), a <strong>lap penalty</strong> (dropped laps), a{" "}
+              Tap <strong>•••</strong> on a rider&apos;s tile to open their
+              detail sheet, then tap <strong>+ Add penalty</strong> to apply
+              a <strong>time penalty</strong> (added seconds), a{" "}
+              <strong>lap penalty</strong> (dropped laps), a{" "}
               <strong>relegation</strong>, or a plain <strong>note</strong> —
               a reason is required for every one. The penalty adjusts that
               rider&apos;s position and gap on the live/results boards without
-              ever touching their recorded crossing times; spectators see a
-              <strong> Penalty</strong> badge with the reason. Remove a
-              mistaken entry with <strong>Remove</strong> next to it.
+              ever touching their recorded crossing times; spectators see a{" "}
+              <strong>Penalty</strong> badge with the reason. A yellow
+              penalty count badge on the rider&apos;s tile in the grid signals
+              that penalties are active. Remove a mistaken entry with{" "}
+              <strong>Remove</strong> inside the detail sheet.
             </li>
           </ul>
         </section>
