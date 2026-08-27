@@ -110,6 +110,14 @@ export default function HelpPage() {
               and its races always start <strong>upcoming</strong>.
             </li>
             <li>
+              Tap <strong>Assign</strong> on a race card to open its entry
+              list. Search by bib, name, or category, or pick a category from
+              the filter to narrow a large roster. Selecting a category also
+              enables <strong>Assign all in [category]</strong> /{" "}
+              <strong>Unassign all in [category]</strong> so you can put a
+              whole field into a race in one action.
+            </li>
+            <li>
               A race can only be edited (name, entries) while it is
               <strong> upcoming</strong>. Starting a race locks its entry list.
             </li>
