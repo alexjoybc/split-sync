@@ -317,7 +317,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   };
 
   if (authLoading || roleLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
-  if (!user || !role) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email, or use a volunteer invite link, to access this event.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
+  if (!user || !role) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email, or use a volunteer invite link, to access this event.</p><Link href={`/login?next=${encodeURIComponent(`/event/${eventId}`)}`} className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   if (!event) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
 
   return (
