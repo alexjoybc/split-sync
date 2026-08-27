@@ -55,6 +55,17 @@ The product has three deliberate surfaces. Do not blend their permissions or goa
 - Verify mobile TypeScript with `pnpm --filter mobile exec tsc --noEmit`.
 - For native Android changes, rebuild with `pnpm --filter mobile exec expo run:android` and test on the connected device when available.
 
+### Worktree Workflow (mandatory for every task)
+
+Every task, regardless of size, is done in its own git worktree — never directly on `main` in the primary checkout.
+
+1. Create a GitHub issue for the task first (`gh issue create`). Every task gets an issue, even small ones.
+2. Branch name and worktree directory: `issue-<number>-<short-slug>` (e.g. `issue-42-fix-lap-gap-calc`).
+3. Create the worktree as a sibling of the repo: `git worktree add ../split-sync-worktrees/issue-<number>-<short-slug> -b issue-<number>-<short-slug>`.
+4. Do all work (edits, installs, builds, commits) inside that worktree directory, not the main checkout.
+5. Push the branch, open a PR referencing the issue (`Closes #N` when the PR fully resolves it), and verify per the rules above before merging.
+6. After the PR is merged and verified, clean up: `git worktree remove ../split-sync-worktrees/issue-<number>-<short-slug>` from the main checkout, then delete the local/remote branch if not already deleted by the merge.
+
 ## Operational Docs
 
 - `docs/architecture.md`: schema, realtime and security model.
