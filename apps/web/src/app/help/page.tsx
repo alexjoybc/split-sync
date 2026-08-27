@@ -46,6 +46,14 @@ export default function HelpPage() {
               race finishes.
             </li>
             <li>
+              An <strong>announcer</strong> view (open a race&apos;s live board
+              and switch to it, or visit <code>/announce/&lt;raceId&gt;</code>)
+              gives a large-text, high-contrast layout for a race announcer or
+              venue screen: current leader, latest crossings, and a bib/name
+              rider lookup. Its <strong>TV mode</strong> auto-scrolls the full
+              standings and suits an unattended screen.
+            </li>
+            <li>
               Positions and gaps are derived live from timing crossings and may
               be corrected as more crossings are recorded. Treat all results as
               unofficial.
