@@ -96,3 +96,11 @@ body {
 .race-input--muted {
   @apply w-full border-2 border-race-ink bg-race-panel px-3 py-2 text-sm font-bold text-race-ink outline-none placeholder:text-race-muted focus:border-race-ink;
 }
+
+/* Printable pages (e.g. the per-race start list) hide chrome that only
+   makes sense on screen and let the table/heading fill the printed page. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

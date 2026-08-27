@@ -57,6 +57,7 @@ export interface Participant {
   team: string | null;
   category: string | null;
   sex: Sex | null;
+  checked_in_at: string | null;
 }
 
 export interface Crossing {
