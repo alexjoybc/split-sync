@@ -66,6 +66,14 @@ Every task, regardless of size, is done in its own git worktree — never direct
 5. Push the branch, open a PR referencing the issue (`Closes #N` when the PR fully resolves it), and verify per the rules above before merging.
 6. After the PR is merged and verified, clean up: `git worktree remove ../split-sync-worktrees/issue-<number>-<short-slug>` from the main checkout, then delete the local/remote branch if not already deleted by the merge.
 
+## Documentation Requirements
+
+- Every user-facing feature must be self-documented on the website itself, not only in repo `docs/`. Add or update the on-site Help section (`apps/web/src/app/help`) so spectators, organizers, and (once shipped) the mobile tracker's in-app help can each find guidance for their own surface without leaving the product.
+- Keep Help content scoped per surface: do not put organizer-only instructions on the spectator-facing Help page, and vice versa.
+- Write an ADR (`docs/adr/000N-*.md`) whenever a change affects architecture, security, data model, or a cross-surface contract (e.g., new invariant, new auth flow, new realtime behavior). Skip an ADR for pure UI copy/style tweaks or bug fixes with no behavioral/architectural change.
+- Update the relevant runbook (`docs/runbooks/`) whenever a change affects an operational workflow (race day, production setup, mobile build).
+- Update `docs/architecture.md` whenever the schema, realtime model, or security model changes.
+
 ## Operational Docs
 
 - `docs/architecture.md`: schema, realtime and security model.
@@ -73,3 +81,4 @@ Every task, regardless of size, is done in its own git worktree — never direct
 - `docs/runbooks/production-setup.md`: Vercel, Supabase, DNS, Resend, migrations.
 - `docs/runbooks/mobile-development.md`: Android/iOS tracker build setup.
 - `docs/adr/`: architectural decisions and rationale.
+- `apps/web/src/app/help`: on-site self-service Help pages for spectators and organizers.

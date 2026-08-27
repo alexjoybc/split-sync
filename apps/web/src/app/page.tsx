@@ -99,6 +99,9 @@ export default function Home() {
             <Link href="/events" className="text-[11px] font-black uppercase tracking-wide text-race-muted hover:text-race-red">
               Live events
             </Link>
+            <Link href="/help" className="text-[11px] font-black uppercase tracking-wide text-race-muted hover:text-race-red">
+              Help
+            </Link>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/login" className="hidden text-[11px] font-black uppercase tracking-wide text-race-muted hover:text-race-red sm:inline">
@@ -328,6 +331,7 @@ export default function Home() {
             <a href="#features" className="hover:text-race-red">Capabilities</a>
             <a href="#how-it-works" className="hover:text-race-red">How it works</a>
             <Link href="/events" className="hover:text-race-red">Live events</Link>
+            <Link href="/help" className="hover:text-race-red">Help</Link>
             <Link href="/login" className="hover:text-race-red">Sign in</Link>
           </div>
         </div>
