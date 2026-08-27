@@ -332,12 +332,19 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                 type="button"
                 onClick={() => canRecord && submit(entry.bib)}
                 disabled={!canRecord}
-                className="block w-full text-left disabled:cursor-not-allowed"
+                aria-label={`Record crossing for #${entry.bib} ${entry.name}`}
+                className="block w-full text-left disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="block text-3xl font-black tabular-nums">#{entry.bib}</span>
                 <span className="mt-2 block truncate text-sm font-black uppercase">{entry.name}</span>
                 <span className={`mt-1 block text-xs font-bold ${flash === entry.bib ? "text-white" : "text-race-muted"}`}>
-                  {statused ? entry.status.toUpperCase() : `Lap ${lapsByBib.get(entry.bib) ?? 0}`}
+                  {statused
+                    ? entry.status.toUpperCase()
+                    : race.status === "active"
+                    ? `Lap ${lapsByBib.get(entry.bib) ?? 0}`
+                    : race.status === "upcoming"
+                    ? "Race not started"
+                    : "Race finished"}
                 </span>
               </button>
               {canManageStatus && (
@@ -347,7 +354,9 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                       key={opt.value}
                       type="button"
                       onClick={() => setEntryStatus(entry, opt.value)}
-                      className={`border px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide ${entry.status === opt.value ? "border-race-ink bg-race-ink text-white" : "border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink"}`}
+                      aria-pressed={entry.status === opt.value}
+                      aria-label={`Set status to ${opt.label} for #${entry.bib} ${entry.name}`}
+                      className={`race-chip ${entry.status === opt.value ? "race-chip--on" : "race-chip--off"}`}
                     >
                       {opt.label}
                     </button>
@@ -358,12 +367,17 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
               {entryPenalties.length > 0 && (
                 <ul className="mt-2 space-y-1">
                   {entryPenalties.map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-1 bg-race-yellow/40 px-1.5 py-0.5 text-[10px] font-bold uppercase text-race-ink">
+                    <li key={p.id} className="flex min-h-[44px] items-center justify-between gap-2 bg-race-yellow/40 px-2 py-1 text-xs font-bold uppercase text-race-ink">
                       <span className="truncate" title={p.reason}>
                         {penaltySummary(p.type, p.value)}
                       </span>
                       {canManagePenaltiesRole && (
-                        <button type="button" onClick={() => removePenalty(p.id)} className="shrink-0 font-black underline decoration-2 underline-offset-2">
+                        <button
+                          type="button"
+                          onClick={() => removePenalty(p.id)}
+                          aria-label={`Remove ${penaltySummary(p.type, p.value)} penalty`}
+                          className="inline-flex min-h-[44px] shrink-0 items-center font-black underline decoration-2 underline-offset-2 active:opacity-70"
+                        >
                           Remove
                         </button>
                       )}
@@ -376,7 +390,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                 <button
                   type="button"
                   onClick={() => startPenalty(entry.id)}
-                  className="mt-2 text-[10px] font-black uppercase tracking-wide text-race-ink underline decoration-2 underline-offset-2"
+                  className="race-inline-action mt-1"
                 >
                   + Penalty
                 </button>
@@ -452,16 +466,18 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                   {new Date(c.client_recorded_at).toLocaleTimeString()}
                 </span>
               </span>
-              <span className="flex gap-3">
+              <span className="flex items-center">
                 <button
                   onClick={() => startEdit(c)}
-                  className="font-black uppercase text-race-ink underline decoration-2 underline-offset-4 hover:no-underline"
+                  aria-label={`Edit crossing for #${c.bib}`}
+                  className="race-inline-action"
                 >
                   Edit
                 </button>
                 <button
                   onClick={() => undo(c.id)}
-                  className="font-black uppercase text-race-ink underline decoration-2 underline-offset-4 hover:no-underline"
+                  aria-label={`Undo crossing for #${c.bib}`}
+                  className="race-inline-action"
                 >
                   Undo
                 </button>
@@ -536,7 +552,8 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                   </span>
                   <button
                     onClick={() => startRestore(c.id)}
-                    className="font-black uppercase text-race-ink underline decoration-2 underline-offset-4 hover:no-underline"
+                    aria-label={`Restore crossing for #${c.bib}`}
+                    className="race-inline-action"
                   >
                     Restore
                   </button>

@@ -97,6 +97,29 @@ body {
   @apply w-full border-2 border-race-ink bg-race-panel px-3 py-2 text-sm font-bold text-race-ink outline-none placeholder:text-race-muted focus:border-race-ink;
 }
 
+/* Scorer secondary chip — minimum 44 × 44 px touch target for status toggle
+   buttons and penalty-removal controls. Organizer/scorer surfaces only; never
+   used on the spectator-facing live/results boards. */
+.race-chip {
+  @apply inline-flex min-h-[44px] min-w-[44px] items-center justify-center border-2 px-3 font-black uppercase text-xs tracking-wide transition-colors active:opacity-70;
+}
+
+/* Chip variant: currently selected / toggled-on state */
+.race-chip--on {
+  @apply border-race-ink bg-race-ink text-white;
+}
+
+/* Chip variant: unselected / toggled-off state */
+.race-chip--off {
+  @apply border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink;
+}
+
+/* Inline text action with a 44-px tap zone via padding.
+   Used for Undo / Edit / Restore / Cancel links in the scorer lists. */
+.race-inline-action {
+  @apply inline-flex min-h-[44px] items-center px-3 font-black uppercase text-sm text-race-ink underline decoration-2 underline-offset-4 hover:no-underline active:opacity-70;
+}
+
 /* Printable pages (e.g. the per-race start list) hide chrome that only
    makes sense on screen and let the table/heading fill the printed page. */
 @media print {
