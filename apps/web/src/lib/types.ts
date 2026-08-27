@@ -53,6 +53,33 @@ export interface Crossing {
   deleted_at: string | null;
 }
 
+export type EventMemberRole = "organizer" | "scorer" | "checkin" | "official";
+
+// Access resolved for the signed-in user against a single event: the literal
+// event owner, an accepted event_members role, or none.
+export type EventAccessRole = "owner" | EventMemberRole | null;
+
+export interface EventMember {
+  id: string;
+  event_id: string;
+  user_id: string;
+  role: EventMemberRole;
+  invited_by: string | null;
+  created_at: string;
+}
+
+export interface EventInvite {
+  id: string;
+  event_id: string;
+  role: EventMemberRole;
+  token: string;
+  created_by: string;
+  expires_at: string;
+  used_at: string | null;
+  used_by: string | null;
+  created_at: string;
+}
+
 export interface EventRow {
   id: string;
   title: string;
