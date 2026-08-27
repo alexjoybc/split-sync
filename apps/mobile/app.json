@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "SplitSync Tracker",
+    "slug": "split-sync-tracker",
+    "version": "1.0.0",
+    "scheme": "org.splitsync.tracker",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "org.splitsync.tracker"
+    },
+    "android": {
+      "package": "org.splitsync.tracker",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
