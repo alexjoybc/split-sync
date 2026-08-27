@@ -17,7 +17,7 @@ const roleOptions: { value: EventMemberRole; label: string; hint: string }[] = [
   { value: "organizer", label: "Organizer", hint: "Manages roster, races, and invites like the owner." },
   { value: "scorer", label: "Scorer", hint: "Records crossings and starts/finishes races." },
   { value: "checkin", label: "Check-in", hint: "Views the private roster before publish." },
-  { value: "official", label: "Read-only official", hint: "Views everything, cannot make changes." },
+  { value: "official", label: "Official", hint: "Views everything, applies rider penalties/adjustments." },
 ];
 const roleLabel = (role: EventMemberRole) => roleOptions.find((option) => option.value === role)?.label ?? role;
 

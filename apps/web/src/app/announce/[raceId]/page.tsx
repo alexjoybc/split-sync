@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
-import { computeStandings, filterByCategory, fmtLapTime, getCategories, getRecentCrossings } from "@/lib/standings";
+import { computeStandings, filterByCategory, fmtLapTime, getCategories, getRecentCrossings, isPenalized, type StandingRow } from "@/lib/standings";
 import {
   computePointsStandings,
   getCurrentLap,
@@ -24,6 +24,26 @@ function classNames(...classes: (string | false)[]) {
 }
 
 const STATUS_LABEL: Record<string, string> = { dns: "DNS", dnf: "DNF", dsq: "DSQ" };
+
+function penaltyTooltip(row: StandingRow): string {
+  return row.penalties
+    .map((p) => {
+      if (p.type === "time_penalty") return `+${p.value}s time penalty${p.reason ? ` — ${p.reason}` : ""}`;
+      if (p.type === "lap_penalty") return `-${p.value} lap penalty${p.reason ? ` — ${p.reason}` : ""}`;
+      if (p.type === "relegation") return `Relegated${p.reason ? ` — ${p.reason}` : ""}`;
+      return `Note${p.reason ? ` — ${p.reason}` : ""}`;
+    })
+    .join("\n");
+}
+
+function PenaltyBadge({ row }: { row: StandingRow }) {
+  if (!isPenalized(row)) return null;
+  return (
+    <span title={penaltyTooltip(row)} className="ml-2 inline-flex cursor-help px-1.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-white bg-[#ec1c24]">
+      Penalty
+    </span>
+  );
+}
 
 function RaceClock({ startedAt }: { startedAt: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -170,7 +190,7 @@ function AnnouncerBody({
             <div className="mt-3 flex items-baseline gap-4">
               <span className="inline-flex min-w-16 justify-center bg-race-yellow px-3 py-1.5 text-3xl font-black tabular-nums text-race-ink sm:text-4xl">{leader.bib}</span>
               <div className="min-w-0">
-                <p className="truncate text-3xl font-black uppercase leading-tight text-white sm:text-5xl">{leader.name}</p>
+                <p className="truncate text-3xl font-black uppercase leading-tight text-white sm:text-5xl">{leader.name}<PenaltyBadge row={leader} /></p>
                 <p className="mt-1 truncate text-sm font-bold uppercase tracking-wide text-white/60 sm:text-base">
                   {leader.team ?? (leader.isUnknownBib ? "Unregistered rider" : "Independent")} · Lap {leader.laps}
                 </p>
@@ -189,7 +209,7 @@ function AnnouncerBody({
                 <li key={row.bib} className="flex items-center gap-4 py-3">
                   <span className="w-8 text-center text-xl font-black tabular-nums text-race-yellow">{row.position}</span>
                   <span className="inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-lg font-black tabular-nums text-white">{row.bib}</span>
-                  <span className="min-w-0 flex-1 truncate text-lg font-black uppercase text-white sm:text-xl">{row.name}</span>
+                  <span className="min-w-0 flex-1 truncate text-lg font-black uppercase text-white sm:text-xl">{row.name}<PenaltyBadge row={row} /></span>
                   <span className="shrink-0 text-base font-bold tabular-nums text-white/70">{row.position === 1 ? "Leader" : row.gapText}</span>
                 </li>
               ))}
@@ -232,7 +252,7 @@ function AnnouncerBody({
           <div className="mt-5 border-t-2 border-white/10 pt-5">
             <div className="flex items-baseline gap-3">
               <span className="inline-flex min-w-14 justify-center bg-race-yellow px-2.5 py-1 text-2xl font-black tabular-nums text-race-ink">{match.bib}</span>
-              <p className="truncate text-2xl font-black uppercase text-white">{match.name}</p>
+              <p className="truncate text-2xl font-black uppercase text-white">{match.name}<PenaltyBadge row={match} /></p>
             </div>
             <p className="mt-1 text-sm font-bold uppercase tracking-wide text-white/50">{match.team ?? (match.isUnknownBib ? "Unregistered rider" : "Independent")}</p>
             <dl className="mt-4 grid grid-cols-2 gap-4 border-t-2 border-white/10 pt-4">
@@ -289,7 +309,7 @@ function TvBody({ standings }: { standings: ReturnType<typeof computeStandings> 
                   <td className="border-l border-white/10 py-4 text-center">
                     <span className={classNames("inline-flex min-w-12 justify-center px-2 py-1 text-xl font-black tabular-nums", isLeader ? "bg-race-ink text-race-yellow" : "bg-white/10 text-white")}>{row.bib}</span>
                   </td>
-                  <td className="border-l border-white/10 px-4 py-4 text-xl font-black uppercase">{row.name}</td>
+                  <td className="border-l border-white/10 px-4 py-4 text-xl font-black uppercase">{row.name}<PenaltyBadge row={row} /></td>
                   <td className="border-l border-white/10 py-4 text-center text-xl font-black tabular-nums">{row.laps}</td>
                   <td className="border-l border-white/10 py-4 pr-4 text-right text-xl font-black tabular-nums">{statused ? "" : isLeader ? "Leader" : row.gapText}</td>
                 </tr>
@@ -357,7 +377,7 @@ function PointsOverlay({ race, crossings, entries }: { race: Race; crossings: Cr
 }
 
 function AnnouncerView({ raceId }: { raceId: string }) {
-  const { race, entries, crossings, loading } = useRaceData(raceId);
+  const { race, entries, crossings, penalties, loading } = useRaceData(raceId);
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<Mode>(searchParams.get("mode") === "tv" ? "tv" : "announcer");
   const [category, setCategory] = useState<string | null>(null);
@@ -376,8 +396,8 @@ function AnnouncerView({ raceId }: { raceId: string }) {
 
   const raceStartMs = race?.started_at ? new Date(race.started_at).getTime() : null;
   const standings = useMemo(
-    () => computeStandings(scopedCrossings, scopedEntries, raceStartMs),
-    [scopedCrossings, scopedEntries, raceStartMs]
+    () => computeStandings(scopedCrossings, scopedEntries, raceStartMs, penalties),
+    [scopedCrossings, scopedEntries, raceStartMs, penalties]
   );
   const recent = useMemo(
     () => getRecentCrossings(scopedCrossings, scopedEntries, raceStartMs, 5),

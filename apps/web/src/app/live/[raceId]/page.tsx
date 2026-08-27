@@ -4,7 +4,7 @@ import { use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "reac
 import Link from "next/link";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
-import { computeStandings, filterByCategory, fmtLapTime, getCategories, type StandingRow } from "@/lib/standings";
+import { computeStandings, filterByCategory, fmtLapTime, getCategories, isPenalized, type StandingRow } from "@/lib/standings";
 import {
   computePointsStandings,
   getCurrentLap,
@@ -15,7 +15,7 @@ import {
   getSprintResult,
 } from "@/lib/pointsRace";
 import { RaceNav } from "@/components/RaceNav";
-import type { Crossing, Entry, Race } from "@/lib/types";
+import type { Crossing, Entry, EntryPenalty, Race } from "@/lib/types";
 
 function classNames(...classes: (string | false)[]) {
   return classes.filter(Boolean).join(" ");
@@ -54,17 +54,42 @@ function computePodiums(
   crossings: Crossing[],
   entries: Entry[],
   raceStartMs: number | null,
-  categories: string[]
+  categories: string[],
+  penalties: EntryPenalty[]
 ): { category: string; rows: StandingRow[] }[] {
   const groups = categories.length > 0 ? categories : ["Overall"];
   return groups.map((category) => {
     const { crossings: c, entries: e } =
       categories.length > 0 ? filterByCategory(crossings, entries, category) : { crossings, entries };
-    const rows = computeStandings(c, e, raceStartMs)
+    const rows = computeStandings(c, e, raceStartMs, penalties)
       .filter((r) => r.status === "ok" && r.laps > 0)
       .slice(0, 3);
     return { category, rows };
   });
+}
+
+/** Tooltip text summarizing every penalty/adjustment applied to a row. */
+function penaltyTooltip(row: StandingRow): string {
+  return row.penalties
+    .map((p) => {
+      if (p.type === "time_penalty") return `+${p.value}s time penalty${p.reason ? ` — ${p.reason}` : ""}`;
+      if (p.type === "lap_penalty") return `-${p.value} lap penalty${p.reason ? ` — ${p.reason}` : ""}`;
+      if (p.type === "relegation") return `Relegated${p.reason ? ` — ${p.reason}` : ""}`;
+      return `Note${p.reason ? ` — ${p.reason}` : ""}`;
+    })
+    .join("\n");
+}
+
+function PenaltyBadge({ row }: { row: StandingRow }) {
+  if (!isPenalized(row)) return null;
+  return (
+    <span
+      title={penaltyTooltip(row)}
+      className="ml-1 inline-flex cursor-help px-1 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white bg-[#ec1c24]"
+    >
+      Penalty
+    </span>
+  );
 }
 
 /**
@@ -148,7 +173,7 @@ function PointsClassification({ race, crossings, entries }: { race: Race; crossi
 
 export default function LiveBoard({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
-  const { race, entries, crossings, loading } = useRaceData(raceId);
+  const { race, entries, crossings, penalties, loading } = useRaceData(raceId);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const [showPodium, setShowPodium] = useState(false);
@@ -161,12 +186,12 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
 
   const raceStartMs = race?.started_at ? new Date(race.started_at).getTime() : null;
   const standings = useMemo(
-    () => computeStandings(scopedCrossings, scopedEntries, raceStartMs),
-    [scopedCrossings, scopedEntries, raceStartMs]
+    () => computeStandings(scopedCrossings, scopedEntries, raceStartMs, penalties),
+    [scopedCrossings, scopedEntries, raceStartMs, penalties]
   );
   const podiums = useMemo(
-    () => (showPodium ? computePodiums(crossings, entries, raceStartMs, categories) : []),
-    [showPodium, crossings, entries, raceStartMs, categories]
+    () => (showPodium ? computePodiums(crossings, entries, raceStartMs, categories, penalties) : []),
+    [showPodium, crossings, entries, raceStartMs, categories, penalties]
   );
   const leader = standings[0];
   const leaderLaps = leader?.laps ?? 0;
@@ -321,7 +346,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                       <li key={row.bib} className="flex items-center gap-3 px-3 py-2">
                         <span className="w-5 shrink-0 text-lg font-black tabular-nums text-zinc-700">{row.position}</span>
                         <span className="inline-flex min-w-8 shrink-0 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black tabular-nums text-white">{row.bib}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-black uppercase">{row.name}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-black uppercase">{row.name}<PenaltyBadge row={row} /></span>
                       </li>
                     ))}
                   </ol>
@@ -361,7 +386,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                       {statused ? <StatusBadge status={row.status} /> : row.laps > 0 ? row.position : "—"}
                     </td>
                     <td className="border-l border-zinc-300 py-3 text-center"><span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black tabular-nums text-white">{row.bib}</span></td>
-                    <td className="border-l border-zinc-300 px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
+                    <td className="border-l border-zinc-300 px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}<PenaltyBadge row={row} /></p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
                     <td className="border-l border-zinc-300 py-3 text-center text-base font-black tabular-nums">{row.laps}</td>
                     <td className="hidden border-l border-zinc-300 py-3 text-center text-sm font-bold tabular-nums sm:table-cell">{fmtLapTime(row.lastLapMs)}</td>
                     <td className={classNames("border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black tabular-nums", row.gapText.startsWith("-") ? "text-[#ec1c24]" : "text-zinc-900")}>

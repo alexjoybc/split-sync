@@ -1,16 +1,25 @@
-import type { Crossing, Entry, EntryStatus } from "./types";
+import type { Crossing, Entry, EntryPenalty, EntryStatus } from "./types";
 
 export interface StandingRow {
   position: number | null; // null for DNS/DNF/DSQ rows — not part of ranked order
   bib: string;
   name: string;
   team: string | null;
-  laps: number;
-  lastCrossingAt: number | null; // epoch ms
-  lastLapMs: number | null;
-  gapText: string; // "—" for leader, "+12.3", "+1:04.2", "-2 laps"
+  laps: number; // raw, factual lap count from crossings — never adjusted
+  lastCrossingAt: number | null; // epoch ms, raw crossing time — never adjusted
+  lastLapMs: number | null; // raw last lap time — never adjusted
+  gapText: string; // "—" for leader, "+12.3", "+1:04.2", "-2 laps" — reflects penalties
   isUnknownBib: boolean;
   status: EntryStatus; // "ok" unless the organizer marked DNS/DNF/DSQ
+  penalties: EntryPenalty[]; // penalties/adjustments applied to this entry, newest last
+  timePenaltySeconds: number; // sum of time_penalty values, added to effective time for ranking
+  lapPenalty: number; // sum of lap_penalty values, subtracted from laps for ranking
+  relegated: boolean; // dropped to the back of its same-lap tier for ranking
+}
+
+/** True if this row carries any penalty/adjustment (for badges/tooltips). */
+export function isPenalized(row: StandingRow): boolean {
+  return row.penalties.length > 0;
 }
 
 function fmtDuration(ms: number): string {
@@ -119,9 +128,16 @@ export function getRecentCrossings(
 export function computeStandings(
   crossings: Crossing[],
   entries: Entry[],
-  raceStartMs?: number | null
+  raceStartMs?: number | null,
+  penalties: EntryPenalty[] = []
 ): StandingRow[] {
   const entryByBib = new Map(entries.map((e) => [e.bib, e]));
+  const penaltiesByEntryId = new Map<string, EntryPenalty[]>();
+  for (const p of penalties) {
+    const arr = penaltiesByEntryId.get(p.entry_id);
+    if (arr) arr.push(p);
+    else penaltiesByEntryId.set(p.entry_id, [p]);
+  }
   const byBib = new Map<string, number[]>(); // bib -> sorted crossing times (epoch ms)
 
   for (const c of crossings) {
@@ -149,6 +165,23 @@ export function computeStandings(
         : laps === 1 && raceStartMs != null
           ? times[0] - raceStartMs
           : null;
+
+    // Penalties/adjustments (#71): asserted facts overlaid on derived
+    // standings, same pattern as rider status (ADR 0007) — applied here as
+    // a final step after the raw rank/gap inputs are known, never mutating
+    // the raw crossing-derived fields above. See docs/adr/0011.
+    const entryPenalties = entry ? (penaltiesByEntryId.get(entry.id) ?? []) : [];
+    let timePenaltySeconds = 0;
+    let lapPenalty = 0;
+    let relegated = false;
+    for (const p of entryPenalties) {
+      if (p.type === "time_penalty") timePenaltySeconds += p.value ?? 0;
+      else if (p.type === "lap_penalty") lapPenalty += p.value ?? 0;
+      else if (p.type === "relegation") relegated = true;
+    }
+    const effectiveLaps = Math.max(laps - lapPenalty, 0);
+    const effectiveAt = lastCrossingAt == null ? null : lastCrossingAt + timePenaltySeconds * 1000;
+
     return {
       bib,
       name: entry?.name ?? `Bib ${bib}`,
@@ -160,6 +193,12 @@ export function computeStandings(
       // Unknown-bib crossings have no entry/status — treat them as ranked,
       // same as before this feature existed.
       status: entry?.status ?? "ok",
+      penalties: entryPenalties,
+      timePenaltySeconds,
+      lapPenalty,
+      relegated,
+      effectiveLaps,
+      effectiveAt,
       times,
     };
   });
@@ -172,28 +211,34 @@ export function computeStandings(
     .filter((r) => r.status !== "ok")
     .sort((a, b) => a.name.localeCompare(b.name) || a.bib.localeCompare(b.bib));
 
+  // Ranking uses the penalty-adjusted lap count and time (effectiveLaps /
+  // effectiveAt), never the raw crossing-derived fields, so a lap or time
+  // penalty (or a relegation, sorted last within its tier) is reflected in
+  // final classification per the acceptance criteria in #71.
   ranked.sort((a, b) => {
-    if (a.laps !== b.laps) return b.laps - a.laps;
-    if (a.lastCrossingAt == null && b.lastCrossingAt == null) return 0;
-    if (a.lastCrossingAt == null) return 1;
-    if (b.lastCrossingAt == null) return -1;
-    return a.lastCrossingAt - b.lastCrossingAt;
+    if (a.effectiveLaps !== b.effectiveLaps) return b.effectiveLaps - a.effectiveLaps;
+    if (a.relegated !== b.relegated) return a.relegated ? 1 : -1;
+    if (a.effectiveAt == null && b.effectiveAt == null) return 0;
+    if (a.effectiveAt == null) return 1;
+    if (b.effectiveAt == null) return -1;
+    return a.effectiveAt - b.effectiveAt;
   });
 
   const leader = ranked[0];
 
   const rankedResult = ranked.map((r, i) => {
     let gapText = "—";
-    if (i > 0 && leader && leader.laps > 0) {
-      if (r.laps === 0) {
+    if (i > 0 && leader && leader.effectiveLaps > 0) {
+      if (r.effectiveLaps === 0) {
         gapText = "";
-      } else if (r.laps < leader.laps) {
-        const down = leader.laps - r.laps;
+      } else if (r.effectiveLaps < leader.effectiveLaps) {
+        const down = leader.effectiveLaps - r.effectiveLaps;
         gapText = `-${down} lap${down > 1 ? "s" : ""}`;
       } else {
-        // same laps as leader: compare crossing time on that lap
-        const leaderAtLap = leader.times[r.laps - 1];
-        gapText = `+${fmtDuration(r.lastCrossingAt! - leaderAtLap)}`;
+        // same effective laps as leader: compare penalty-adjusted time.
+        // (When neither rider has a lap penalty this is exactly the raw
+        // "crossing time at that lap" comparison used before #71.)
+        gapText = `+${fmtDuration(r.effectiveAt! - leader.effectiveAt!)}`;
       }
     }
     return {
@@ -207,6 +252,10 @@ export function computeStandings(
       gapText,
       isUnknownBib: r.isUnknownBib,
       status: r.status,
+      penalties: r.penalties,
+      timePenaltySeconds: r.timePenaltySeconds,
+      lapPenalty: r.lapPenalty,
+      relegated: r.relegated,
     };
   });
 
@@ -221,6 +270,10 @@ export function computeStandings(
     gapText: "",
     isUnknownBib: r.isUnknownBib,
     status: r.status,
+    penalties: r.penalties,
+    timePenaltySeconds: r.timePenaltySeconds,
+    lapPenalty: r.lapPenalty,
+    relegated: r.relegated,
   }));
 
   return [...rankedResult, ...statusedResult];

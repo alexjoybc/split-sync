@@ -54,6 +54,22 @@ export interface EntryStatusChange {
   created_at: string;
 }
 
+export type PenaltyType = "time_penalty" | "lap_penalty" | "relegation" | "note";
+
+// entry_id, not race_id: penalties/adjustments are per race-entry, same
+// scope as EntryStatus. Unlike status (one current value + history), an
+// entry can carry several stacked penalties, so this is the record itself,
+// not an audit log of it.
+export interface EntryPenalty {
+  id: string;
+  entry_id: string;
+  type: PenaltyType;
+  value: number | null; // seconds for time_penalty, laps for lap_penalty; null for relegation/note
+  reason: string;
+  set_by: string;
+  set_at: string;
+}
+
 export type Sex = "M" | "F" | "X";
 
 export interface Participant {

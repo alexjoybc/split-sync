@@ -19,7 +19,7 @@ const roleCopy: Record<EventMemberRole, string> = {
   organizer: "manage the roster, races, and invites",
   scorer: "record crossings and start/finish races",
   checkin: "view the private roster before publish",
-  official: "view the event without making changes",
+  official: "view the event and apply rider penalties/adjustments",
 };
 
 export default function AcceptInvite({ params }: { params: Promise<{ token: string }> }) {
