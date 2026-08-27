@@ -19,9 +19,10 @@ export default function EventsPage() {
   const { user, loading } = useAuth();
 
   useEffect(() => {
+    if (loading) return;
     supabase.from("events").select("*").then(({ data }) => setEvents(data ?? []));
     supabase.from("races").select("*").order("sequence_order").then(({ data }) => setRaces(data ?? []));
-  }, []);
+  }, [loading, user]);
 
   return (
     <main className="race-page">
