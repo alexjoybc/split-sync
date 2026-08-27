@@ -15,7 +15,44 @@ const sexOptions: { value: Sex; label: string }[] = [
   { value: "F", label: "F" },
   { value: "X", label: "X" },
 ];
+const timezones = ["America/Vancouver", "America/Edmonton", "America/Winnipeg", "America/Toronto", "America/Halifax", "UTC"];
 const inputCls = "race-input--muted";
+
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function fromDatetimeLocal(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+interface EventDetailsForm {
+  description: string;
+  banner_image_url: string;
+  venue_address: string;
+  starts_at: string;
+  ends_at: string;
+  timezone: string;
+  contact_email: string;
+  registration_url: string;
+}
+
+const emptyDetails: EventDetailsForm = {
+  description: "",
+  banner_image_url: "",
+  venue_address: "",
+  starts_at: "",
+  ends_at: "",
+  timezone: "",
+  contact_email: "",
+  registration_url: "",
+};
 
 export default function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = use(params);
@@ -27,6 +64,9 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const [newRace, setNewRace] = useState({ name: "", laps: "" });
   const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
   const [origin, setOrigin] = useState("");
+  const [details, setDetails] = useState<EventDetailsForm>(emptyDetails);
+  const [savingDetails, setSavingDetails] = useState(false);
+  const [detailsSaved, setDetailsSaved] = useState(false);
   const bibInputRef = useRef<HTMLInputElement>(null);
   const { user, loading: authLoading } = useAuth();
 
@@ -45,6 +85,42 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
 
   useEffect(() => { refetch(); }, [refetch]);
   useEffect(() => { setOrigin(window.location.origin); }, []);
+  useEffect(() => {
+    if (!event) return;
+    setDetails({
+      description: event.description ?? "",
+      banner_image_url: event.banner_image_url ?? "",
+      venue_address: event.venue_address ?? "",
+      starts_at: toDatetimeLocal(event.starts_at),
+      ends_at: toDatetimeLocal(event.ends_at),
+      timezone: event.timezone ?? "",
+      contact_email: event.contact_email ?? "",
+      registration_url: event.registration_url ?? "",
+    });
+  }, [event]);
+
+  const saveDetails = async () => {
+    setSavingDetails(true);
+    setDetailsSaved(false);
+    const { error } = await supabase
+      .from("events")
+      .update({
+        description: details.description.trim() || null,
+        banner_image_url: details.banner_image_url.trim() || null,
+        venue_address: details.venue_address.trim() || null,
+        starts_at: fromDatetimeLocal(details.starts_at),
+        ends_at: fromDatetimeLocal(details.ends_at),
+        timezone: details.timezone.trim() || null,
+        contact_email: details.contact_email.trim() || null,
+        registration_url: details.registration_url.trim() || null,
+      })
+      .eq("id", eventId);
+    setSavingDetails(false);
+    if (!error) {
+      setDetailsSaved(true);
+      refetch();
+    }
+  };
 
   const addParticipant = async () => {
     if (!rider.bib.trim() || !rider.name.trim()) return;
@@ -117,7 +193,48 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
       <section className="race-panel mt-8 p-4">
-        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">1. Event roster</h2><span className="text-sm font-bold text-race-muted">{participants.length} racers</span></div>
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">1. Event details</h2>{detailsSaved && <span className="text-xs font-bold text-race-muted">Saved</span>}</div>
+        <p className="mt-1 text-sm text-race-muted">Shown to spectators on the results page and shared with anyone you invite.</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-black uppercase tracking-wide">Description</label>
+            <textarea value={details.description} onChange={(e) => setDetails({ ...details, description: e.target.value })} placeholder="What racers and spectators should know about this event." rows={3} className={`mt-1 ${inputCls}`} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-black uppercase tracking-wide">Banner image URL</label>
+            <input value={details.banner_image_url} onChange={(e) => setDetails({ ...details, banner_image_url: e.target.value })} placeholder="https://…" className={`mt-1 ${inputCls}`} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-black uppercase tracking-wide">Venue address</label>
+            <input value={details.venue_address} onChange={(e) => setDetails({ ...details, venue_address: e.target.value })} placeholder="1234 Track Rd, Victoria, BC" className={`mt-1 ${inputCls}`} />
+          </div>
+          <div>
+            <label className="block text-xs font-black uppercase tracking-wide">Starts</label>
+            <input type="datetime-local" value={details.starts_at} onChange={(e) => setDetails({ ...details, starts_at: e.target.value })} className={`mt-1 ${inputCls}`} />
+          </div>
+          <div>
+            <label className="block text-xs font-black uppercase tracking-wide">Ends</label>
+            <input type="datetime-local" value={details.ends_at} onChange={(e) => setDetails({ ...details, ends_at: e.target.value })} className={`mt-1 ${inputCls}`} />
+          </div>
+          <div>
+            <label className="block text-xs font-black uppercase tracking-wide">Timezone</label>
+            <input value={details.timezone} onChange={(e) => setDetails({ ...details, timezone: e.target.value })} placeholder="America/Vancouver" list="timezones" className={`mt-1 ${inputCls}`} />
+            <datalist id="timezones">{timezones.map((tz) => <option key={tz} value={tz} />)}</datalist>
+          </div>
+          <div>
+            <label className="block text-xs font-black uppercase tracking-wide">Contact email</label>
+            <input type="email" value={details.contact_email} onChange={(e) => setDetails({ ...details, contact_email: e.target.value })} placeholder="organizer@example.com" className={`mt-1 ${inputCls}`} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-black uppercase tracking-wide">Registration link</label>
+            <input value={details.registration_url} onChange={(e) => setDetails({ ...details, registration_url: e.target.value })} placeholder="https://zone4.ca/…" className={`mt-1 ${inputCls}`} />
+          </div>
+        </div>
+        <button onClick={saveDetails} disabled={savingDetails} className="race-action--muted mt-4 disabled:opacity-50">{savingDetails ? "Saving…" : "Save details"}</button>
+      </section>
+
+      <section className="race-panel mt-6 p-4">
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">2. Event roster</h2><span className="text-sm font-bold text-race-muted">{participants.length} racers</span></div>
         <p className="mt-1 text-sm text-race-muted">Add each racer once, then place them in one or more races below.</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_150px_72px_auto]">
           <input ref={bibInputRef} value={rider.bib} onChange={(e) => setRider({ ...rider, bib: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Bib" inputMode="numeric" className={inputCls} />
@@ -167,7 +284,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       </section>
 
       <section className="mt-6">
-        <div className="race-section-heading flex items-baseline justify-between"><h2 className="text-base font-black uppercase">2. Races</h2><span className="text-sm font-bold text-race-muted">Create then assign racers</span></div>
+        <div className="race-section-heading flex items-baseline justify-between"><h2 className="text-base font-black uppercase">3. Races</h2><span className="text-sm font-bold text-race-muted">Create then assign racers</span></div>
         <div className="mt-3 space-y-3">
           {races.map((race) => {
             const raceEntries = entries.filter((entry) => entry.race_id === race.id);
@@ -182,7 +299,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
         </div>
       </section>
       <section className="race-panel mt-6 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker--muted">3. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish once, then print or display this event QR code. Spectators choose their race from the results page.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action--muted">Publish event</button>}</div>
+        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker--muted">4. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish once, then print or display this event QR code. Spectators choose their race from the results page.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action--muted">Publish event</button>}</div>
         {event.status === "live" && origin && <div className="mt-5 border-2 border-race-ink bg-race-paper p-4"><div className="flex flex-wrap items-center gap-5">{(() => { const resultsUrl = `${origin}/results/${eventId}`; return <><QRCodeSVG value={resultsUrl} size={136} bgColor="#f4f1ea" fgColor="#18181b" /><div className="min-w-0"><p className="text-lg font-black uppercase">Event results QR</p><p className="mt-1 max-w-md text-sm text-race-muted">One link for every live race and finished classification at this event.</p><p className="mt-3 break-all text-[10px] font-bold text-race-muted">{resultsUrl}</p><a href={resultsUrl} target="_blank" className="mt-3 inline-block text-xs font-black uppercase text-race-ink underline decoration-2 underline-offset-4">Open spectator results ↗</a></div></>; })()}</div></div>}
       </section>
       </div>
