@@ -3,7 +3,7 @@ import type { Crossing, Entry, EntryStatus, Race } from "./types";
 /**
  * Velodrome points race scoring — a derived overlay on top of the same
  * crossings + entries used by `standings.ts` (see ADR 0001 and
- * docs/adr/0009-points-race-overlay.md). No new fact table exists: sprint
+ * docs/adr/0011-points-race-overlay.md). No new fact table exists: sprint
  * results are read directly from each rider's existing crossing sequence
  * (the Nth crossing = their arrival at lap N), and points are always
  * recomputed from crossings + the race's scoring config, never persisted.

@@ -98,6 +98,36 @@ export default function HelpPage() {
               same roster.
             </li>
             <li>
+              For fields with many riders (like a CX event), use{" "}
+              <strong>Import from CSV</strong> in the roster section instead of
+              entering racers one at a time. Columns: <code>bib</code>,{" "}
+              <code>first_name</code>/<code>last_name</code> (or a single{" "}
+              <code>name</code> column), <code>team</code>,{" "}
+              <code>category</code>, and optional <code>sex</code>. The
+              preview shows which rows are ready and which are skipped
+              (missing bib/name, duplicate bib in the file, or a bib already
+              on the roster). You can optionally map each category in the
+              file to an upcoming race so imported riders are assigned to
+              their race in the same step. Day-of registrations can still be
+              added one at a time with the regular add-racer form.
+            </li>
+            <li>
+              Running a recurring series? Use <strong>Clone event</strong> on an
+              existing event to start a new draft with the same details,
+              categories, and race structure. Optionally include a copy of the
+              participant roster. Cloning never copies race-day data — the new
+              event starts as a draft with no entries, crossings, or results,
+              and its races always start <strong>upcoming</strong>.
+            </li>
+            <li>
+              Tap <strong>Assign</strong> on a race card to open its entry
+              list. Search by bib, name, or category, or pick a category from
+              the filter to narrow a large roster. Selecting a category also
+              enables <strong>Assign all in [category]</strong> /{" "}
+              <strong>Unassign all in [category]</strong> so you can put a
+              whole field into a race in one action.
+            </li>
+            <li>
               A race can only be edited (name, entries) while it is
               <strong> upcoming</strong>. Starting a race locks its entry list.
             </li>
@@ -153,6 +183,19 @@ export default function HelpPage() {
               An accidental crossing can be removed without reopening: use{" "}
               <strong>Undo</strong> next to it in the scorer&apos;s recent list.
               This works whether the race is active or finished.
+            </li>
+            <li>
+              Tapped the wrong bib, or the time looks off? Use{" "}
+              <strong>Edit</strong> next to a recent crossing to correct its
+              bib or time. A reason is required and is kept in the
+              crossing&apos;s audit history; the crossing&apos;s identity
+              (used for offline sync) is never changed, so standings update
+              live from the correction.
+            </li>
+            <li>
+              Undid a crossing by mistake? Find it under{" "}
+              <strong>Recently removed</strong> below the recent list and tap{" "}
+              <strong>Restore</strong>. A reason is required, same as editing.
             </li>
             <li>
               Mark a rider <strong>DNS</strong>, <strong>DNF</strong>, or{" "}

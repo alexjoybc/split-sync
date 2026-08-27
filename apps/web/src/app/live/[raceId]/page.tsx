@@ -221,7 +221,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
   return (
     <main className="min-h-dvh bg-race-paper pb-12 font-sans text-race-ink">
       <div className="race-topline" />
-      <RaceNav links={[{ href: `/results/${race.event_id}`, label: "All event races" }, { href: "/help", label: "Help" }]} />
+      <RaceNav links={[{ href: `/results/${race.event_id}`, label: "All event races" }]} />
       <header className="bg-race-ink px-4 py-4 text-white sm:px-6">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
           <div className="min-w-0">

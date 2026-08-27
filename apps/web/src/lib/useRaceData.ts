@@ -13,10 +13,11 @@ export function useRaceData(raceId: string) {
   const [race, setRace] = useState<Race | null>(null);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [crossings, setCrossings] = useState<Crossing[]>([]);
+  const [deletedCrossings, setDeletedCrossings] = useState<Crossing[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refetch = useCallback(async () => {
-    const [raceRes, entriesRes, crossingsRes] = await Promise.all([
+    const [raceRes, entriesRes, crossingsRes, deletedRes] = await Promise.all([
       supabase.from("races").select("*").eq("id", raceId).single(),
       supabase.from("entries").select("*").eq("race_id", raceId),
       supabase
@@ -25,10 +26,19 @@ export function useRaceData(raceId: string) {
         .eq("race_id", raceId)
         .is("deleted_at", null)
         .order("client_recorded_at", { ascending: true }),
+      // Recently removed crossings, kept around so a mistaken "Undo" can be restored.
+      supabase
+        .from("crossings")
+        .select("*")
+        .eq("race_id", raceId)
+        .not("deleted_at", "is", null)
+        .order("deleted_at", { ascending: false })
+        .limit(20),
     ]);
     if (raceRes.data) setRace(raceRes.data);
     if (entriesRes.data) setEntries(entriesRes.data);
     if (crossingsRes.data) setCrossings(crossingsRes.data);
+    if (deletedRes.data) setDeletedCrossings(deletedRes.data);
     setLoading(false);
   }, [raceId]);
 
@@ -54,5 +64,5 @@ export function useRaceData(raceId: string) {
     };
   }, [raceId, refetch]);
 
-  return { race, entries, crossings, loading, refetch };
+  return { race, entries, crossings, deletedCrossings, loading, refetch };
 }

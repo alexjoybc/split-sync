@@ -1,4 +1,4 @@
-# ADR 0009: Velodrome Points Race As A Config-Driven Standings Overlay
+# ADR 0011: Velodrome Points Race As A Config-Driven Standings Overlay
 
 ## Status
 
