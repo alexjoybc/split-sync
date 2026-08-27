@@ -78,18 +78,18 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   }
 
   if (!user || !isOwner) {
-    return <main className="race-page"><div className="race-topline" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Organizer sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event organizer can score this race until volunteer scorer access is configured.</p><Link href="/login" className="race-action mt-5 inline-block">Sign in</Link></div></div></main>;
+    return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Organizer sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event organizer can score this race until volunteer scorer access is configured.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   }
 
   return (
     <main className="race-page">
-      <div className="race-topline" />
+      <div className="race-topline--muted" />
       <RaceNav links={[{ href: `/event/${race.event_id}`, label: "Event setup" }, { href: `/results/${race.event_id}`, label: "Spectator results" }]} showAuth />
       <div className="mx-auto flex min-h-[calc(100dvh-0.5rem)] max-w-lg flex-col px-4 py-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-            <p className="race-kicker">Race control</p>
+            <p className="race-kicker--muted">Race control</p>
             <h1 className="mt-1 text-lg font-black uppercase">{race.name}</h1>
             <p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">
               Scorer station
@@ -103,7 +103,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         {race.status === "upcoming" && (
           <button
             onClick={() => setRaceStatus("active")}
-            className="race-action race-action--yellow"
+            className="race-action--muted race-action--yellow"
           >
             Start race
           </button>
@@ -111,13 +111,13 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         {race.status === "active" && (
           <button
             onClick={() => setRaceStatus("finished")}
-            className="race-action"
+            className="race-action--muted"
           >
             Finish
           </button>
         )}
         {race.status === "finished" && (
-          <Link href={`/live/${raceId}`} className="text-sm font-black uppercase text-race-red">
+          <Link href={`/live/${raceId}`} className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4">
             View results
           </Link>
         )}
@@ -125,7 +125,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
 
       <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">Tap a rider as they cross the line</p>
       {race.status === "active" ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {entries.map((entry) => <button key={entry.id} onClick={() => submit(entry.bib)} className={`min-h-28 border-2 p-3 text-left transition-colors active:bg-race-yellow ${flash === entry.bib ? "border-race-red bg-race-red text-white" : "border-race-ink bg-race-panel text-race-ink"}`}>
+        {entries.map((entry) => <button key={entry.id} onClick={() => submit(entry.bib)} className={`min-h-28 border-2 p-3 text-left transition-colors active:bg-race-yellow ${flash === entry.bib ? "border-race-ink bg-race-ink text-white" : "border-race-ink bg-race-panel text-race-ink"}`}>
           <span className="block text-3xl font-black tabular-nums">#{entry.bib}</span>
           <span className="mt-2 block truncate text-sm font-black uppercase">{entry.name}</span>
           <span className={`mt-1 block text-xs font-bold ${flash === entry.bib ? "text-white" : "text-race-muted"}`}>Lap {lapsByBib.get(entry.bib) ?? 0}</span>
@@ -145,7 +145,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
             </span>
             <button
               onClick={() => undo(c.id)}
-              className="font-black uppercase text-race-red hover:text-race-ink"
+              className="font-black uppercase text-race-ink underline decoration-2 underline-offset-4 hover:no-underline"
             >
               Undo
             </button>

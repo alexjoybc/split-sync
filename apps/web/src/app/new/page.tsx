@@ -36,16 +36,16 @@ export default function NewEvent() {
   };
 
   const inputCls =
-    "race-input";
+    "race-input--muted";
 
   return (
     <main className="race-page">
-      <div className="race-topline" />
+      <div className="race-topline--muted" />
       <RaceNav links={[{ href: "/", label: "All events" }]} showAuth />
-      <header className="race-masthead"><div className="mx-auto max-w-lg"><p className="race-kicker">Race calendar</p><h1 className="race-title">New event</h1></div></header>
+      <header className="race-masthead"><div className="mx-auto max-w-lg"><p className="race-kicker--muted">Race calendar</p><h1 className="race-title">New event</h1></div></header>
       <div className="mx-auto max-w-lg px-4 py-8 sm:px-6">
 
-       {!loading && !user ? <div className="race-panel p-5"><p className="text-sm text-race-muted">Sign in before creating an event.</p><button onClick={() => router.push("/login")} className="race-action mt-4">Sign in</button></div> : <>
+       {!loading && !user ? <div className="race-panel p-5"><p className="text-sm text-race-muted">Sign in before creating an event.</p><button onClick={() => router.push("/login")} className="race-action--muted mt-4">Sign in</button></div> : <>
 
       <div className="mt-6 space-y-4">
         <div>
@@ -66,12 +66,12 @@ export default function NewEvent() {
           </select>
         </div>
 
-        {error && <p className="border-l-4 border-race-red bg-white px-3 py-2 text-sm font-bold text-race-red">{error}</p>}
+        {error && <p className="border-l-4 border-race-ink bg-white px-3 py-2 text-sm font-bold text-race-ink">{error}</p>}
 
         <button
           onClick={createEvent}
           disabled={saving || loading}
-          className="race-action w-full disabled:opacity-50"
+          className="race-action--muted w-full disabled:opacity-50"
         >
           {saving ? "Creating…" : "Create event and add racers"}
         </button>

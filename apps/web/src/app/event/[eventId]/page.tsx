@@ -10,7 +10,7 @@ import { RaceNav } from "@/components/RaceNav";
 import type { Entry, EventRow, Participant, Race } from "@/lib/types";
 
 const categories = ["U13", "U15", "U17", "Junior", "U23", "Senior", "Master 35+", "Master 40+", "Master 50+", "Open"];
-const inputCls = "race-input";
+const inputCls = "race-input--muted";
 
 export default function EventPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = use(params);
@@ -90,13 +90,13 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   };
 
   if (!event || authLoading) return <main className="race-page flex items-center justify-center text-race-muted">Loading…</main>;
-  if (!user || event.owner_id !== user.id) return <main className="race-page"><div className="race-topline" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email to manage this event.</p><Link href="/login" className="race-action mt-5 inline-block">Sign in</Link></div></div></main>;
+  if (!user || event.owner_id !== user.id) return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Organizer access</p><h1 className="mt-1 text-2xl font-black uppercase">This event is private</h1><p className="mt-3 text-sm text-race-muted">Sign in with the organizer email to manage this event.</p><Link href="/login" className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
 
   return (
     <main className="race-page">
-      <div className="race-topline" />
+      <div className="race-topline--muted" />
       <RaceNav links={[{ href: `/results/${eventId}`, label: "Spectator results" }]} showAuth />
-      <header className="race-masthead"><div className="mx-auto max-w-3xl"><p className="race-kicker">Event setup</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header>
+      <header className="race-masthead"><div className="mx-auto max-w-3xl"><p className="race-kicker--muted">Event setup</p><h1 className="race-title">{event.title}</h1><p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">{event.location}</p></div></header>
       <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
 
       <section className="race-panel mt-8 p-4">
@@ -107,7 +107,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
           <input value={rider.name} onChange={(e) => setRider({ ...rider, name: e.target.value })} onKeyDown={(e) => e.key === "Enter" && addParticipant()} placeholder="Racer name" className={inputCls} />
           <input value={rider.team} onChange={(e) => setRider({ ...rider, team: e.target.value })} placeholder="Team / club" className={inputCls} />
           <input value={rider.category} onChange={(e) => setRider({ ...rider, category: e.target.value })} placeholder="Category" list="categories" className={inputCls} />
-          <button onClick={addParticipant} className="race-action flex items-center justify-center"><PlusIcon className="size-5" /></button>
+          <button onClick={addParticipant} className="race-action--muted flex items-center justify-center"><PlusIcon className="size-5" /></button>
         </div>
         <datalist id="categories">{categories.map((category) => <option key={category} value={category} />)}</datalist>
         {participants.length > 0 && <div className="mt-4 flex flex-wrap gap-1.5">{participants.map((participant) => <span key={participant.id} className="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-700 dark:bg-white/10 dark:text-gray-300"><b>#{participant.bib}</b> {participant.name}{participant.category && <span className="ml-1 text-gray-500 dark:text-gray-400">· {participant.category}</span>}</span>)}</div>}
@@ -129,8 +129,8 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
         </div>
       </section>
       <section className="race-panel mt-6 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker">3. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish once, then print or display this event QR code. Spectators choose their race from the results page.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action">Publish event</button>}</div>
-        {event.status === "live" && origin && <div className="mt-5 border-2 border-race-ink bg-race-paper p-4"><div className="flex flex-wrap items-center gap-5">{(() => { const resultsUrl = `${origin}/results/${eventId}`; return <><QRCodeSVG value={resultsUrl} size={136} bgColor="#f4f1ea" fgColor="#18181b" /><div className="min-w-0"><p className="text-lg font-black uppercase">Event results QR</p><p className="mt-1 max-w-md text-sm text-race-muted">One link for every live race and finished classification at this event.</p><p className="mt-3 break-all text-[10px] font-bold text-race-muted">{resultsUrl}</p><a href={resultsUrl} target="_blank" className="mt-3 inline-block text-xs font-black uppercase text-race-red">Open spectator results ↗</a></div></>; })()}</div></div>}
+        <div className="flex flex-wrap items-center justify-between gap-4"><div><p className="race-kicker--muted">3. Publish</p><h2 className="mt-1 text-base font-black uppercase">Spectator sharing</h2><p className="mt-1 text-sm text-race-muted">Publish once, then print or display this event QR code. Spectators choose their race from the results page.</p></div>{event.status === "live" ? <span className="bg-race-yellow px-3 py-2 text-xs font-black uppercase">Published</span> : <button onClick={publish} className="race-action--muted">Publish event</button>}</div>
+        {event.status === "live" && origin && <div className="mt-5 border-2 border-race-ink bg-race-paper p-4"><div className="flex flex-wrap items-center gap-5">{(() => { const resultsUrl = `${origin}/results/${eventId}`; return <><QRCodeSVG value={resultsUrl} size={136} bgColor="#f4f1ea" fgColor="#18181b" /><div className="min-w-0"><p className="text-lg font-black uppercase">Event results QR</p><p className="mt-1 max-w-md text-sm text-race-muted">One link for every live race and finished classification at this event.</p><p className="mt-3 break-all text-[10px] font-bold text-race-muted">{resultsUrl}</p><a href={resultsUrl} target="_blank" className="mt-3 inline-block text-xs font-black uppercase text-race-ink underline decoration-2 underline-offset-4">Open spectator results ↗</a></div></>; })()}</div></div>}
       </section>
       </div>
     </main>

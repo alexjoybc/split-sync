@@ -43,7 +43,7 @@ function AuthCallbackContent() {
       listener.subscription.unsubscribe();
     };
   }, [params, router]);
-  return error ? <div className="text-center"><p className="text-sm font-black uppercase tracking-wide text-race-red">{error}</p><a href="/login" className="race-action mt-5 inline-block">Back to sign in</a></div> : <p className="text-sm font-black uppercase tracking-wide text-race-muted">Signing you in…</p>;
+  return error ? <div className="text-center"><p className="text-sm font-black uppercase tracking-wide text-race-ink">{error}</p><a href="/login" className="race-action--muted mt-5 inline-block">Back to sign in</a></div> : <p className="text-sm font-black uppercase tracking-wide text-race-muted">Signing you in…</p>;
 }
 
 export default function AuthCallback() {
