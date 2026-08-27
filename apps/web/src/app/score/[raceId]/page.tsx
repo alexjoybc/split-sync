@@ -2,7 +2,6 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { BackspaceIcon } from "@heroicons/react/24/outline";
 import { supabase } from "@/lib/supabase";
 import { useRaceData } from "@/lib/useRaceData";
 import { recordCrossing, flushQueue, pendingCount } from "@/lib/crossingQueue";
@@ -11,8 +10,7 @@ import { RaceNav } from "@/components/RaceNav";
 
 export default function Scorer({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
-  const { race, crossings, loading, refetch } = useRaceData(raceId);
-  const [bib, setBib] = useState("");
+  const { race, entries, crossings, loading, refetch } = useRaceData(raceId);
   const [pending, setPending] = useState(0);
   const [flash, setFlash] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState(false);
@@ -38,7 +36,6 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const submit = useCallback(
     async (value: string) => {
       if (!value) return;
-      setBib("");
       setFlash(value);
       setTimeout(() => setFlash(null), 600);
       await recordCrossing(raceId, value);
@@ -47,17 +44,6 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
     },
     [raceId, refetch]
   );
-
-  // Physical keyboard support (laptop at the timing table)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (/^[0-9]$/.test(e.key)) setBib((b) => (b + e.key).slice(0, 4));
-      else if (e.key === "Backspace") setBib((b) => b.slice(0, -1));
-      else if (e.key === "Enter") submit(bib);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [bib, submit]);
 
   const lapsByBib = useMemo(() => {
     const m = new Map<string, number>();
@@ -137,49 +123,14 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         )}
       </div>
 
-      {/* Bib display */}
-      <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">Enter the bib as the rider crosses the line</p>
-      <div className="mt-2 flex h-16 items-center justify-center border-2 border-race-ink bg-race-panel">
-        <span className="text-4xl font-black tabular-nums tracking-widest text-race-ink">
-          {flash && !bib ? (
-            <span className="text-race-red">#{flash} ✓</span>
-          ) : (
-            bib || <span className="text-race-muted">bib</span>
-          )}
-        </span>
-      </div>
-
-      {/* Keypad */}
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
-          <button
-            key={d}
-            onClick={() => setBib((b) => (b + d).slice(0, 4))}
-            className="border-2 border-race-ink bg-race-panel py-5 text-2xl font-black text-race-ink active:bg-race-yellow"
-          >
-            {d}
-          </button>
-        ))}
-        <button
-          onClick={() => setBib((b) => b.slice(0, -1))}
-          className="flex items-center justify-center border-2 border-race-ink bg-race-panel py-5 text-race-ink active:bg-race-yellow"
-        >
-          <BackspaceIcon className="size-7" />
-        </button>
-        <button
-          onClick={() => setBib((b) => (b + "0").slice(0, 4))}
-          className="border-2 border-race-ink bg-race-panel py-5 text-2xl font-black text-race-ink active:bg-race-yellow"
-        >
-          0
-        </button>
-        <button
-          onClick={() => submit(bib)}
-          disabled={!bib}
-          className="border-2 border-race-red bg-race-red py-5 text-xl font-black text-white active:bg-race-ink disabled:opacity-40"
-        >
-          ✓
-        </button>
-      </div>
+      <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">Tap a rider as they cross the line</p>
+      {race.status === "active" ? <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {entries.map((entry) => <button key={entry.id} onClick={() => submit(entry.bib)} className={`min-h-28 border-2 p-3 text-left transition-colors active:bg-race-yellow ${flash === entry.bib ? "border-race-red bg-race-red text-white" : "border-race-ink bg-race-panel text-race-ink"}`}>
+          <span className="block text-3xl font-black tabular-nums">#{entry.bib}</span>
+          <span className="mt-2 block truncate text-sm font-black uppercase">{entry.name}</span>
+          <span className={`mt-1 block text-xs font-bold ${flash === entry.bib ? "text-white" : "text-race-muted"}`}>Lap {lapsByBib.get(entry.bib) ?? 0}</span>
+        </button>)}
+      </div> : <div className="race-panel mt-3 p-4 text-center text-sm font-bold text-race-muted">{entries.length} rostered riders ready. Start the race to enable crossing capture.</div>}
 
       {/* Recent crossings with undo */}
       <ul className="mt-4 border-y-2 border-race-ink divide-y divide-zinc-300">

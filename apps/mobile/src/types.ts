@@ -14,3 +14,9 @@ export type Race = {
   laps_planned: number | null;
   status: RaceStatus;
 };
+
+export type Entry = {
+  id: string;
+  bib: string;
+  name: string;
+};
