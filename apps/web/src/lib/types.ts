@@ -70,6 +70,19 @@ export interface Crossing {
   deleted_at: string | null;
 }
 
+export type CrossingCorrectionField = "bib" | "client_recorded_at" | "deleted_at";
+
+export interface CrossingCorrection {
+  id: string;
+  crossing_id: string;
+  field_changed: CrossingCorrectionField;
+  previous_value: string | null;
+  new_value: string | null;
+  actor: string;
+  reason: string | null;
+  created_at: string;
+}
+
 export type EventMemberRole = "organizer" | "scorer" | "checkin" | "official";
 
 // Access resolved for the signed-in user against a single event: the literal

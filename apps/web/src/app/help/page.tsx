@@ -143,6 +143,19 @@ export default function HelpPage() {
               This works whether the race is active or finished.
             </li>
             <li>
+              Tapped the wrong bib, or the time looks off? Use{" "}
+              <strong>Edit</strong> next to a recent crossing to correct its
+              bib or time. A reason is required and is kept in the
+              crossing&apos;s audit history; the crossing&apos;s identity
+              (used for offline sync) is never changed, so standings update
+              live from the correction.
+            </li>
+            <li>
+              Undid a crossing by mistake? Find it under{" "}
+              <strong>Recently removed</strong> below the recent list and tap{" "}
+              <strong>Restore</strong>. A reason is required, same as editing.
+            </li>
+            <li>
               Mark a rider <strong>DNS</strong>, <strong>DNF</strong>, or{" "}
               <strong>DSQ</strong> from the scorer screen at any time —
               before the race starts (DNS), mid-race (DNF/DSQ), or even after
