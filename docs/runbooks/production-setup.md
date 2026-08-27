@@ -42,6 +42,8 @@ Google OAuth is the organizer sign-in method. Set it up once:
 
 Email/password is a second organizer sign-in option, offered alongside Google. Sign-up confirmation and "forgot password" emails go through the Resend SMTP config below. Magic link (OTP) is no longer used.
 
+**Important:** `redirectTo`/`emailRedirectTo` must always be one of the bare URLs above, with no query string. Supabase validates the full URL against this allow-list, and an unlisted query string (e.g. `/auth/callback?next=/new`) fails validation — Supabase then silently redirects to the Site URL (the marketing home page) instead of `/auth/callback`, with no session, which looks like sign-in silently failed. The web app stores the post-login destination in `sessionStorage` (see `apps/web/src/lib/authRedirect.ts`) precisely to avoid needing a query string here. If you ever need a redirect URL with a variable path, allow-list it with a wildcard (`https://splitsync.org/auth/callback/**`) rather than adding query-string variants.
+
 ## Resend And DNS
 
 Sender: `noreply@splitsync.org`.
