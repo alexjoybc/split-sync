@@ -47,6 +47,14 @@ export interface EventRow {
   title: string;
   sport_type: string;
   location: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  timezone: string | null;
+  venue_address: string | null;
+  description: string | null;
+  banner_image_url: string | null;
+  contact_email: string | null;
+  registration_url: string | null;
   status: string;
   owner_id: string | null;
 }
