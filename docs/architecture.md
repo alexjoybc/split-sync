@@ -119,6 +119,10 @@ The live board and announcer view render a sprint-lap banner, that sprint's own 
 
 `race_entry_penalties` (`time_penalty` | `lap_penalty` | `relegation` | `note`) is an organizer/official-asserted fact, same category as rider status, applied as the final step in `computeStandings` after the raw per-lap/gap computation: a time penalty shifts an entry's effective ranking time, a lap penalty reduces its effective lap count, and a relegation sorts it to the back of its same-effective-lap tier. `StandingRow`'s raw fields (`laps`, `lastCrossingAt`, `lastLapMs`) are never altered by a penalty — only the derived `position`/`gapText` and the row's `timePenaltySeconds`/`lapPenalty`/`relegated`/`penalties` fields reflect it, preserving the "raw vs. adjusted" split even though only the adjusted view is shown by default. Every penalty requires a reason and is attributed (`set_by`/`set_at`, set by a trigger, not the client). Unlike rider status, penalties are cumulative (a table of penalty rows, not a column), and rows are only ever inserted or deleted, not updated. See ADR 0012.
 
+## Time Trial (Planned)
+
+A time-trial race type (solo start/finish timing for downhill MTB/ski-style events) is designed in ADR 0014 and being implemented across web and mobile under the "Time Trial Events" GitHub milestone. This section will be filled in with the shipped schema/scoring/UI details once implementation lands; see the ADR for the full design in the meantime.
+
 ## Realtime
 
 Supabase Realtime publishes changes from `crossings`, `races`, `entries`, and `race_entry_penalties`. Web clients use `useRaceData` to refetch current race data on a change, then recompute the pure standings function. This favors correctness and simple recovery over incremental client state. `race_entry_penalties` has no `race_id` column to filter the subscription on, so `useRaceData` listens unfiltered and re-scopes on refetch by the race's current entry ids.
