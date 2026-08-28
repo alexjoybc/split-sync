@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { supabase } from "@/lib/supabase";
@@ -9,7 +9,8 @@ import { recordCrossing, flushQueue, pendingCount } from "@/lib/crossingQueue";
 import { useAuth } from "@/lib/useAuth";
 import { canManageEvent, canManagePenalties, canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
-import type { Entry, EntryStatus, PenaltyType } from "@/lib/types";
+import type { Entry, EntryStatus, PenaltyType, Race, Crossing } from "@/lib/types";
+import { computeTimeTrialQueue, computeTimeTrialResults, getProgress } from "@/lib/timeTrial";
 
 const STATUS_OPTIONS: { value: EntryStatus; label: string }[] = [
   { value: "ok", label: "OK" },
@@ -67,6 +68,281 @@ interface RestoreState {
   id: string;
   reason: string;
   error: string | null;
+}
+
+// ─── Time trial scorer ───────────────────────────────────────────────────────
+
+/** Format elapsed ms as M:SS.T or SS.Ts */
+function fmtElapsedMs(ms: number): string {
+  const totalTenths = Math.round(ms / 100);
+  const tenths = totalTenths % 10;
+  const totalSeconds = Math.floor(totalTenths / 10);
+  const s = totalSeconds % 60;
+  const m = Math.floor(totalSeconds / 60);
+  if (m > 0) return `${m}:${String(s).padStart(2, "0")}.${tenths}`;
+  return `${s}.${tenths}s`;
+}
+
+/** Play a short beep via Web Audio API. freq: Hz, dur: ms */
+function beep(audioCtx: AudioContext, freq: number, dur: number) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur / 1000);
+  osc.start(audioCtx.currentTime);
+  osc.stop(audioCtx.currentTime + dur / 1000);
+}
+
+interface TimeTrialScorerProps {
+  race: Race;
+  entries: Entry[];
+  crossings: Crossing[];
+  onStart: (bib: string) => Promise<void>;
+  onFinish: (bib: string) => Promise<void>;
+  onUndo: (crossingId: string) => Promise<void>;
+}
+
+function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTrialScorerProps) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Live clock tick — every second
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Cleanup countdown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  const queue = useMemo(() => computeTimeTrialQueue(crossings, entries), [crossings, entries]);
+  const results = useMemo(() => computeTimeTrialResults(crossings, entries), [crossings, entries]);
+
+  const running = useMemo(() => results.find((r) => r.phase === "running") ?? null, [results]);
+  const finished = useMemo(
+    () =>
+      results
+        .filter((r) => r.phase === "finished" || r.phase === "needs-review")
+        .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)),
+    [results]
+  );
+
+  // Best finished time for progress bar reference
+  const bestMs = useMemo(() => {
+    const times = results
+      .filter((r) => r.elapsedMs != null)
+      .map((r) => r.elapsedMs as number);
+    return times.length > 0 ? Math.min(...times) : null;
+  }, [results]);
+
+  const nextInQueue = queue[0] ?? null;
+
+  function getAudioCtx(): AudioContext {
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioContext();
+    }
+    return audioCtxRef.current;
+  }
+
+  function cancelCountdown() {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setCountdown(null);
+  }
+
+  function startCountdown(bib: string, totalSeconds: number) {
+    if (totalSeconds <= 0) {
+      onStart(bib);
+      return;
+    }
+    setCountdown(totalSeconds);
+    let remaining = totalSeconds;
+    const ctx = getAudioCtx();
+
+    countdownRef.current = setInterval(async () => {
+      remaining -= 1;
+      setCountdown(remaining);
+      if (remaining > 0) {
+        beep(ctx, 880, 100);
+      } else {
+        // Final beep + fire start
+        beep(ctx, 1200, 200);
+        clearInterval(countdownRef.current!);
+        countdownRef.current = null;
+        setCountdown(null);
+        await onStart(bib);
+      }
+    }, 1000);
+  }
+
+  // Progress bar for running rider
+  const elapsedMs = running?.startedAt != null ? nowMs - running.startedAt : 0;
+  const progress = running ? getProgress(elapsedMs, bestMs) : null;
+
+  return (
+    <div className="mt-6 space-y-6">
+      {/* ── Section: Up Next ── */}
+      <section>
+        <p className="race-kicker--muted mb-2">Up next</p>
+        {queue.length === 0 ? (
+          <p className="text-xs font-bold text-race-muted">Queue empty — all riders started.</p>
+        ) : (
+          <ul className="divide-y divide-zinc-300 border-2 border-race-ink">
+            {queue.map((row, idx) => (
+              <li
+                key={row.bib}
+                className="flex items-center gap-3 px-3 py-2 text-sm font-bold text-race-muted"
+              >
+                {idx === 0 && (
+                  <span className="shrink-0 bg-race-ink px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+                    NEXT
+                  </span>
+                )}
+                <span className="tabular-nums">
+                  #{row.bib} {row.name}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ── Section: On Course ── */}
+      <section>
+        <p className="race-kicker--muted mb-2">On course</p>
+
+        {/* Countdown overlay */}
+        {countdown !== null && (
+          <div className="mb-4 flex flex-col items-center gap-3 border-2 border-race-ink bg-race-panel p-6">
+            <p className="text-xs font-black uppercase tracking-wide text-race-muted">
+              Countdown — #{nextInQueue?.bib} {nextInQueue?.name}
+            </p>
+            <p className="text-7xl font-black tabular-nums text-race-ink">{countdown}</p>
+            <button
+              type="button"
+              onClick={cancelCountdown}
+              className="race-action--muted"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {running ? (
+          <div className="border-2 border-race-ink bg-race-panel p-4 space-y-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-2xl font-black tabular-nums text-race-ink">#{running.bib}</p>
+                <p className="text-sm font-black uppercase text-race-ink">{running.name}</p>
+                <p className="mt-1 text-lg font-black tabular-nums text-race-muted">
+                  {fmtElapsedMs(elapsedMs)}
+                </p>
+                {progress?.overtimeMs != null && (
+                  <p className="text-xs font-bold text-race-red">
+                    +{fmtElapsedMs(progress.overtimeMs)} over best
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => onFinish(running.bib)}
+                className="race-action--muted race-action--yellow min-h-[44px]"
+              >
+                Finish
+              </button>
+            </div>
+
+            {/* Progress bar */}
+            <div className="h-3 w-full border border-race-muted bg-zinc-100 overflow-hidden">
+              {progress?.indeterminate ? (
+                <div className="h-full w-1/3 bg-race-yellow animate-pulse" />
+              ) : (
+                <div
+                  className="h-full bg-race-yellow transition-all duration-1000"
+                  style={{ width: `${progress?.pct ?? 0}%` }}
+                />
+              )}
+            </div>
+          </div>
+        ) : nextInQueue ? (
+          countdown === null && (
+            <div className="border-2 border-race-ink bg-race-panel p-4 space-y-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-wide text-race-muted mb-1">
+                  Ready to start
+                </p>
+                <p className="text-2xl font-black tabular-nums text-race-ink">
+                  #{nextInQueue.bib}
+                </p>
+                <p className="text-sm font-black uppercase text-race-ink">{nextInQueue.name}</p>
+              </div>
+              <div className="flex gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => onStart(nextInQueue.bib)}
+                  className="race-action--muted race-action--yellow min-h-[44px]"
+                >
+                  Start now
+                </button>
+                {race.time_trial_countdown_seconds > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => startCountdown(nextInQueue.bib, race.time_trial_countdown_seconds)}
+                    className="race-action--muted min-h-[44px]"
+                  >
+                    Start countdown ({race.time_trial_countdown_seconds}s)
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        ) : (
+          <p className="text-xs font-bold text-race-muted">All riders have finished.</p>
+        )}
+      </section>
+
+      {/* ── Section: Finished ── */}
+      {finished.length > 0 && (
+        <section>
+          <p className="race-kicker--muted mb-2">Finished</p>
+          <ul className="divide-y divide-zinc-300 border-2 border-race-ink">
+            {finished.map((row) => (
+              <li key={row.bib} className="flex items-center gap-3 px-3 py-2 text-sm">
+                <span className="w-6 shrink-0 text-right font-black tabular-nums text-race-muted">
+                  {row.position ?? "—"}
+                </span>
+                <span className="flex-1 font-bold text-race-ink">
+                  #{row.bib} {row.name}
+                  {row.phase === "needs-review" && (
+                    <span className="ml-2 text-[10px] font-black uppercase bg-race-yellow px-1.5 py-0.5 text-race-ink">
+                      review
+                    </span>
+                  )}
+                </span>
+                <span className="font-black tabular-nums text-race-ink">
+                  {row.elapsedMs != null ? fmtElapsedMs(row.elapsedMs) : "—"}
+                </span>
+                {row.gapText && row.gapText !== "—" && (
+                  <span className="text-xs font-bold text-race-muted">{row.gapText}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </div>
+  );
 }
 
 // ─── Rider detail sheet ──────────────────────────────────────────────────────
@@ -560,83 +836,96 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         </div>
       )}
 
-      <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">
-        {race.status === "active" ? "Tap a rider to record a crossing · tap ••• for status & penalties" : `${entries.length} rostered riders — set DNS before the start, tap Start race to enable crossing capture`}
-      </p>
-      <div className="relative mt-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Find bib / rider"
-          className="w-full border-2 border-race-ink bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-race-muted focus:border-race-red"
+      {race.is_time_trial ? (
+        <TimeTrialScorer
+          race={race}
+          entries={entries}
+          crossings={crossings}
+          onStart={async (bib) => { await submit(bib); }}
+          onFinish={async (bib) => { await submit(bib); }}
+          onUndo={undo}
         />
-        <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-race-muted" />
-      </div>
-      {search.trim() && (
-        <p className="mt-1 text-xs font-bold text-race-muted">
-          {filteredEntries.length} of {entries.length} riders
-        </p>
-      )}
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {filteredEntries.map((entry) => {
-          const statused = entry.status !== "ok";
-          const canRecord = canScore(role) && race.status === "active" && !statused;
-          const entryPenalties = penaltiesByEntry.get(entry.id) ?? [];
-          const hasPenalties = entryPenalties.length > 0;
-          const showDetailBtn = canManageStatus || canManagePenaltiesRole;
-          return (
-            <div
-              key={entry.id}
-              className={`relative min-h-28 border-2 p-3 text-left transition-colors ${flash === entry.bib ? "border-race-ink bg-race-ink text-white" : statused ? "border-race-muted bg-race-panel-alt text-race-muted" : "border-race-ink bg-race-panel text-race-ink"}`}
-            >
-              {/* Primary lap-recording button — fills most of the tile */}
-              <button
-                type="button"
-                onClick={() => canRecord && submit(entry.bib)}
-                disabled={!canRecord}
-                aria-label={`Record crossing for #${entry.bib} ${entry.name}`}
-                className="block w-full text-left disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span className="block text-3xl font-black tabular-nums">#{entry.bib}</span>
-                <span className="mt-2 block truncate text-sm font-black uppercase">{entry.name}</span>
-                <span className={`mt-1 block text-xs font-bold ${flash === entry.bib ? "text-white" : "text-race-muted"}`}>
-                  {statused
-                    ? entry.status.toUpperCase()
-                    : race.status === "active"
-                    ? `Lap ${lapsByBib.get(entry.bib) ?? 0}`
-                    : race.status === "upcoming"
-                    ? "Race not started"
-                    : "Race finished"}
-                </span>
-                {/* Penalty indicator badge */}
-                {hasPenalties && (
-                  <span className="mt-1 inline-block bg-race-yellow px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-race-ink">
-                    {entryPenalties.length} penalty{entryPenalties.length !== 1 ? "s" : ""}
-                  </span>
-                )}
-              </button>
-
-              {/* Detail sheet trigger — corner button */}
-              {showDetailBtn && (
-                <button
-                  type="button"
-                  onClick={() => setSheetEntry(entry)}
-                  aria-label={`Open detail for #${entry.bib} ${entry.name}`}
-                  className={`absolute bottom-2 right-2 flex min-h-[36px] min-w-[36px] items-center justify-center border px-1.5 text-[11px] font-black uppercase tracking-widest transition-colors ${
-                    flash === entry.bib
-                      ? "border-white/40 text-white/70 hover:bg-white/10"
-                      : statused
-                      ? "border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink"
-                      : "border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink"
-                  }`}
+      ) : (
+        <>
+          <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">
+            {race.status === "active" ? "Tap a rider to record a crossing · tap ••• for status & penalties" : `${entries.length} rostered riders — set DNS before the start, tap Start race to enable crossing capture`}
+          </p>
+          <div className="relative mt-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Find bib / rider"
+              className="w-full border-2 border-race-ink bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-race-muted focus:border-race-red"
+            />
+            <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-race-muted" />
+          </div>
+          {search.trim() && (
+            <p className="mt-1 text-xs font-bold text-race-muted">
+              {filteredEntries.length} of {entries.length} riders
+            </p>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {filteredEntries.map((entry) => {
+              const statused = entry.status !== "ok";
+              const canRecord = canScore(role) && race.status === "active" && !statused;
+              const entryPenalties = penaltiesByEntry.get(entry.id) ?? [];
+              const hasPenalties = entryPenalties.length > 0;
+              const showDetailBtn = canManageStatus || canManagePenaltiesRole;
+              return (
+                <div
+                  key={entry.id}
+                  className={`relative min-h-28 border-2 p-3 text-left transition-colors ${flash === entry.bib ? "border-race-ink bg-race-ink text-white" : statused ? "border-race-muted bg-race-panel-alt text-race-muted" : "border-race-ink bg-race-panel text-race-ink"}`}
                 >
-                  •••
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                  {/* Primary lap-recording button — fills most of the tile */}
+                  <button
+                    type="button"
+                    onClick={() => canRecord && submit(entry.bib)}
+                    disabled={!canRecord}
+                    aria-label={`Record crossing for #${entry.bib} ${entry.name}`}
+                    className="block w-full text-left disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <span className="block text-3xl font-black tabular-nums">#{entry.bib}</span>
+                    <span className="mt-2 block truncate text-sm font-black uppercase">{entry.name}</span>
+                    <span className={`mt-1 block text-xs font-bold ${flash === entry.bib ? "text-white" : "text-race-muted"}`}>
+                      {statused
+                        ? entry.status.toUpperCase()
+                        : race.status === "active"
+                        ? `Lap ${lapsByBib.get(entry.bib) ?? 0}`
+                        : race.status === "upcoming"
+                        ? "Race not started"
+                        : "Race finished"}
+                    </span>
+                    {/* Penalty indicator badge */}
+                    {hasPenalties && (
+                      <span className="mt-1 inline-block bg-race-yellow px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-race-ink">
+                        {entryPenalties.length} penalty{entryPenalties.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Detail sheet trigger — corner button */}
+                  {showDetailBtn && (
+                    <button
+                      type="button"
+                      onClick={() => setSheetEntry(entry)}
+                      aria-label={`Open detail for #${entry.bib} ${entry.name}`}
+                      className={`absolute bottom-2 right-2 flex min-h-[36px] min-w-[36px] items-center justify-center border px-1.5 text-[11px] font-black uppercase tracking-widest transition-colors ${
+                        flash === entry.bib
+                          ? "border-white/40 text-white/70 hover:bg-white/10"
+                          : statused
+                          ? "border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink"
+                          : "border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink"
+                      }`}
+                    >
+                      •••
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {/* Recent crossings with edit/undo */}
       <ul className="mt-4 border-y-2 border-race-ink divide-y divide-zinc-300">

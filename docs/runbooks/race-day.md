@@ -27,6 +27,20 @@
 12. Finish the race only after the final crossing sequence is recorded.
 13. For a points race, nothing extra happens at the scorer screen — sprints and lap-gain bonuses score automatically from the crossings you're already recording. Watch the live board or announcer view to call out each sprint result to spectators as it appears.
 
+### Time Trial Workflow
+
+The scorer screen for a time trial replaces the bib grid with an **Up Next / On Course / Finished** workflow. Only one rider runs at a time.
+
+1. Open the scorer for the time trial race and tap **Start race**.
+2. The **Up Next** list shows riders in natural bib order; the first entry is marked **NEXT**.
+3. To send the next rider:
+   - **Start now** — records a start crossing immediately.
+   - **Start countdown** — plays a visual countdown with audible beeps (pre-beeps at 880 Hz, final beep at 1200 Hz); fires the start crossing automatically at 0. Tap **Cancel** to abort a countdown before it fires.
+4. The **On Course** panel shows a live elapsed timer and a progress bar against the current best time. When the rider goes over the best time, the panel shows "+N over best".
+5. Tap **Finish** when the rider crosses the finish line.
+6. The **Finished** list shows results ranked by elapsed time, most recent at top.
+7. To correct a start or finish crossing, use **Undo** in the recent crossings list below the scorer (same as any race type) — the rider returns to On Course (if only the finish was removed) or Up Next (if both crossings were removed).
+
 ## If Connectivity Fails
 
 - Keep tapping: crossings are queued locally with their original timestamps.

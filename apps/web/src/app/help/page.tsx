@@ -169,14 +169,64 @@ export default function HelpPage() {
               your sprint interval.
             </li>
             <li>
-              Use the scorer screen to record crossings by tapping a rider&apos;s
-              bib as they cross the line. Free-form bib entry is intentionally
-              not supported — only assigned entries appear as tiles. For large
-              fields, use the <strong>Find bib / rider</strong> search box
-              above the grid to narrow the tiles to a matching bib number or
-              name — the rest of the field is hidden while you search but
-              their lap counts and state are unaffected. Clear the box to
-              restore the full grid instantly.
+              To run a <strong>time trial</strong>, check{" "}
+              <strong>Time trial</strong> when adding the race (or use the
+              &quot;Time trial&quot; template) and optionally set the{" "}
+              <strong>countdown seconds</strong>. The scorer screen replaces
+              the bib grid with a dedicated <strong>Up Next / On Course /
+              Finished</strong> workflow:
+              <ul className="mt-2 list-disc space-y-1 pl-4">
+                <li>
+                  <strong>Up Next</strong> lists all riders who haven&apos;t
+                  started yet, in natural bib order. The top entry is marked{" "}
+                  <strong>NEXT</strong>.
+                </li>
+                <li>
+                  To send a rider, tap <strong>Start now</strong> (immediate)
+                  or <strong>Start countdown</strong> (visual + audible
+                  countdown, cancelable). The countdown plays beep tones
+                  through your device speaker and fires the start crossing
+                  automatically at zero. If countdown seconds is set to 0,
+                  only &quot;Start now&quot; is shown.
+                </li>
+                <li>
+                  Only one rider can be on course at a time. While someone is
+                  running, the start controls are hidden.
+                </li>
+                <li>
+                  The <strong>On Course</strong> panel shows a live elapsed
+                  timer and a progress bar against the current best time. When
+                  the rider exceeds the best time, an &quot;over best&quot;
+                  indicator appears. Tap <strong>Finish</strong> to record
+                  their finish crossing.
+                </li>
+                <li>
+                  <strong>Finished</strong> lists ranked results in most-recent
+                  first order, with elapsed time and gap to leader.
+                </li>
+                <li>
+                  DNS/DNF/DSQ riders are excluded from the queue but remain on
+                  the live and results boards with their badge.
+                </li>
+                <li>
+                  To correct a start or finish crossing, use{" "}
+                  <strong>Undo</strong> in the recent crossings list below the
+                  scorer — the rider returns to the appropriate state
+                  immediately (to On Course if only start removed, to Up Next
+                  if both removed).
+                </li>
+              </ul>
+            </li>
+            <li>
+              For mass-start races, use the scorer screen to record crossings by
+              tapping a rider&apos;s bib as they cross the line. Free-form bib
+              entry is intentionally not supported — only assigned entries appear
+              as tiles. For large fields, use the{" "}
+              <strong>Find bib / rider</strong> search box above the grid to
+              narrow the tiles to a matching bib number or name — the rest of
+              the field is hidden while you search but their lap counts and
+              state are unaffected. Clear the box to restore the full grid
+              instantly.
             </li>
             <li>
               Crossings can only be recorded while a race is <strong>active</strong>.
