@@ -169,7 +169,10 @@ export function RosterCsvImport({
       }));
 
     if (entryRows.length > 0) {
-      await supabase.from("entries").insert(entryRows);
+      // upsert + ignoreDuplicates: guards against a leftover entries row
+      // still occupying (race_id, bib) for a bib that was freed up on the
+      // roster and is now being re-imported (see issue #127).
+      await supabase.from("entries").upsert(entryRows, { onConflict: "race_id,bib", ignoreDuplicates: true });
     }
 
     setImporting(false);
