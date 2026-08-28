@@ -9,6 +9,8 @@ export interface RaceTemplate {
   /** Suggested duration in minutes, shown when the race is timed rather than lap-based. */
   suggestedDurationMinutes?: number;
   suggestedCategories: string[];
+  /** When true, this template pre-selects the time trial mode. */
+  isTimeTrial?: boolean;
 }
 
 /**
@@ -62,5 +64,15 @@ export const raceTemplates: RaceTemplate[] = [
     defaultLaps: null,
     suggestedDurationMinutes: 45,
     suggestedCategories: ["Open"],
+  },
+  {
+    id: "time-trial",
+    label: "Time trial",
+    sport: "General",
+    description: "Solo start/finish timing — riders go one at a time and are ranked by elapsed time.",
+    suggestedName: "Time Trial",
+    defaultLaps: null,
+    suggestedCategories: ["Open"],
+    isTimeTrial: true,
   },
 ];
