@@ -17,6 +17,10 @@ export interface Race {
   final_sprint_multiplier: number;
   lap_gain_bonus: number;
   lap_loss_penalty: number;
+  // Time trial config (see docs/adr/0014-time-trial-race-type.md).
+  // Meaningless when is_time_trial is false.
+  is_time_trial: boolean;
+  time_trial_countdown_seconds: number;
 }
 
 export interface RaceStatusChange {
