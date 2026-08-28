@@ -729,7 +729,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                     <h3 className="text-sm font-black uppercase">
                       {race.name}
                       {race.is_points_race && <span className="ml-2 bg-race-yellow px-1.5 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide text-race-ink">Points race</span>}
-                      {race.is_time_trial && <span className="ml-2 bg-zinc-200 px-1.5 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide text-race-ink">Time trial</span>}
+                      {race.is_time_trial && <span className="ml-2 bg-race-panel-alt px-1.5 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide text-race-ink">Time trial</span>}
                     </h3>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-race-muted">
                       <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${raceStatusStyle[race.status]}`}>{race.status}</span>
