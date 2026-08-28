@@ -4,7 +4,7 @@ import { supabase } from "./supabase";
 
 const key = "splitsync.pending-crossings";
 
-type PendingCrossing = {
+export type PendingCrossing = {
   race_id: string;
   bib: string;
   client_id: string;
@@ -25,6 +25,10 @@ export async function pendingCrossings() {
   return (await readQueue()).length;
 }
 
+export async function getPendingQueue(): Promise<PendingCrossing[]> {
+  return readQueue();
+}
+
 export async function flushCrossings() {
   const items = await readQueue();
   if (items.length === 0) return 0;
@@ -35,15 +39,29 @@ export async function flushCrossings() {
   return error ? items.length : 0;
 }
 
-export async function recordCrossing(raceId: string, bib: string) {
+export async function recordCrossing(
+  raceId: string,
+  bib: string,
+): Promise<{ remaining: number; client_id: string; client_recorded_at: string }> {
   const queue = await readQueue();
-  queue.push({
-    race_id: raceId,
-    bib,
-    client_id: Crypto.randomUUID(),
-    client_recorded_at: new Date().toISOString(),
-    source: "manual",
-  });
+  const client_id = Crypto.randomUUID();
+  const client_recorded_at = new Date().toISOString();
+  queue.push({ race_id: raceId, bib, client_id, client_recorded_at, source: "manual" });
   await writeQueue(queue);
-  return flushCrossings();
+  const remaining = await flushCrossings();
+  return { remaining, client_id, client_recorded_at };
+}
+
+/**
+ * Remove a crossing from the local pending queue by its client_id.
+ * Returns true if it was found (and removed) — meaning it had not yet synced.
+ * Returns false if not in queue — caller should soft-delete via Supabase API.
+ */
+export async function removePendingCrossing(clientId: string): Promise<boolean> {
+  const queue = await readQueue();
+  const index = queue.findIndex((item) => item.client_id === clientId);
+  if (index === -1) return false;
+  queue.splice(index, 1);
+  await writeQueue(queue);
+  return true;
 }

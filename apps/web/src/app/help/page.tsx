@@ -269,9 +269,28 @@ export default function HelpPage() {
               single tap and works alongside this website.
             </li>
             <li>
-              In-app help within the tracker app is coming soon. Until then,
-              refer to the organizer guidance above and the race day runbook
-              your event owner shared with you.
+              Tap a rider&apos;s tile on the scorer screen as they cross the
+              line. The tile flashes red to confirm the recording.
+            </li>
+            <li>
+              A <strong>Recent Crossings</strong> panel appears below the rider
+              grid during an active race. It shows the last few crossings (bib
+              and time). Tap <strong>UNDO</strong> next to any crossing to
+              remove it immediately — this soft-deletes the crossing so it is
+              excluded from lap counts and standings, matching the web
+              scorer&apos;s behavior.
+            </li>
+            <li>
+              Undo works whether the crossing has already synced to the server
+              or is still pending in the offline queue. If the crossing hasn&apos;t
+              synced yet (you&apos;re offline or the upload is still in progress),
+              it is removed from the local queue directly — no round-trip needed.
+            </li>
+            <li>
+              Undo on mobile is intended for immediate mis-tap correction. To
+              restore a removed crossing, correct a bib or time, or manage older
+              crossings, use the web scorer at splitsync.org — those tools require
+              an audit reason and are kept in the crossing&apos;s history.
             </li>
           </ul>
         </section>
