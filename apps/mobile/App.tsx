@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, FlatList, Pressable, ScrollView, StatusBar, StyleSheet, Text, TextInput, useWindowDimensions, View } from "react-native";
+import * as Haptics from "expo-haptics";
 import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
@@ -41,6 +42,7 @@ function Tracker() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [lapCounts, setLapCounts] = useState<Record<string, number>>({});
   const [lastBib, setLastBib] = useState<string | null>(null);
+  const lastBibTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pending, setPending] = useState(0);
   const [recentCrossings, setRecentCrossings] = useState<RecentCrossing[]>([]);
   const [reopenReason, setReopenReason] = useState("");
@@ -184,12 +186,16 @@ function Tracker() {
   };
   const recordBib = async (value: string) => {
     if (!selectedRace) return;
+    // Haptic feedback at point of tap
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const { remaining, client_id, client_recorded_at } = await recordCrossing(selectedRace.id, value);
     setLapCounts((counts) => ({ ...counts, [value]: (counts[value] ?? 0) + 1 }));
+    // Highlight the tapped tile for 600 ms then return to neutral
+    if (lastBibTimerRef.current) clearTimeout(lastBibTimerRef.current);
     setLastBib(value);
+    lastBibTimerRef.current = setTimeout(() => setLastBib(null), 600);
     setRecentCrossings((prev) => [{ client_id, bib: value, client_recorded_at }, ...prev].slice(0, 5));
     setPending(remaining || await pendingCrossings());
-    setMessage(`Bib ${value} recorded`);
   };
 
   const undoCrossing = async (crossing: RecentCrossing) => {

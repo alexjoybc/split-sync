@@ -112,6 +112,10 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
       if (!value) return;
       setFlash(value);
       setTimeout(() => setFlash(null), 600);
+      // Haptic feedback where supported (e.g. Android Chrome, some iOS PWAs)
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+        navigator.vibrate(50);
+      }
       await recordCrossing(raceId, value);
       setPending(pendingCount());
       refetch();
