@@ -38,7 +38,6 @@ function penaltySummary(type: PenaltyType, value: number | null): string {
 }
 
 interface PenaltyFormState {
-  entryId: string;
   type: PenaltyType;
   value: string;
   reason: string;
@@ -69,6 +68,234 @@ interface RestoreState {
   error: string | null;
 }
 
+// ─── Rider detail sheet ──────────────────────────────────────────────────────
+
+interface RiderDetailSheetProps {
+  entry: Entry;
+  lapCount: number;
+  penalties: { id: string; type: PenaltyType; value: number | null; reason: string }[];
+  canManageStatus: boolean;
+  canManagePenaltiesRole: boolean;
+  onClose: () => void;
+  onSetEntryStatus: (entry: Entry, status: EntryStatus) => Promise<void>;
+  onRemovePenalty: (id: string) => Promise<void>;
+  onAddPenalty: (form: PenaltyFormState) => Promise<void>;
+}
+
+function RiderDetailSheet({
+  entry,
+  lapCount,
+  penalties,
+  canManageStatus,
+  canManagePenaltiesRole,
+  onClose,
+  onSetEntryStatus,
+  onRemovePenalty,
+  onAddPenalty,
+}: RiderDetailSheetProps) {
+  const [penaltyForm, setPenaltyForm] = useState<PenaltyFormState | null>(null);
+
+  const handleSavePenalty = async () => {
+    if (!penaltyForm) return;
+    const opt = PENALTY_TYPE_OPTIONS.find((o) => o.value === penaltyForm.type)!;
+    if (opt.needsValue && (!penaltyForm.value.trim() || Number(penaltyForm.value) <= 0)) {
+      setPenaltyForm({ ...penaltyForm, error: `${opt.label} requires a positive value` });
+      return;
+    }
+    if (!penaltyForm.reason.trim()) {
+      setPenaltyForm({ ...penaltyForm, error: "A reason is required" });
+      return;
+    }
+    try {
+      await onAddPenalty(penaltyForm);
+      setPenaltyForm(null);
+    } catch (e) {
+      setPenaltyForm({ ...penaltyForm, error: (e as Error).message });
+    }
+  };
+
+  const statused = entry.status !== "ok";
+
+  return (
+    /* Overlay */
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      {/* Sheet panel */}
+      <div className="w-full max-w-lg border-2 border-race-ink bg-race-panel overflow-y-auto max-h-[85dvh] sm:max-h-[75dvh]">
+        {/* Sheet header */}
+        <div className="flex items-start justify-between border-b-2 border-race-ink p-4">
+          <div>
+            <p className="race-kicker--muted">Rider detail</p>
+            <p className="mt-1 text-2xl font-black tabular-nums">#{entry.bib}</p>
+            <p className="text-sm font-black uppercase">{entry.name}</p>
+            <p className="mt-1 text-xs font-bold text-race-muted">
+              {statused ? (
+                <span className="inline-block border border-race-ink px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide">
+                  {entry.status.toUpperCase()}
+                  {entry.status_reason ? ` — ${entry.status_reason}` : ""}
+                </span>
+              ) : (
+                `Lap ${lapCount}`
+              )}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="ml-4 shrink-0 border-2 border-race-ink px-3 py-1.5 text-xs font-black uppercase tracking-wide text-race-ink hover:bg-race-ink hover:text-white"
+            aria-label="Close rider detail"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="p-4 space-y-5">
+          {/* Status section */}
+          {canManageStatus && (
+            <div>
+              <p className="race-kicker--muted mb-2">Status</p>
+              <div className="flex flex-wrap gap-2">
+                {STATUS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onSetEntryStatus(entry, opt.value)}
+                    aria-pressed={entry.status === opt.value}
+                    aria-label={`Set status to ${opt.label} for #${entry.bib} ${entry.name}`}
+                    className={`race-chip ${entry.status === opt.value ? "race-chip--on" : "race-chip--off"}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Penalties section */}
+          {(canManagePenaltiesRole || penalties.length > 0) && (
+            <div>
+              <p className="race-kicker--muted mb-2">Penalties &amp; adjustments</p>
+              {penalties.length === 0 ? (
+                <p className="text-xs text-race-muted font-semibold">No penalties applied.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {penalties.map((p) => (
+                    <li key={p.id} className="flex items-start justify-between gap-2 border-2 border-race-ink bg-race-yellow/30 px-3 py-2">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-wide text-race-ink">
+                          {penaltySummary(p.type, p.value)}
+                        </p>
+                        <p className="mt-0.5 text-[10px] font-semibold text-race-muted">{p.reason}</p>
+                      </div>
+                      {canManagePenaltiesRole && (
+                        <button
+                          type="button"
+                          onClick={() => onRemovePenalty(p.id)}
+                          aria-label={`Remove ${penaltySummary(p.type, p.value)} penalty`}
+                          className="race-inline-action shrink-0"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Add penalty form */}
+              {canManagePenaltiesRole && !penaltyForm && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPenaltyForm({ type: "time_penalty", value: "", reason: "", error: null })
+                  }
+                  className="mt-3 min-h-[44px] border-2 border-race-ink px-3 py-2 text-xs font-black uppercase tracking-wide text-race-ink hover:bg-race-ink hover:text-white"
+                >
+                  + Add penalty
+                </button>
+              )}
+
+              {penaltyForm && (
+                <div className="mt-3 border-2 border-race-ink bg-race-panel p-3 space-y-3">
+                  <p className="race-kicker--muted">New penalty</p>
+
+                  <label className="block text-xs font-bold uppercase tracking-wide text-race-muted">
+                    Type
+                    <select
+                      value={penaltyForm.type}
+                      onChange={(e) =>
+                        setPenaltyForm({ ...penaltyForm, type: e.target.value as PenaltyType, error: null })
+                      }
+                      className="mt-1 w-full border-2 border-race-ink bg-white p-2 text-sm"
+                    >
+                      {PENALTY_TYPE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  {PENALTY_TYPE_OPTIONS.find((o) => o.value === penaltyForm.type)?.needsValue && (
+                    <label className="block text-xs font-bold uppercase tracking-wide text-race-muted">
+                      Value
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={penaltyForm.value}
+                        onChange={(e) =>
+                          setPenaltyForm({ ...penaltyForm, value: e.target.value, error: null })
+                        }
+                        className="mt-1 w-full border-2 border-race-ink bg-white p-2 text-sm tabular-nums"
+                      />
+                    </label>
+                  )}
+
+                  <label className="block text-xs font-bold uppercase tracking-wide text-race-muted">
+                    Reason (required)
+                    <textarea
+                      value={penaltyForm.reason}
+                      onChange={(e) =>
+                        setPenaltyForm({ ...penaltyForm, reason: e.target.value, error: null })
+                      }
+                      placeholder="Why is this penalty being applied?"
+                      className="mt-1 w-full border-2 border-race-ink bg-white p-2 text-sm"
+                      rows={2}
+                    />
+                  </label>
+
+                  {penaltyForm.error && (
+                    <p className="text-xs font-bold text-race-red">{penaltyForm.error}</p>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleSavePenalty}
+                      className="race-action--muted race-action--yellow min-h-[44px]"
+                    >
+                      Save penalty
+                    </button>
+                    <button
+                      onClick={() => setPenaltyForm(null)}
+                      className="min-h-[44px] text-xs font-black uppercase text-race-ink underline decoration-2 underline-offset-2"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main scorer page ────────────────────────────────────────────────────────
+
 export default function Scorer({ params }: { params: Promise<{ raceId: string }> }) {
   const { raceId } = use(params);
   const { race, entries, crossings, deletedCrossings, penalties, loading, refetch } = useRaceData(raceId);
@@ -84,7 +311,9 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const [reopenError, setReopenError] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [restoring, setRestoring] = useState<RestoreState | null>(null);
-  const [penaltyForm, setPenaltyForm] = useState<PenaltyFormState | null>(null);
+
+  // Detail sheet — which entry's sheet is open (null = none)
+  const [sheetEntry, setSheetEntry] = useState<Entry | null>(null);
 
   const penaltiesByEntry = useMemo(() => {
     const m = new Map<string, typeof penalties>();
@@ -106,6 +335,14 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
       window.removeEventListener("online", sync);
     };
   }, []);
+
+  // Close sheet on Escape
+  useEffect(() => {
+    if (!sheetEntry) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") setSheetEntry(null); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [sheetEntry]);
 
   const submit = useCallback(
     async (value: string) => {
@@ -184,34 +421,25 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
     }
     await supabase.from("entries").update({ status, status_reason: reason }).eq("id", entry.id);
     refetch();
-  };
-
-  const startPenalty = (entryId: string) =>
-    setPenaltyForm({ entryId, type: "time_penalty", value: "", reason: "", error: null });
-
-  const savePenalty = async () => {
-    if (!penaltyForm) return;
-    const opt = PENALTY_TYPE_OPTIONS.find((o) => o.value === penaltyForm.type)!;
-    if (opt.needsValue && (!penaltyForm.value.trim() || Number(penaltyForm.value) <= 0)) {
-      return setPenaltyForm({ ...penaltyForm, error: `${opt.label} requires a positive value` });
-    }
-    if (!penaltyForm.reason.trim()) {
-      return setPenaltyForm({ ...penaltyForm, error: "A reason is required" });
-    }
-    const { error } = await supabase.from("race_entry_penalties").insert({
-      entry_id: penaltyForm.entryId,
-      type: penaltyForm.type,
-      value: opt.needsValue ? Number(penaltyForm.value) : null,
-      reason: penaltyForm.reason.trim(),
-    });
-    if (error) return setPenaltyForm({ ...penaltyForm, error: error.message });
-    setPenaltyForm(null);
-    refetch();
+    // Keep the sheet open but update the entry reference; refetch will cause re-render
   };
 
   const removePenalty = async (id: string) => {
     if (!window.confirm("Remove this penalty/adjustment?")) return;
     await supabase.from("race_entry_penalties").delete().eq("id", id);
+    refetch();
+  };
+
+  const addPenalty = async (form: PenaltyFormState) => {
+    if (!sheetEntry) return;
+    const opt = PENALTY_TYPE_OPTIONS.find((o) => o.value === form.type)!;
+    const { error } = await supabase.from("race_entry_penalties").insert({
+      entry_id: sheetEntry.id,
+      type: form.type,
+      value: opt.needsValue ? Number(form.value) : null,
+      reason: form.reason.trim(),
+    });
+    if (error) throw new Error(error.message);
     refetch();
   };
 
@@ -235,6 +463,9 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   if (!user || !allowed) {
     return <main className="race-page"><div className="race-topline--muted" /><div className="mx-auto max-w-lg px-4 py-16"><div className="race-panel p-5"><p className="race-kicker--muted">Scorer access</p><h1 className="mt-1 text-2xl font-black uppercase">Sign-in required</h1><p className="mt-3 text-sm text-race-muted">Only the event owner or an invited organizer/scorer/official can access this race&apos;s scorer screen. Ask the organizer for an invite link.</p><Link href={`/login?next=${encodeURIComponent(`/score/${raceId}`)}`} className="race-action--muted mt-5 inline-block">Sign in</Link></div></div></main>;
   }
+
+  // Keep sheetEntry in sync after refetch (entries array may be new objects)
+  const sheetEntryLive = sheetEntry ? entries.find((e) => e.id === sheetEntry.id) ?? null : null;
 
   return (
     <main className="race-page">
@@ -320,18 +551,21 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
       )}
 
       <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">
-        {race.status === "active" ? "Tap a rider as they cross the line" : `${entries.length} rostered riders — set DNS before the start, tap Start race to enable crossing capture`}
+        {race.status === "active" ? "Tap a rider to record a crossing · tap ••• for status & penalties" : `${entries.length} rostered riders — set DNS before the start, tap Start race to enable crossing capture`}
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         {entries.map((entry) => {
           const statused = entry.status !== "ok";
           const canRecord = canScore(role) && race.status === "active" && !statused;
           const entryPenalties = penaltiesByEntry.get(entry.id) ?? [];
+          const hasPenalties = entryPenalties.length > 0;
+          const showDetailBtn = canManageStatus || canManagePenaltiesRole;
           return (
             <div
               key={entry.id}
-              className={`min-h-28 border-2 p-3 text-left transition-colors ${flash === entry.bib ? "border-race-ink bg-race-ink text-white" : statused ? "border-race-muted bg-race-panel-alt text-race-muted" : "border-race-ink bg-race-panel text-race-ink"}`}
+              className={`relative min-h-28 border-2 p-3 text-left transition-colors ${flash === entry.bib ? "border-race-ink bg-race-ink text-white" : statused ? "border-race-muted bg-race-panel-alt text-race-muted" : "border-race-ink bg-race-panel text-race-ink"}`}
             >
+              {/* Primary lap-recording button — fills most of the tile */}
               <button
                 type="button"
                 onClick={() => canRecord && submit(entry.bib)}
@@ -350,108 +584,30 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                     ? "Race not started"
                     : "Race finished"}
                 </span>
+                {/* Penalty indicator badge */}
+                {hasPenalties && (
+                  <span className="mt-1 inline-block bg-race-yellow px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-race-ink">
+                    {entryPenalties.length} penalty{entryPenalties.length !== 1 ? "s" : ""}
+                  </span>
+                )}
               </button>
-              {canManageStatus && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {STATUS_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setEntryStatus(entry, opt.value)}
-                      aria-pressed={entry.status === opt.value}
-                      aria-label={`Set status to ${opt.label} for #${entry.bib} ${entry.name}`}
-                      className={`race-chip ${entry.status === opt.value ? "race-chip--on" : "race-chip--off"}`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
 
-              {entryPenalties.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {entryPenalties.map((p) => (
-                    <li key={p.id} className="flex min-h-[44px] items-center justify-between gap-2 bg-race-yellow/40 px-2 py-1 text-xs font-bold uppercase text-race-ink">
-                      <span className="truncate" title={p.reason}>
-                        {penaltySummary(p.type, p.value)}
-                      </span>
-                      {canManagePenaltiesRole && (
-                        <button
-                          type="button"
-                          onClick={() => removePenalty(p.id)}
-                          aria-label={`Remove ${penaltySummary(p.type, p.value)} penalty`}
-                          className="race-inline-action shrink-0"
-                        >
-                          Remove
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {canManagePenaltiesRole && (
+              {/* Detail sheet trigger — corner button */}
+              {showDetailBtn && (
                 <button
                   type="button"
-                  onClick={() => startPenalty(entry.id)}
-                  className="race-inline-action mt-1"
+                  onClick={() => setSheetEntry(entry)}
+                  aria-label={`Open detail for #${entry.bib} ${entry.name}`}
+                  className={`absolute bottom-2 right-2 flex min-h-[36px] min-w-[36px] items-center justify-center border px-1.5 text-[11px] font-black uppercase tracking-widest transition-colors ${
+                    flash === entry.bib
+                      ? "border-white/40 text-white/70 hover:bg-white/10"
+                      : statused
+                      ? "border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink"
+                      : "border-race-muted text-race-muted hover:border-race-ink hover:text-race-ink"
+                  }`}
                 >
-                  + Penalty
+                  •••
                 </button>
-              )}
-
-              {penaltyForm?.entryId === entry.id && (
-                <div className="race-panel mt-2 p-2">
-                  <label className="block text-[10px] font-bold uppercase tracking-wide text-race-muted">
-                    Type
-                    <select
-                      value={penaltyForm.type}
-                      onChange={(e) => setPenaltyForm({ ...penaltyForm, type: e.target.value as PenaltyType, error: null })}
-                      className="mt-1 w-full border-2 border-race-ink bg-white p-1.5 text-xs"
-                    >
-                      {PENALTY_TYPE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  {PENALTY_TYPE_OPTIONS.find((o) => o.value === penaltyForm.type)?.needsValue && (
-                    <label className="mt-2 block text-[10px] font-bold uppercase tracking-wide text-race-muted">
-                      Value
-                      <input
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={penaltyForm.value}
-                        onChange={(e) => setPenaltyForm({ ...penaltyForm, value: e.target.value, error: null })}
-                        className="mt-1 w-full border-2 border-race-ink bg-white p-1.5 text-xs tabular-nums"
-                      />
-                    </label>
-                  )}
-                  <label className="mt-2 block text-[10px] font-bold uppercase tracking-wide text-race-muted">
-                    Reason (required)
-                    <textarea
-                      value={penaltyForm.reason}
-                      onChange={(e) => setPenaltyForm({ ...penaltyForm, reason: e.target.value, error: null })}
-                      placeholder="Why is this penalty being applied?"
-                      className="mt-1 w-full border-2 border-race-ink bg-white p-1.5 text-xs"
-                      rows={2}
-                    />
-                  </label>
-                  {penaltyForm.error && <p className="mt-1 text-[10px] font-bold text-race-red">{penaltyForm.error}</p>}
-                  <div className="mt-2 flex gap-3">
-                    <button onClick={savePenalty} className="race-action--muted race-action--yellow px-2 py-1 text-[10px]">
-                      Save
-                    </button>
-                    <button
-                      onClick={() => setPenaltyForm(null)}
-                      className="text-[10px] font-black uppercase text-race-ink underline decoration-2 underline-offset-2"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
               )}
             </div>
           );
@@ -599,6 +755,21 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         </div>
       )}
       </div>
+
+      {/* Rider detail sheet (portal-like fixed overlay) */}
+      {sheetEntryLive && (
+        <RiderDetailSheet
+          entry={sheetEntryLive}
+          lapCount={lapsByBib.get(sheetEntryLive.bib) ?? 0}
+          penalties={penaltiesByEntry.get(sheetEntryLive.id) ?? []}
+          canManageStatus={canManageStatus}
+          canManagePenaltiesRole={canManagePenaltiesRole}
+          onClose={() => setSheetEntry(null)}
+          onSetEntryStatus={setEntryStatus}
+          onRemovePenalty={removePenalty}
+          onAddPenalty={addPenalty}
+        />
+      )}
     </main>
   );
 }
