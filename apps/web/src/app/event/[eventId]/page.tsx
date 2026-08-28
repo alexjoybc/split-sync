@@ -248,6 +248,17 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   };
 
   const removeParticipant = async (participant: Participant) => {
+    // Entries are a denormalized snapshot of the roster row (bib/name/team/
+    // category), not FK-linked to participants. Races that have already
+    // started keep their locked entries as historical record (invariant 4),
+    // but any entry in a still-editable race must be cleaned up here —
+    // otherwise the bib becomes reassignable on the roster while a stale
+    // entries row for it still occupies that (race_id, bib) slot, and the
+    // next rider given that bib collides with it on assignment (23505).
+    const upcomingRaceIds = races.filter((r) => r.status === "upcoming").map((r) => r.id);
+    if (upcomingRaceIds.length > 0) {
+      await supabase.from("entries").delete().eq("bib", participant.bib).in("race_id", upcomingRaceIds);
+    }
     await supabase.from("participants").delete().eq("id", participant.id);
     refetch();
   };
@@ -285,18 +296,45 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
 
   const saveEdit = async () => {
     if (!editingId || !editDraft.bib.trim() || !editDraft.firstName.trim()) return;
+    const previous = participants.find((p) => p.id === editingId);
+    const newBib = editDraft.bib.trim();
+    const newFirstName = editDraft.firstName.trim();
+    const newLastName = editDraft.lastName.trim() || null;
+    const newTeam = editDraft.team.trim() || null;
+    const newCategory = editDraft.category || null;
     const { error } = await supabase
       .from("participants")
       .update({
-        bib: editDraft.bib.trim(),
-        first_name: editDraft.firstName.trim(),
-        last_name: editDraft.lastName.trim() || null,
-        team: editDraft.team.trim() || null,
-        category: editDraft.category || null,
+        bib: newBib,
+        first_name: newFirstName,
+        last_name: newLastName,
+        team: newTeam,
+        category: newCategory,
         sex: editDraft.sex || null,
       })
       .eq("id", editingId);
     if (!error) {
+      // Entries are a denormalized snapshot (see removeParticipant above),
+      // so a roster edit — especially a bib change — must be propagated to
+      // any already-assigned entries in still-editable races. Otherwise the
+      // entry keeps stale bib/name data, and the old bib becomes free to
+      // reassign to a different rider while a stale entry for it still
+      // occupies that (race_id, bib) slot in an upcoming race.
+      if (previous) {
+        const upcomingRaceIds = races.filter((r) => r.status === "upcoming").map((r) => r.id);
+        if (upcomingRaceIds.length > 0) {
+          await supabase
+            .from("entries")
+            .update({
+              bib: newBib,
+              name: [newFirstName, newLastName].filter(Boolean).join(" "),
+              team: newTeam,
+              category: newCategory,
+            })
+            .eq("bib", previous.bib)
+            .in("race_id", upcomingRaceIds);
+        }
+      }
       cancelEdit();
       refetch();
     }
@@ -338,13 +376,22 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       const existing = entries.find((entry) => entry.race_id === race.id && entry.bib === participant.bib);
       if (existing) await supabase.from("entries").delete().eq("id", existing.id);
     } else {
-      await supabase.from("entries").insert({
-        race_id: race.id,
-        bib: participant.bib,
-        name: fullName(participant),
-        team: participant.team,
-        category: participant.category,
-      });
+      // upsert + ignoreDuplicates: entries isn't realtime-synced, so two
+      // editors assigning the same bib concurrently (or a stale local
+      // `entries` check) should no-op on the second write rather than throw
+      // entries_race_id_bib_key.
+      await supabase
+        .from("entries")
+        .upsert(
+          {
+            race_id: race.id,
+            bib: participant.bib,
+            name: fullName(participant),
+            team: participant.team,
+            category: participant.category,
+          },
+          { onConflict: "race_id,bib", ignoreDuplicates: true }
+        );
     }
     refetch();
   };
@@ -360,8 +407,9 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     const raceEntries = entries.filter((entry) => entry.race_id === race.id);
     const toAssign = participants.filter((p) => p.category === category && !raceEntries.some((entry) => entry.bib === p.bib));
     if (toAssign.length === 0) return;
-    await supabase.from("entries").insert(
-      toAssign.map((p) => ({ race_id: race.id, bib: p.bib, name: fullName(p), team: p.team, category: p.category }))
+    await supabase.from("entries").upsert(
+      toAssign.map((p) => ({ race_id: race.id, bib: p.bib, name: fullName(p), team: p.team, category: p.category })),
+      { onConflict: "race_id,bib", ignoreDuplicates: true }
     );
     refetch();
   };
