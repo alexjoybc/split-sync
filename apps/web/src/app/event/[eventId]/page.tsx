@@ -90,6 +90,8 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
   const [newRaceTemplateId, setNewRaceTemplateId] = useState("");
   const [newRacePointsRace, setNewRacePointsRace] = useState(false);
   const [newRaceSprintInterval, setNewRaceSprintInterval] = useState("5");
+  const [newRaceTimeTrial, setNewRaceTimeTrial] = useState(false);
+  const [newRaceCountdownSeconds, setNewRaceCountdownSeconds] = useState("5");
   const [assigningRaceId, setAssigningRaceId] = useState<string | null>(null);
   const [assignQuery, setAssignQuery] = useState("");
   const [assignCategory, setAssignCategory] = useState("");
@@ -351,14 +353,18 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       event_id: eventId,
       name: newRace.name.trim(),
       sequence_order: races.length + 1,
-      laps_planned: newRace.laps ? parseInt(newRace.laps, 10) : null,
+      laps_planned: newRaceTimeTrial ? null : (newRace.laps ? parseInt(newRace.laps, 10) : null),
       is_points_race: newRacePointsRace,
+      is_time_trial: newRaceTimeTrial,
+      time_trial_countdown_seconds: newRaceTimeTrial ? parseInt(newRaceCountdownSeconds, 10) || 0 : 5,
       ...(newRacePointsRace ? { sprint_interval_laps: newRaceSprintInterval ? parseInt(newRaceSprintInterval, 10) : 5 } : {}),
     });
     setNewRace({ name: "", laps: "" });
     setNewRaceTemplateId("");
     setNewRacePointsRace(false);
     setNewRaceSprintInterval("5");
+    setNewRaceTimeTrial(false);
+    setNewRaceCountdownSeconds("5");
     refetch();
   };
 
@@ -367,7 +373,13 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
     const template = raceTemplates.find((t) => t.id === templateId);
     if (!template) return;
     setNewRace({ name: template.suggestedName, laps: template.defaultLaps ? String(template.defaultLaps) : "" });
-    setNewRacePointsRace(templateId === "velodrome-points");
+    if (template.isTimeTrial) {
+      setNewRaceTimeTrial(true);
+      setNewRacePointsRace(false);
+    } else {
+      setNewRaceTimeTrial(false);
+      setNewRacePointsRace(templateId === "velodrome-points");
+    }
   };
 
   const toggleAssignment = async (race: Race, participant: Participant, assigned: boolean) => {
@@ -717,12 +729,14 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                     <h3 className="text-sm font-black uppercase">
                       {race.name}
                       {race.is_points_race && <span className="ml-2 bg-race-yellow px-1.5 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide text-race-ink">Points race</span>}
+                      {race.is_time_trial && <span className="ml-2 bg-zinc-200 px-1.5 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide text-race-ink">Time trial</span>}
                     </h3>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-race-muted">
                       <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${raceStatusStyle[race.status]}`}>{race.status}</span>
-                      <span>{race.laps_planned ? `${race.laps_planned} laps` : "Open-ended"}</span>
+                      <span>{race.is_time_trial ? "Time trial" : race.laps_planned ? `${race.laps_planned} laps` : "Open-ended"}</span>
                       <span>· {raceEntries.length}/{participants.length} assigned</span>
                       {race.is_points_race && <span>· sprint every {race.sprint_interval_laps} laps</span>}
+                      {race.is_time_trial && <span>· countdown {race.time_trial_countdown_seconds}s</span>}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -820,11 +834,26 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
               </div>
               <div className="mt-2 flex gap-2">
                 <input value={newRace.name} onChange={(e) => setNewRace({ ...newRace, name: e.target.value })} placeholder="Race name" className={inputCls} />
-                <input value={newRace.laps} onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })} placeholder="Laps" inputMode="numeric" className={`${inputCls} !w-20`} />
+                <input
+                  value={newRace.laps}
+                  onChange={(e) => setNewRace({ ...newRace, laps: e.target.value.replace(/\D/g, "") })}
+                  placeholder="Laps"
+                  inputMode="numeric"
+                  disabled={newRaceTimeTrial}
+                  className={`${inputCls} !w-20 disabled:opacity-40`}
+                />
                 <button onClick={addRace} className="race-action--muted shrink-0">Add</button>
               </div>
               <label className="mt-2 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-race-muted">
-                <input type="checkbox" checked={newRacePointsRace} onChange={(e) => setNewRacePointsRace(e.target.checked)} className="size-4 border-2 border-race-ink accent-race-ink" />
+                <input
+                  type="checkbox"
+                  checked={newRacePointsRace}
+                  onChange={(e) => {
+                    setNewRacePointsRace(e.target.checked);
+                    if (e.target.checked) setNewRaceTimeTrial(false);
+                  }}
+                  className="size-4 border-2 border-race-ink accent-race-ink"
+                />
                 Points race — sprint every
                 <input
                   value={newRaceSprintInterval}
@@ -834,6 +863,26 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                   className={`${inputCls} !w-14 !py-1 disabled:opacity-40`}
                 />
                 laps, sprint points 5/3/2/1, final sprint doubled
+              </label>
+              <label className="mt-2 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-race-muted">
+                <input
+                  type="checkbox"
+                  checked={newRaceTimeTrial}
+                  onChange={(e) => {
+                    setNewRaceTimeTrial(e.target.checked);
+                    if (e.target.checked) setNewRacePointsRace(false);
+                  }}
+                  className="size-4 border-2 border-race-ink accent-race-ink"
+                />
+                Time trial — countdown
+                <input
+                  value={newRaceCountdownSeconds}
+                  onChange={(e) => setNewRaceCountdownSeconds(e.target.value.replace(/\D/g, ""))}
+                  disabled={!newRaceTimeTrial}
+                  inputMode="numeric"
+                  className={`${inputCls} !w-14 !py-1 disabled:opacity-40`}
+                />
+                seconds (0 = no countdown), no laps
               </label>
             </div>
           )}
