@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { supabase } from "@/lib/supabase";
 import { useRaceData } from "@/lib/useRaceData";
 import { recordCrossing, flushQueue, pendingCount } from "@/lib/crossingQueue";
@@ -309,6 +310,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   const [reopening, setReopening] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
   const [reopenError, setReopenError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<EditState | null>(null);
   const [restoring, setRestoring] = useState<RestoreState | null>(null);
 
@@ -367,6 +369,14 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
   }, [crossings]);
 
   const recent = useMemo(() => [...crossings].reverse().slice(0, 8), [crossings]);
+
+  const filteredEntries = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter(
+      (e) => e.bib.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
+    );
+  }, [entries, search]);
 
   const undo = async (id: string) => {
     await supabase
@@ -553,8 +563,22 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
       <p className="mt-6 text-center text-xs font-bold uppercase tracking-wide text-race-muted">
         {race.status === "active" ? "Tap a rider to record a crossing · tap ••• for status & penalties" : `${entries.length} rostered riders — set DNS before the start, tap Start race to enable crossing capture`}
       </p>
+      <div className="relative mt-3">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Find bib / rider"
+          className="w-full border-2 border-race-ink bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-race-muted focus:border-race-red"
+        />
+        <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-race-muted" />
+      </div>
+      {search.trim() && (
+        <p className="mt-1 text-xs font-bold text-race-muted">
+          {filteredEntries.length} of {entries.length} riders
+        </p>
+      )}
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {entries.map((entry) => {
+        {filteredEntries.map((entry) => {
           const statused = entry.status !== "ok";
           const canRecord = canScore(role) && race.status === "active" && !statused;
           const entryPenalties = penaltiesByEntry.get(entry.id) ?? [];

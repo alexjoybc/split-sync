@@ -171,7 +171,12 @@ export default function HelpPage() {
             <li>
               Use the scorer screen to record crossings by tapping a rider&apos;s
               bib as they cross the line. Free-form bib entry is intentionally
-              not supported — only assigned entries appear as tiles.
+              not supported — only assigned entries appear as tiles. For large
+              fields, use the <strong>Find bib / rider</strong> search box
+              above the grid to narrow the tiles to a matching bib number or
+              name — the rest of the field is hidden while you search but
+              their lap counts and state are unaffected. Clear the box to
+              restore the full grid instantly.
             </li>
             <li>
               Crossings can only be recorded while a race is <strong>active</strong>.
