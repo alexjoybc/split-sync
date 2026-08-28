@@ -147,7 +147,7 @@ function Tracker() {
     setMessage("Password updated.");
   };
   const chooseEvent = async (event: Event) => {
-    const { data } = await supabase.from("races").select("id,event_id,name,laps_planned,status").eq("event_id", event.id).order("sequence_order");
+    const { data } = await supabase.from("races").select("id,event_id,name,laps_planned,status,is_time_trial,time_trial_countdown_seconds").eq("event_id", event.id).order("sequence_order");
     setSelectedEvent(event);
     setRaces(data ?? []);
   };
