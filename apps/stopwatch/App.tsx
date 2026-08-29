@@ -3,7 +3,7 @@
  *
  * Design: digitalized device feel in SplitSync's visual language.
  * - Dark device casing (masthead + button bar)
- * - Inset LCD instrument panel — DSEG7 amber digits on black
+ * - Inset LCD instrument panel — DSEG7 green digits on black (lap), white (session)
  * - Race-paper content area — dense lap table with Δ best
  * - Physical raised buttons with bevel + press-down shadow
  */
@@ -33,9 +33,9 @@ const C = {
 
   // LCD instrument panel
   instrument:   "#0D0D0D",
-  lcd:          "#FFA800",   // amber — Ultrak 4 / classic LCD
-  lcdDim:       "#2C1A00",   // off-segment ghost
-  lcdSmall:     "#FF7A00",   // session sub-display
+  lcd:          "#00FF87",   // bright mint-green — classic timing instrument (Casio/Garmin)
+  lcdDim:       "#002918",   // off-segment ghost (dark green)
+  lcdSmall:     "#FFFFFF",   // session sub-display — pure white, clearly secondary
 
   // SplitSync content surfaces
   paper:        "#F5F0E8",
@@ -353,7 +353,7 @@ function Stopwatch() {
             ms={sessionMs}
             mainSize={Math.round(lcdMain * 0.42)}
             color={C.lcdSmall}
-            dimColor="#1A0D00"
+            dimColor="#222222"
             fontLoaded={!!fontsLoaded}
           />
         </View>
