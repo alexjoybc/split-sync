@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { use, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
@@ -154,14 +154,18 @@ function PointsClassification({ race, crossings, entries }: { race: Race; crossi
               const isLeader = row.position === 1;
               const statused = row.status !== "ok";
               return (
-                <tr key={row.bib} className={classNames("border-t border-zinc-300", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", statused && "opacity-70")}>
-                  <td className={classNames("py-3 text-center text-lg font-black tabular-nums", isLeader ? "bg-zinc-950 text-[#f6d428]" : "text-zinc-700")}>
+                <tr
+                  key={row.bib}
+                  className={classNames("border-t border-zinc-300", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", statused && "opacity-70")}
+                  style={isLeader ? { boxShadow: "var(--race-leader-shadow)" } : undefined}
+                >
+                  <td className={classNames("py-3 text-center text-lg font-black race-numeral", isLeader ? "bg-zinc-950 text-[#f6d428] race-angle-cut" : "text-zinc-700")}>
                     {statused ? <StatusBadge status={row.status} /> : row.position ?? "—"}
                   </td>
-                  <td className="border-l border-zinc-300 py-3 text-center"><span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black tabular-nums text-white">{row.bib}</span></td>
+                  <td className="border-l border-zinc-300 py-3 text-center"><span className="race-numeral inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black text-white">{row.bib}</span></td>
                   <td className="border-l border-zinc-300 px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
-                  <td className="border-l border-zinc-300 py-3 text-center text-base font-black tabular-nums">{row.points}</td>
-                  <td className="border-l border-zinc-300 py-3 text-center text-base font-black tabular-nums">{row.laps}</td>
+                  <td className="race-numeral border-l border-zinc-300 py-3 text-center text-base font-black">{row.points}</td>
+                  <td className="race-numeral border-l border-zinc-300 py-3 text-center text-base font-black">{row.laps}</td>
                 </tr>
               );
             })}
@@ -428,17 +432,18 @@ function TimeTrialBoard({
                     "border-t border-zinc-300",
                     isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]"
                   )}
+                  style={isLeader ? { boxShadow: "var(--race-leader-shadow)" } : undefined}
                 >
                   <td
                     className={classNames(
-                      "py-3 text-center text-lg font-black tabular-nums",
-                      isLeader ? "bg-zinc-950 text-[#f6d428]" : "text-zinc-700"
+                      "py-3 text-center text-lg font-black race-numeral",
+                      isLeader ? "bg-zinc-950 text-[#f6d428] race-angle-cut" : "text-zinc-700"
                     )}
                   >
                     {row.position ?? "—"}
                   </td>
                   <td className="border-l border-zinc-300 py-3 text-center">
-                    <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black tabular-nums text-white">
+                    <span className="race-numeral inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black text-white">
                       {row.bib}
                     </span>
                   </td>
@@ -455,10 +460,10 @@ function TimeTrialBoard({
                       </span>
                     )}
                   </td>
-                  <td className="border-l border-zinc-300 py-3 text-center text-sm font-bold tabular-nums">
+                  <td className="race-numeral border-l border-zinc-300 py-3 text-center text-sm font-bold">
                     {row.elapsedMs != null ? fmtElapsedMs(row.elapsedMs) : "—"}
                   </td>
-                  <td className="border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black tabular-nums">
+                  <td className="race-numeral border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black">
                     {row.gapText || "—"}
                   </td>
                 </tr>
@@ -666,12 +671,17 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
         <div className="mx-auto grid max-w-4xl grid-cols-[1.1fr_1fr_1fr] divide-x-2 divide-zinc-950">
           <div className="pr-3 sm:pr-5">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Race status</p>
-            <p className={classNames("mt-1 text-base font-black uppercase", race.status === "active" ? "text-race-red" : "text-race-ink")}>
-              {race.status === "active" && (
-                <span className="race-live-pulse mr-1.5 align-middle" aria-hidden="true" />
-              )}
-              {race.status === "active" ? "Live now" : race.status}
-            </p>
+            {race.status === "active" ? (
+              <div
+                className="race-angle-cut mt-1 inline-flex items-center gap-1.5 bg-race-red px-2 py-1"
+                style={{ boxShadow: "var(--race-live-shadow)", "--race-pulse-color": "#ffffff" } as React.CSSProperties}
+              >
+                <span className="race-live-pulse shrink-0" aria-hidden="true" />
+                <span className="text-xs font-black uppercase tracking-[0.2em] text-white">Live</span>
+              </div>
+            ) : (
+              <p className="mt-1 text-base font-black uppercase text-race-ink">{race.status}</p>
+            )}
           </div>
           <div className="px-3 sm:px-5">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-race-muted">Laps to go</p>
@@ -788,15 +798,17 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                           if (el) rowRefs.current.set(row.bib, el);
                           else rowRefs.current.delete(row.bib);
                         }}
-                        className={classNames("relative border-t border-zinc-300 transition-opacity", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", hit && !isLeader && "bg-[#ffdfdf] ring-2 ring-inset ring-[#ec1c24]", !hit && q !== "" && "opacity-35", statused && "opacity-70")}>
-                        <td className={classNames("py-3 text-center text-lg font-black tabular-nums", isLeader ? "bg-zinc-950 text-[#f6d428]" : podium ? "text-[#ec1c24]" : "text-zinc-700")}>
+                        className={classNames("relative border-t border-zinc-300 transition-opacity", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", hit && !isLeader && "bg-[#ffdfdf] ring-2 ring-inset ring-[#ec1c24]", !hit && q !== "" && "opacity-35", statused && "opacity-70")}
+                        style={isLeader ? { boxShadow: "var(--race-leader-shadow)" } : undefined}
+                      >
+                        <td className={classNames("py-3 text-center text-lg font-black race-numeral", isLeader ? "bg-zinc-950 text-[#f6d428] race-angle-cut" : podium ? "text-[#ec1c24]" : "text-zinc-700")}>
                           {statused ? <StatusBadge status={row.status} /> : row.laps > 0 ? row.position : "—"}
                         </td>
-                        <td className="border-l border-zinc-300 py-3 text-center"><span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black tabular-nums text-white">{row.bib}</span></td>
+                        <td className="border-l border-zinc-300 py-3 text-center"><span className="race-numeral inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black text-white">{row.bib}</span></td>
                         <td className="border-l border-zinc-300 px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}<PenaltyBadge row={row} /></p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
-                        <td className="border-l border-zinc-300 py-3 text-center text-base font-black tabular-nums">{row.laps}</td>
-                        <td className="hidden border-l border-zinc-300 py-3 text-center text-sm font-bold tabular-nums sm:table-cell">{fmtLapTime(row.lastLapMs)}</td>
-                        <td className={classNames("border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black tabular-nums", row.gapText.startsWith("-") ? "text-[#ec1c24]" : "text-zinc-900")}>
+                        <td className="race-numeral border-l border-zinc-300 py-3 text-center text-base font-black">{row.laps}</td>
+                        <td className="race-numeral hidden border-l border-zinc-300 py-3 text-center text-sm font-bold sm:table-cell">{fmtLapTime(row.lastLapMs)}</td>
+                        <td className={classNames("race-numeral border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black", row.gapText.startsWith("-") ? "text-[#ec1c24]" : "text-zinc-900")}>
                           {statused ? "" : isLeader ? "Leader" : row.gapText}
                         </td>
                       </tr>
