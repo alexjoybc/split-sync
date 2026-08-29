@@ -52,14 +52,13 @@ test.describe('Time Trial live board', () => {
 
     await expect(page.getByText(/up next/i)).toBeVisible({ timeout: 10_000 });
 
-    // The Up Next section renders bibs as plain numbers (no # prefix).
-    // Use rider names (Alice=bib2, Bob=bib9, Carol=bib10) which are unique
-    // and appear in natural bib sort order in the queue.
+    // Seed: Alice=bib2 (sorts first), Bob=bib9, Carol=bib10 (sorts last).
+    // Inserted in reverse order (Carol, Bob, Alice) to verify natural sort.
     const pageText = await page.locator('body').textContent() ?? '';
-    const idxAlice = pageText.indexOf('Alice'); // bib 2
-    const idxBob   = pageText.indexOf('Bob');   // bib 9
-    const idxCarol = pageText.indexOf('Carol'); // bib 10
-    expect(idxAlice, 'Alice (bib 2) should appear in queue').toBeGreaterThanOrEqual(0);
+    const idxAlice = pageText.indexOf('Alice'); // bib 2 → first in natural sort
+    const idxBob   = pageText.indexOf('Bob');   // bib 9 → second
+    const idxCarol = pageText.indexOf('Carol'); // bib 10 → third
+    expect(idxAlice, 'Alice (bib 2) should appear in page').toBeGreaterThanOrEqual(0);
     expect(idxBob,   'Bob (bib 9) should appear after Alice').toBeGreaterThan(idxAlice);
     expect(idxCarol, 'Carol (bib 10) should appear after Bob').toBeGreaterThan(idxBob);
   });

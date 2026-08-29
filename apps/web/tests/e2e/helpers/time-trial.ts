@@ -56,11 +56,16 @@ export async function seedTimeTrialRace(
     .single();
   if (raceError || !race) throw new Error(`Failed to create race: ${raceError?.message}`);
 
-  // Create participants (bibs in non-sorted order to exercise natural sort)
+  // Participants inserted in REVERSE bib order to exercise natural sort:
+  //   Carol (bib 10) inserted first → should sort LAST
+  //   Bob   (bib 9)  inserted second → should sort MIDDLE
+  //   Alice (bib 2)  inserted last  → should sort FIRST
+  // This intentionally tests that the queue respects natural (numeric) sort,
+  // not insertion order.
   const bibDefs = [
-    { bib: '10', first_name: 'Alice' },
+    { bib: '10', first_name: 'Carol' },
     { bib: '9',  first_name: 'Bob'   },
-    { bib: '2',  first_name: 'Carol' },
+    { bib: '2',  first_name: 'Alice' },
   ];
   const { error: pErr } = await client.from('participants').insert(
     bibDefs.map((d) => ({
