@@ -81,13 +81,12 @@ export async function buildEvent(opts: {
   const eventId = event.id as string;
 
   // Participants — roster first (domain invariant #3).
-  // participants.name was replaced by first_name (NOT NULL) + last_name in
-  // migration 20260827000002_participant_first_last_name.sql.
+  // participants.name was dropped in migration 20260827000002; use first_name/last_name.
   const participants = bibs.map((bib, i) => ({
     event_id: eventId,
     bib,
-    first_name: `Rider ${bib}`,
-    last_name: null as string | null,
+    first_name: `Rider`,
+    last_name: bib,
     team: i % 2 === 0 ? 'Team A' : 'Team B',
   }));
   const { error: pErr } = await client.from('participants').insert(participants);
