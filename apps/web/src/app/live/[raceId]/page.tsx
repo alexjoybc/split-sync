@@ -233,6 +233,10 @@ function TimeTrialBoard({
   }, [results]);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // Reset nowMs immediately when a new runner starts so elapsed is correct right away
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, [running?.bib]);
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => setNowMs(Date.now()), 1000);
@@ -241,6 +245,14 @@ function TimeTrialBoard({
 
   const elapsedMs = running?.startedAt != null ? nowMs - running.startedAt : 0;
   const progress = getProgress(elapsedMs, fastestMs);
+
+  // How many finished riders are currently faster → projectedPosition = that count + 1
+  const projectedPosition: number | null = running
+    ? results.filter(
+        (r) => r.phase === "finished" && r.elapsedMs != null && r.elapsedMs < elapsedMs
+      ).length + 1
+    : null;
+  const showRank = results.some((r) => r.phase === "finished");
 
   const finishedResults = results.filter(
     (r) => (r.phase === "finished" || r.phase === "needs-review") && r.status === "ok"
@@ -268,8 +280,17 @@ function TimeTrialBoard({
                   <p className="text-xs font-bold uppercase text-zinc-500">{running.team}</p>
                 )}
               </div>
-              <span className="ml-auto text-3xl font-black tabular-nums text-race-red">
-                {fmtElapsedMs(elapsedMs)}
+              <span className="ml-auto flex items-baseline gap-2">
+                <span className="text-3xl font-black tabular-nums text-race-red">
+                  {fmtElapsedMs(elapsedMs)}
+                </span>
+                {showRank && projectedPosition != null && (
+                  <span
+                    className={`inline-block px-2 py-0.5 text-xs font-black tabular-nums ${projectedPosition === 1 ? "bg-race-yellow text-race-ink" : "bg-zinc-200 text-zinc-800"}`}
+                  >
+                    P{projectedPosition}
+                  </span>
+                )}
               </span>
             </div>
             <div className="mt-3 h-3 w-full bg-zinc-300">
@@ -277,7 +298,7 @@ function TimeTrialBoard({
                 <div className="h-3 w-full animate-pulse bg-race-yellow" />
               ) : (
                 <div
-                  className="h-3 bg-race-yellow transition-all"
+                  className={`h-3 transition-all ${progress.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
                   style={{ width: `${progress.pct}%` }}
                 />
               )}
