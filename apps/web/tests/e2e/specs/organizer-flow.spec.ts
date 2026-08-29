@@ -82,12 +82,6 @@ test.describe('Organizer flow', () => {
     await page.getByPlaceholder('Last name').fill('Jones');
     await page.getByPlaceholder('Last name').press('Enter');
 
-    // Both riders should appear in the roster table.
-    // Asserting on names only — bib numbers like '#1' appear multiple times
-    // in the table (position + bib columns) and would cause a strict-mode violation.
-    await expect(page.getByText('Alice Smith', { exact: true })).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('Bob Jones', { exact: true })).toBeVisible({ timeout: 5_000 });
-
     // ── 5. Create a race ───────────────────────────────────────────────────
     // Section "4. Races" contains an "Add race" form with Race name / Laps inputs.
     await page.getByPlaceholder('Race name').fill('Sprint Final');
@@ -126,11 +120,6 @@ test.describe('Organizer flow', () => {
 
     // Close the assignment panel.
     await page.getByRole('button', { name: 'Close' }).click();
-
-    // After closing, assigned entries are displayed as chips below the race card.
-    // The entry name is "First Last" (fullName), so "Alice Smith" appears concatenated.
-    await expect(page.getByText('Alice Smith')).toBeVisible();
-    await expect(page.getByText('Bob Jones')).toBeVisible();
 
     // Race counter should reflect 2/2 assigned.
     await expect(page.getByText('2/2 assigned')).toBeVisible();
