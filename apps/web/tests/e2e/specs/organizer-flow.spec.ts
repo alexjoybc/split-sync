@@ -85,8 +85,8 @@ test.describe('Organizer flow', () => {
     // Both riders should appear in the roster table.
     // Asserting on names only — bib numbers like '#1' appear multiple times
     // in the table (position + bib columns) and would cause a strict-mode violation.
-    await expect(page.getByText('Alice')).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByText('Bob')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Alice Smith', { exact: true })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText('Bob Jones', { exact: true })).toBeVisible({ timeout: 5_000 });
 
     // ── 5. Create a race ───────────────────────────────────────────────────
     // Section "4. Races" contains an "Add race" form with Race name / Laps inputs.
