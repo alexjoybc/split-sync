@@ -40,7 +40,7 @@ export async function seedTimeTrialRace(
     .single();
   if (eventError || !event) throw new Error(`Failed to create event: ${eventError?.message}`);
 
-  // Create TT race
+  // Create TT race as 'upcoming' so entries can be inserted (RLS blocks inserts on active races)
   const { data: race, error: raceError } = await client
     .from('races')
     .insert({
@@ -50,7 +50,7 @@ export async function seedTimeTrialRace(
       laps_planned: null,
       is_time_trial: true,
       time_trial_countdown_seconds: 3,
-      status: 'active',
+      status: 'upcoming',
     })
     .select()
     .single();
@@ -93,7 +93,14 @@ export async function seedTimeTrialRace(
   );
   if (eErr) throw new Error(`Failed to insert entries: ${eErr.message}`);
 
-  return { event, race, client };
+  // Now start the race so crossings can be inserted
+  const { error: startErr } = await client
+    .from('races')
+    .update({ status: 'active' })
+    .eq('id', race.id);
+  if (startErr) throw new Error(`Failed to start race: ${startErr.message}`);
+
+  return { event, race: { ...race, status: 'active' as const }, client };
 }
 
 /**
