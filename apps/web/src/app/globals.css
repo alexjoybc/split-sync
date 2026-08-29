@@ -170,6 +170,71 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* ── Live-pulse animation ─────────────────────────────────────────────── */
+@keyframes race-live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+.race-live-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--race-pulse-color);
+  animation: race-live-pulse var(--motion-live-pulse-duration) var(--motion-live-pulse-easing) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-live-pulse {
+    animation: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Rank-change flash ────────────────────────────────────────────────── */
+@keyframes race-rank-flash-up {
+  0%   { background-color: var(--race-leader-glow); }
+  100% { background-color: transparent; }
+}
+@keyframes race-rank-flash-down {
+  0%   { background-color: var(--race-accent-glow); }
+  100% { background-color: transparent; }
+}
+
+/* No fill-mode: none (default) so background reverts to its class-set
+   value once the animation completes, leaving row colours untouched. */
+.race-rank-flash-up {
+  animation: race-rank-flash-up var(--motion-rank-flash-duration) var(--motion-rank-flash-easing);
+}
+.race-rank-flash-down {
+  animation: race-rank-flash-down var(--motion-rank-flash-duration) var(--motion-rank-flash-easing);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-rank-flash-up,
+  .race-rank-flash-down {
+    animation: none;
+  }
+}
+
+/* ── Leader-change transition ─────────────────────────────────────────── */
+@keyframes race-leader-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.race-leader-change {
+  animation: race-leader-in var(--motion-leader-change-duration) var(--motion-leader-change-easing) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .race-leader-change {
+    animation: none;
+  }
+}
+
 /* Printable pages (e.g. the per-race start list) hide chrome that only
    makes sense on screen and let the table/heading fill the printed page. */
 @media print {

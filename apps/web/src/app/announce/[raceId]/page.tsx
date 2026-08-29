@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useEffect, useRef, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
@@ -182,10 +182,35 @@ function AnnouncerBody({
   const q = query.trim().toLowerCase();
   const match = q === "" ? null : standings.find((row) => row.bib === q || row.name.toLowerCase().includes(q)) ?? null;
 
+  // Leader-change transition: fire the entrance animation whenever P1
+  // passes to a different rider. Skipped on the initial render (prevRef null).
+  const prevLeaderBibRef = useRef<string | null>(null);
+  const leaderSectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const newLeaderBib = leader?.bib ?? null;
+    if (
+      newLeaderBib != null &&
+      prevLeaderBibRef.current != null &&
+      newLeaderBib !== prevLeaderBibRef.current
+    ) {
+      const el = leaderSectionRef.current;
+      if (el) {
+        el.classList.remove("race-leader-change");
+        void el.offsetWidth; // force reflow to restart the animation
+        el.classList.add("race-leader-change");
+        setTimeout(() => {
+          el.classList.remove("race-leader-change");
+        }, 400); // 380 ms duration + small buffer
+      }
+    }
+    prevLeaderBibRef.current = newLeaderBib;
+  }, [leader?.bib]);
+
   return (
     <div className="mx-auto grid max-w-5xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.3fr_1fr]">
       <div className="space-y-6">
-        <section className="border-4 border-race-yellow bg-black/40 p-6">
+        <section ref={leaderSectionRef} className="border-4 border-race-yellow bg-black/40 p-6">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-race-yellow">Current leader</p>
           {leader ? (
             <div className="mt-3 flex items-baseline gap-4">
@@ -742,7 +767,12 @@ function AnnouncerView({ raceId }: { raceId: string }) {
           </div>
           <div className="flex items-center gap-6">
             <div className="text-right">
-              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Race time</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">
+                {race.status === "active" && (
+                  <span className="race-live-pulse mr-1 align-middle" aria-hidden="true" />
+                )}
+                Race time
+              </p>
               <p className="text-2xl font-black tabular-nums">{race.status === "active" && race.started_at ? <RaceClock startedAt={race.started_at} /> : "—"}</p>
             </div>
             <div className="text-right">
