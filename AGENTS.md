@@ -33,7 +33,7 @@ The product has three deliberate surfaces. Do not blend their permissions or goa
 
 ## Authentication And Authorization
 
-- Organizer web login uses Supabase magic links at `/login` and `/auth/callback`.
+- Organizer web login uses email+password (and Google OAuth) at `/login` and `/auth/callback`. Magic links are NOT used; the login form calls `supabase.auth.signInWithPassword`.
 - Mobile callback scheme is `org.splitsync.tracker://auth/callback`.
 - `events.owner_id` holds a JWT subject as text, not an `auth.users` foreign key. This intentionally supports current Supabase Auth and future OAuth/Auth0/OIDC providers.
 - Never use a Supabase `service_role`/secret key in web or mobile code.
@@ -52,6 +52,8 @@ The product has three deliberate surfaces. Do not blend their permissions or goa
 - Reference issues in commits. Use `Closes #N` only when the work completes the issue.
 - Do not overwrite user/uncommitted changes. The live board may be concurrently edited.
 - Verify web work with `pnpm --filter web build`.
+- Functional tests (Playwright): `pnpm --filter web test:e2e` (requires local Supabase running). CI runs the full suite on every PR via the `e2e` job in `.github/workflows/ci.yml` and must pass before merge.
+- New or changed user-facing web flows must include or update a Playwright E2E spec in `apps/web/tests/e2e/`.
 - Verify mobile TypeScript with `pnpm --filter mobile exec tsc --noEmit`.
 - For native Android changes, rebuild with `pnpm --filter mobile exec expo run:android` and test on the connected device when available.
 
@@ -80,5 +82,6 @@ Every task, regardless of size, is done in its own git worktree — never direct
 - `docs/runbooks/race-day.md`: organizer workflow at an event.
 - `docs/runbooks/production-setup.md`: Vercel, Supabase, DNS, Resend, migrations.
 - `docs/runbooks/mobile-development.md`: Android/iOS tracker build setup.
+- `docs/runbooks/functional-tests.md`: Playwright E2E suite prerequisites, local run, CI artifacts.
 - `docs/adr/`: architectural decisions and rationale.
 - `apps/web/src/app/help`: on-site self-service Help pages for spectators and organizers.
