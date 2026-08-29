@@ -130,7 +130,7 @@ function Tracker() {
 
   // ── Live-pulse animation ──────────────────────────────────────────────────
   // Drives the pulsing dot shown in the status row while a race is active/recording.
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(1));
   useEffect(() => {
     if (selectedRace?.status !== "active") return;
     const loop = Animated.loop(
