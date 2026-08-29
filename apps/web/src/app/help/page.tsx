@@ -367,6 +367,15 @@ export default function HelpPage() {
               crossings, use the web scorer at splitsync.org — those tools require
               an audit reason and are kept in the crossing&apos;s history.
             </li>
+            <li>
+              For a <strong>time trial race</strong>, the tracker shows an{" "}
+              <strong>Up Next / On Course / Finished</strong> workflow instead of the
+              bib grid. Tap <strong>Start now</strong> to send the next rider
+              immediately, or <strong>Start countdown</strong> for a haptic countdown
+              before the start crossing fires automatically. Tap{" "}
+              <strong>Finish</strong> when the rider crosses the finish line. Only one
+              rider can be on course at a time.
+            </li>
           </ul>
         </section>
       </div>
