@@ -4,13 +4,14 @@
 
 SplitSync is live classification software for grassroots mass-start lap racing. The current MVP serves velodrome and cyclocross. It is not an official certified timing system; it provides live situational awareness and unofficial results.
 
-The product has three deliberate surfaces. Do not blend their permissions or goals.
+The product has four deliberate surfaces. Do not blend their permissions or goals.
 
 | Surface | Location | Audience | Rules |
 | --- | --- | --- | --- |
 | Spectator | `apps/web/src/app/live`, `apps/web/src/app/results`, `apps/web/src/app/announce` | Public | No sign-in, read-only, mobile-first, must never expose organizer controls |
 | Organizer admin | `apps/web/src/app`, `new`, `event`, `login`, `auth` | Event owner | Creates roster/races, publishes event, owns all writes through RLS |
 | Mobile tracker | `apps/mobile` | Event owner now, volunteers later | Start/finish and one-tap crossings only; no roster edits during a race |
+| Casual stopwatch | `apps/stopwatch` (native, `org.splitsync.stopwatch`) + `apps/web/src/app/stopwatch` (web) | Public | No sign-in, anonymous code-based sessions, event log is truth; no organizer controls; no roster; no auth.users |
 
 ## Domain Invariants
 
@@ -55,6 +56,7 @@ The product has three deliberate surfaces. Do not blend their permissions or goa
 - Functional tests (Playwright): `pnpm --filter web test:e2e` (requires local Supabase running). CI runs the full suite on every PR via the `e2e` job in `.github/workflows/ci.yml` and must pass before merge.
 - New or changed user-facing web flows must include or update a Playwright E2E spec in `apps/web/tests/e2e/`.
 - Verify mobile TypeScript with `pnpm --filter mobile exec tsc --noEmit`.
+- Verify stopwatch TypeScript with `pnpm --filter stopwatch exec tsc --noEmit`.
 - For native Android changes, rebuild with `pnpm --filter mobile exec expo run:android` and test on the connected device when available.
 
 ### Worktree Workflow (mandatory for every task)
