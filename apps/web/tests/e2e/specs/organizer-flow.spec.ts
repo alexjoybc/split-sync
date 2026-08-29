@@ -47,10 +47,10 @@ test.describe('Organizer flow', () => {
     const eventTitle = `E2E Organizer Test ${Date.now()}`;
 
     await page
-      .getByLabel('Title')
+      .getByPlaceholder('Friday Night Racing')
       .fill(eventTitle);
     await page
-      .getByLabel('Location')
+      .getByPlaceholder('Greater Victoria Velodrome')
       .fill('Test Velodrome Arena');
 
     await page
