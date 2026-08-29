@@ -187,3 +187,15 @@ Migration 00004 introduces the ownership policies. Migration 00005 enforces the 
 ### Resolving a user's access to an event
 
 `apps/web/src/lib/useEventAccess.ts` resolves, for the signed-in user and one event, whether they are the `owner`, an `event_members` role, or have no access — this drives both the event setup page and the scorer page. It is a UX convenience only; the RLS policies above are the actual enforcement boundary.
+
+## UI System
+
+The visual design system is a shared contract across web and mobile, documented in [`docs/adr/0015-broadcast-ui-refresh.md`](adr/0015-broadcast-ui-refresh.md).
+
+Key elements:
+
+- **Tokens**: `--race-*` CSS custom properties in `apps/web/src/app/globals.css` and matching keys in the `colors` object in `apps/mobile/App.tsx`.
+- **Typography**: Geist Sans (body), Barlow Condensed 700 (numeral display columns — rank, lap, gap, elapsed).
+- **Motion vocabulary**: three named patterns — `live-pulse`, `rank-flash`, `leader-change` — defined as CSS `@keyframes` utility classes respecting `prefers-reduced-motion`.
+- **Element rule table**: which UI elements receive broadcast depth/motion treatment (hero/live only) vs. which remain flat (organizer admin, static content) — see the ADR for the full table.
+- **Cross-surface contract**: every token added to web's `:root` block has a matching mobile `colors` key, and vice versa.
