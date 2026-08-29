@@ -7,7 +7,9 @@
     "mobile": "pnpm --filter mobile start",
     "db:start": "supabase start",
     "db:stop": "supabase stop",
-    "db:reset": "supabase db reset"
+    "db:reset": "supabase db reset",
+    "test:e2e": "node scripts/e2e.mjs",
+    "test:e2e:ui": "node scripts/e2e.mjs --ui"
   },
   "engines": {
     "node": ">=22.13"
