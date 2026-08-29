@@ -105,13 +105,24 @@ test.describe('Organizer flow', () => {
     await page.getByRole('button', { name: 'Assign' }).click();
 
     // The assignment panel opens and lists roster participants as checkboxes.
-    // Check each participant by their combined name label.
-    await page
-      .getByRole('checkbox', { name: /Alice/i })
-      .check();
-    await page
-      .getByRole('checkbox', { name: /Bob/i })
-      .check();
+    // Wait for the panel to render before interacting.
+    await expect(
+      page.getByRole('checkbox', { name: /Alice/i }),
+    ).toBeVisible({ timeout: 5_000 });
+
+    // The checkboxes are controlled React inputs: clicking triggers an async
+    // Supabase write + refetch(), so state doesn't flip synchronously.
+    // Use .click() (no post-click state assertion) then wait for toBeChecked()
+    // to let the round-trip complete before moving on.
+    await page.getByRole('checkbox', { name: /Alice/i }).click();
+    await expect(
+      page.getByRole('checkbox', { name: /Alice/i }),
+    ).toBeChecked({ timeout: 10_000 });
+
+    await page.getByRole('checkbox', { name: /Bob/i }).click();
+    await expect(
+      page.getByRole('checkbox', { name: /Bob/i }),
+    ).toBeChecked({ timeout: 10_000 });
 
     // Close the assignment panel.
     await page.getByRole('button', { name: 'Close' }).click();
