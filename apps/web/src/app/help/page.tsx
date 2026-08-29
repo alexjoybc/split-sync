@@ -333,6 +333,48 @@ export default function HelpPage() {
 
         <section>
           <div className="race-section-heading">
+            <p className="race-kicker--muted">Solo timer</p>
+            <h2 className="mt-1 text-xl font-black uppercase">
+              Using the stopwatch
+            </h2>
+          </div>
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+            <li>
+              The <Link href="/stopwatch" className="underline decoration-2 underline-offset-2 hover:text-race-red">solo stopwatch</Link>{" "}
+              is available at <code>/stopwatch</code> — no sign-in required. It
+              works fully offline; no data is sent to any server.
+            </li>
+            <li>
+              Tap <strong>Start</strong> to begin timing, <strong>Stop</strong>{" "}
+              to pause. Tap <strong>Reset</strong> while stopped to return to
+              zero.
+            </li>
+            <li>
+              While running, tap <strong>Lap</strong> to record a split. Each
+              lap shows its own duration and the cumulative time. The{" "}
+              <strong>best (shortest) lap</strong> is highlighted in yellow.
+              Laps are shown newest-first.
+            </li>
+            <li>
+              Keyboard shortcuts:{" "}
+              <strong>Space</strong> = start / stop,{" "}
+              <strong>L</strong> = lap.
+            </li>
+            <li>
+              Timing stays accurate while the tab is in the background — the
+              stopwatch anchors to a monotonic clock ({"`"}
+              performance.now(){"`"}), not accumulated intervals.
+            </li>
+            <li>
+              A <strong>Time together</strong> button will appear once shared
+              sessions are available — you will be able to share a link and
+              time alongside others in real time.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <div className="race-section-heading">
             <p className="race-kicker--muted">For mobile trackers</p>
             <h2 className="mt-1 text-xl font-black uppercase">
               Using the tracker app

@@ -242,3 +242,192 @@ body {
     display: none !important;
   }
 }
+
+/* ── Stopwatch tokens ────────────────────────────────────────────────────── */
+:root {
+  /* Bezel depth */
+  --sw-bezel-size:        clamp(240px, 70vw, 320px);
+  --sw-bezel-border:      8px;
+  --sw-bezel-color:       var(--race-ink);
+  --sw-bezel-bg:          #1a1a1c;
+  --sw-bezel-inner-bg:    #111113;
+
+  /* Digit display */
+  --sw-digit-color:       #f0ede6;        /* warm off-white on dark dial */
+  --sw-digit-sub-color:   rgba(240,237,230,0.55);
+
+  /* Pushers */
+  --sw-pusher-size:       clamp(68px, 16vw, 84px);
+  --sw-pusher-gap:        clamp(32px, 8vw, 52px);
+
+  /* Lap list */
+  --sw-lap-best-bg:       var(--race-yellow);
+  --sw-lap-best-color:    var(--race-ink);
+  --sw-lap-row-border:    var(--race-line);
+}
+
+/* Circular stopwatch dial/bezel */
+.sw-dial {
+  position: relative;
+  width:  var(--sw-bezel-size);
+  height: var(--sw-bezel-size);
+  border-radius: 50%;
+  background: var(--sw-bezel-bg);
+  border: var(--sw-bezel-border) solid var(--sw-bezel-color);
+  box-shadow:
+    0 0 0 3px rgba(255,255,255,0.06),
+    0 8px 32px rgba(0,0,0,0.55),
+    inset 0 2px 8px rgba(255,255,255,0.06),
+    inset 0 -4px 16px rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Inner recessed face */
+.sw-dial::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: var(--sw-bezel-inner-bg);
+  box-shadow: inset 0 4px 20px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+/* 12-o'clock crown pip */
+.sw-dial::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--race-red);
+  box-shadow: 0 0 6px var(--race-red);
+}
+
+/* Large tabular digit display */
+.sw-digits {
+  position: relative;         /* above ::before layer */
+  z-index: 1;
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--sw-digit-color);
+  line-height: 1;
+  text-align: center;
+  letter-spacing: -0.02em;
+}
+
+/* Chunky physical pushers */
+.sw-pusher {
+  width:  var(--sw-pusher-size);
+  height: var(--sw-pusher-size);
+  border-radius: 50%;
+  border: 4px solid var(--race-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 80ms ease, box-shadow 80ms ease, filter 80ms ease;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.25);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sw-pusher:active,
+.sw-pusher--pressed {
+  transform: translateY(3px) scale(0.96);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.25);
+  filter: brightness(0.88);
+}
+
+.sw-pusher--primary {
+  background: var(--race-red);
+  color: #fff;
+}
+
+.sw-pusher--secondary {
+  background: var(--race-ink);
+  color: #fff;
+}
+
+.sw-pusher--secondary-idle {
+  background: var(--race-panel-alt);
+  color: var(--race-ink);
+}
+
+/* Lap table */
+.sw-lap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.sw-lap-table th {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--race-muted);
+  border-bottom: 2px solid var(--race-ink);
+  padding: 6px 8px;
+  text-align: right;
+}
+
+.sw-lap-table th:first-child { text-align: left; }
+
+.sw-lap-table td {
+  padding: 6px 8px;
+  font-size: 14px;
+  font-weight: 700;
+  border-bottom: 1px solid var(--sw-lap-row-border);
+  text-align: right;
+  color: var(--race-ink);
+}
+
+.sw-lap-table td:first-child { text-align: left; }
+
+.sw-lap-row--best td {
+  background: var(--sw-lap-best-bg);
+  color: var(--sw-lap-best-color);
+}
+
+/* "Time together" stub link */
+.sw-together-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--race-muted);
+  border: 2px solid var(--race-line);
+  padding: 8px 14px;
+  border-radius: 2px;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+/* Keyboard shortcut badge */
+.sw-kbd {
+  display: inline-block;
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border: 1px solid var(--race-line);
+  border-radius: 3px;
+  color: var(--race-muted);
+  background: var(--race-panel);
+}
