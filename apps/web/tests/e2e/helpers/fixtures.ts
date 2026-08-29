@@ -17,8 +17,11 @@ const db = () => createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
  * The token must come from `signInProgrammatically().session.access_token`.
  * RLS policies that check `auth.jwt()->>'sub'` (e.g. events write, races) are
  * satisfied only by an authenticated client — the anon client has no `sub`.
+ *
+ * Exported so specs can perform direct RLS assertions without duplicating the
+ * client-construction logic inline.
  */
-const authedDb = (accessToken: string) =>
+export const authedDb = (accessToken: string) =>
   createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
   });

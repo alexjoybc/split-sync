@@ -27,7 +27,7 @@ import {
   createTestOrganizer,
   signInProgrammatically,
 } from '../helpers/supabase';
-import { buildEvent } from '../helpers/fixtures';
+import { authedDb, buildEvent } from '../helpers/fixtures';
 
 // ---------------------------------------------------------------------------
 // Local helpers
@@ -39,12 +39,8 @@ const SUPABASE_ANON_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7b6b7xNHPnjyxvFnDpvnuN51o4MXVToypGc';
 
-/** Supabase client authenticated as a given user (for RLS-protected writes). */
-function makeAuthedClient(accessToken: string) {
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    global: { headers: { Authorization: `Bearer ${accessToken}` } },
-  });
-}
+// `authedDb` is imported from helpers/fixtures — no need to duplicate the
+// client-construction logic here.
 
 /** Anon client for reads that don't require authentication. */
 const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -315,10 +311,25 @@ test.describe('Crossing idempotency', () => {
   }) => {
     // Authenticated client — crossings write RLS checks event ownership via
     // auth.jwt()->>'sub', so inserts must carry the organizer's access token.
-    const authedDb = makeAuthedClient(accessToken);
+    // Imported from helpers/fixtures (not duplicated inline).
+    const db = authedDb(accessToken);
 
     // Activate the race so the crossing insert policy is satisfied.
-    await authedDb.from('races').update({ status: 'active' }).eq('id', raceId);
+    await db.from('races').update({ status: 'active' }).eq('id', raceId);
+
+    // ── Race-lock invariant (DB layer) ──────────────────────────────────────
+    // Migration 20260825000005_lock_race_roster.sql replaces the broad
+    // "organizer manage entries" policy with one that gates on
+    // races.status = 'upcoming'. Once a race is active the RLS policy's
+    // WITH CHECK expression evaluates to false, so any INSERT into entries
+    // for that race must be rejected — regardless of what the UI does.
+    const { error: lockError } = await db.from('entries').insert({
+      race_id: raceId,
+      bib: '99',
+      name: 'Late Entrant',
+    });
+    // RLS must reject the insert; a null error here would mean the lock is broken.
+    expect(lockError).not.toBeNull();
 
     const clientId = crypto.randomUUID();
     const crossingPayload = {
@@ -329,14 +340,14 @@ test.describe('Crossing idempotency', () => {
     };
 
     // First insert — must succeed.
-    const { error: firstError } = await authedDb
+    const { error: firstError } = await db
       .from('crossings')
       .insert(crossingPayload);
     expect(firstError).toBeNull();
 
     // Second insert with identical client_id — must be rejected by the unique
     // constraint on (client_id) declared in the crossings table.
-    const { error: dupeError } = await authedDb
+    const { error: dupeError } = await db
       .from('crossings')
       .insert(crossingPayload);
     expect(dupeError).not.toBeNull();
