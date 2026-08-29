@@ -6,7 +6,7 @@
 | --- | --- |
 | `events` | Event metadata, publication status, provider-neutral organizer `owner_id` |
 | `participants` | Event-level racer roster: bib, first/last name, team, category, sex, check-in timestamp |
-| `races` | A race/category within an event, planned laps, lifecycle state, and optional velodrome points race scoring config |
+| `races` | A race/category within an event, planned laps, lifecycle state, and optional velodrome points race scoring config or time trial config |
 | `entries` | Roster participants assigned to a specific race; roster identity frozen on start, status settable throughout |
 | `crossings` | A recorded line crossing: race, bib, client UUID, client/server timestamps, source |
 | `race_status_changes` | Append-only audit log of every race status transition, written by a trigger |
@@ -119,9 +119,44 @@ The live board and announcer view render a sprint-lap banner, that sprint's own 
 
 `race_entry_penalties` (`time_penalty` | `lap_penalty` | `relegation` | `note`) is an organizer/official-asserted fact, same category as rider status, applied as the final step in `computeStandings` after the raw per-lap/gap computation: a time penalty shifts an entry's effective ranking time, a lap penalty reduces its effective lap count, and a relegation sorts it to the back of its same-effective-lap tier. `StandingRow`'s raw fields (`laps`, `lastCrossingAt`, `lastLapMs`) are never altered by a penalty — only the derived `position`/`gapText` and the row's `timePenaltySeconds`/`lapPenalty`/`relegated`/`penalties` fields reflect it, preserving the "raw vs. adjusted" split even though only the adjusted view is shown by default. Every penalty requires a reason and is attributed (`set_by`/`set_at`, set by a trigger, not the client). Unlike rider status, penalties are cumulative (a table of penalty rows, not a column), and rows are only ever inserted or deleted, not updated. See ADR 0012.
 
-## Time Trial (Planned)
+## Time Trial
 
-A time-trial race type (solo start/finish timing for downhill MTB/ski-style events) is designed in ADR 0014 and being implemented across web and mobile under the "Time Trial Events" GitHub milestone. This section will be filled in with the shipped schema/scoring/UI details once implementation lands; see the ADR for the full design in the meantime.
+A time trial is a race format where riders start and finish solo, one at a time, in bib start order, and are ranked by their individual elapsed time between start and finish (downhill MTB, ski racing, and similar disciplines).
+
+### Data model
+
+`races` carries two new columns added in migration `20260828000002_time_trial_race_type.sql`:
+- `is_time_trial boolean not null default false` — enables the format.
+- `time_trial_countdown_seconds int not null default 5` — length of the optional start countdown; 0 disables it (immediate start only).
+
+A check constraint (`races_points_or_time_trial_check`) prevents a race from being both `is_points_race` and `is_time_trial` simultaneously — the two formats are mutually exclusive. `laps_planned` is always `null` for time-trial races (same convention as open-ended timed mass-start races).
+
+No changes were made to `crossings` or `entries`. Start and finish are ordinary crossings: a rider's 1st non-deleted crossing (by `client_recorded_at`) is their start; their 2nd is their finish. A 3rd+ crossing is treated as a data-entry error requiring organizer correction rather than a new lap.
+
+`clone_event()` is updated (migration `20260828000003_clone_event_time_trial.sql`) to copy both new columns, and also fixes a previously-missing copy of the points-race config columns (`is_points_race`, `sprint_interval_laps`, `sprint_points`, `final_sprint_multiplier`, `lap_gain_bonus`, `lap_loss_penalty`).
+
+### Scoring semantics
+
+`apps/web/src/lib/timeTrial.ts` derives, purely from `Crossing[]` + `Entry[]`:
+
+- **`queued`** — 0 non-deleted crossings, `status === 'ok'`.
+- **`running`** — exactly 1 non-deleted crossing.
+- **`finished`** — exactly 2 non-deleted crossings; `elapsedMs = finishedAt - startedAt`.
+- **`needs-review`** — 3+ crossings; best-effort elapsed from 1st+2nd; flagged for organizer correction.
+- DNS/DNF/DSQ entries excluded from ranking, returned separately (same convention as `standings.ts`).
+
+Ranking is ascending `elapsedMs` among `finished` entries — the opposite of mass-start (which ranks by most laps then earliest time). The live board renders a **different component entirely** (`TimeTrialBoard`) rather than an overlay, since elapsed-time ranking and lap-count ranking are mutually exclusive views.
+
+`computeTimeTrialQueue()` returns `queued` entries in natural/numeric bib order ("9" before "10"). `computeTimeTrialResults()` returns `finished`/`needs-review` entries ranked by `elapsedMs` ascending with `position` and `gapText`. `getProgress()` derives progress-bar state: indeterminate before any rider finishes, proportional against the fastest elapsed time otherwise, overtime indicator when exceeded.
+
+### UI shape
+
+- **Organizer scorer** (`/score/[raceId]`, muted styling): Up Next / On Course / Finished sections. Start controls offer immediate tap or a countdown (length from `time_trial_countdown_seconds`, audible via Web Audio API, cancelable). Start hidden while any rider is on course (solo-only enforcement). Crossing correction/undo via the existing recent-crossings list (unchanged).
+- **Spectator live board** (`/live/[raceId]`, full red/yellow styling): Now Running hero with live timer + progress bar; Up Next row list; elapsed-time ranked results table with DNS/DNF/DSQ appended. Announcer view (`/announce/[raceId]`) replaced with elapsed-time results and on-course rider (lap-based standings not shown for TT races).
+- **Mobile tracker** (`apps/mobile`): Up Next / On Course / Finished flow; start uses haptic countdown (expo-haptics). Both start and finish call `recordCrossing()` unchanged — a start and a finish are two ordinary crossings.
+- **Results page** (`/results/[eventId]`): labels time-trial races as "Time trial" instead of "N laps" / "Timed race".
+
+See ADR 0014 for full rationale.
 
 ## Realtime
 
@@ -147,7 +182,7 @@ Supabase RLS enforces the application boundary:
 - Invite links (`event_invites`) are single-use and expire after 14 days. Looking up or accepting one goes through the `preview_event_invite` / `accept_event_invite` security-definer functions rather than a direct SELECT policy, so tokens are never listable.
 - Check-in: `participants.checked_in_at` is writable, at any race status, only through the `set_participant_checked_in(participant_id, checked_in)` security-definer function, which checks event ownership or an `organizer`/`checkin` `event_members` role. This is the same pattern as `reopen_race` — a `checkin` volunteer is not granted a blanket `UPDATE` on `participants`, so they cannot edit bib/name/team/category, only the check-in flag. See ADR 0008.
 
-Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_volunteer_roles` adds volunteer roles and invite links. Migration `20260827000006_race_entry_statuses` adds rider status, its audit log, and splits the entries write policy into insert/delete (upcoming-only) and update (owner/organizer-member, field-level lock via trigger). Migration `20260827000007_participant_checkin` adds `checked_in_at` and the `set_participant_checked_in` function. Migration `20260827000008_clone_event` adds the `clone_event` function. Migration `20260827000009_crossing_corrections` adds the `crossing_corrections` audit table, the correction guard/audit triggers, and the `correct_crossing`/`restore_crossing` functions. Migration `20260827000010_velodrome_points_race` adds the points-race scoring config columns on `races`; no RLS changes were needed since they're covered by the existing races policies. Migration `20260827000011_race_entry_penalties` adds `race_entry_penalties`, its insert guard/attribution trigger, and the owner/organizer/official manage policies plus the published-event public read policy. Migration `20260828000001_organizer_read_entries` adds the missing owner-scoped SELECT policy on `entries` that `20260827000006` had dropped without a replacement, fixing a 403 on any entries write path (e.g. `upsert()`) that triggers PostgREST's internal `RETURNING`.
+Migration 00004 introduces the ownership policies. Migration 00005 enforces the start-time roster lock. Migration `20260827000004_race_lifecycle` adds `finished_at`, the lifecycle trigger/audit log, the `reopen_race` function, and the active-only crossing insert policy. Migration `20260827000005_volunteer_roles` adds volunteer roles and invite links. Migration `20260827000006_race_entry_statuses` adds rider status, its audit log, and splits the entries write policy into insert/delete (upcoming-only) and update (owner/organizer-member, field-level lock via trigger). Migration `20260827000007_participant_checkin` adds `checked_in_at` and the `set_participant_checked_in` function. Migration `20260827000008_clone_event` adds the `clone_event` function. Migration `20260827000009_crossing_corrections` adds the `crossing_corrections` audit table, the correction guard/audit triggers, and the `correct_crossing`/`restore_crossing` functions. Migration `20260827000010_velodrome_points_race` adds the points-race scoring config columns on `races`; no RLS changes were needed since they're covered by the existing races policies. Migration `20260827000011_race_entry_penalties` adds `race_entry_penalties`, its insert guard/attribution trigger, and the owner/organizer/official manage policies plus the published-event public read policy. Migration `20260828000001_organizer_read_entries` adds the missing owner-scoped SELECT policy on `entries` that `20260827000006` had dropped without a replacement, fixing a 403 on any entries write path (e.g. `upsert()`) that triggers PostgREST's internal `RETURNING`. Migration `20260828000002_time_trial_race_type` adds `is_time_trial` and `time_trial_countdown_seconds` to `races` plus the mutual-exclusion constraint. Migration `20260828000003_clone_event_time_trial` replaces `clone_event()` to copy all race config columns (points-race columns were previously missing).
 
 ### Resolving a user's access to an event
 
