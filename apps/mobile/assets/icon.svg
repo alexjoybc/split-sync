@@ -1,0 +1,9 @@
+<svg width="1024" height="1024" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- SplitSync icon mark: two diagonal bars in ink and yellow -->
+  <!-- Black left panel -->
+  <polygon points="0,0 12,0 8,20 0,20" fill="#18181b"/>
+  <!-- Yellow right panel -->
+  <polygon points="12,0 20,0 20,20 8,20" fill="#f6d428"/>
+  <!-- Paper-coloured diagonal cut -->
+  <polygon points="10,0 12,0 8,20 6,20" fill="#f4f1ea"/>
+</svg>

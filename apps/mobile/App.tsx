@@ -64,8 +64,38 @@ function Button({ title, onPress, variant = "dark", disabled = false }: { title:
   return <Pressable onPress={onPress} disabled={disabled} style={[styles.button, styles[`button_${variant}`], disabled && styles.disabled]}><Text style={[styles.buttonText, variant === "yellow" || variant === "outline" ? styles.buttonTextDark : undefined]}>{title}</Text></Pressable>;
 }
 
+/** Tiny icon mark: two angled bars (ink + yellow) simulated with skewX. */
+function Mark({ size = 14 }: { size?: number }) {
+  return (
+    <View style={{ width: size, height: size, overflow: "hidden" }}>
+      {/* Yellow right panel (full background) */}
+      <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.yellow }} />
+      {/* Ink left panel angled via skewX over the yellow base */}
+      <View
+        style={{
+          position: "absolute",
+          left: -(size * 0.4),
+          top: 0,
+          bottom: 0,
+          width: size * 1.05,
+          backgroundColor: colors.ink,
+          transform: [{ skewX: "-18deg" }],
+        }}
+      />
+    </View>
+  );
+}
+
 function Logo() {
-  return <View style={styles.logo}><View style={styles.logoSplit}><Text style={styles.logoText}>SPLIT</Text></View><View style={styles.logoSync}><Text style={styles.logoTextDark}>SYNC</Text></View></View>;
+  return (
+    <View style={styles.logo}>
+      <View style={[styles.logoSplit, { flexDirection: "row", alignItems: "center", gap: 4 }]}>
+        <Mark size={12} />
+        <Text style={styles.logoText}>SPLIT</Text>
+      </View>
+      <View style={styles.logoSync}><Text style={styles.logoTextDark}>SYNC</Text></View>
+    </View>
+  );
 }
 
 function Header({ title, onBack, onSignOut, signedInAs }: { title: string; onBack?: () => void; onSignOut?: () => void; signedInAs?: string | null }) {
