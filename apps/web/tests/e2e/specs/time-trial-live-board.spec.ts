@@ -4,14 +4,12 @@ import { seedTimeTrialRace, insertCrossing } from '../helpers/time-trial';
 
 /**
  * Wait for the TT live board to finish its initial data load.
- * The board shows "Loading classification" while fetching, then transitions
- * to the board content. We wait for something that is ALWAYS present once
- * loaded: the race name in the header OR the live-board container.
+ * Do NOT use waitForLoadState('networkidle') — the polling interval (every 4 s)
+ * and the Supabase Realtime WebSocket keep the network permanently active, so
+ * 'networkidle' never fires. Instead wait directly for an element that only
+ * appears once the data fetch succeeds: the race name in the page header.
  */
 async function waitForBoardLoad(page: Parameters<Parameters<typeof test>[1]>[0], raceName = 'Time Trial') {
-  // Wait for network requests to settle first
-  await page.waitForLoadState('networkidle', { timeout: 15_000 });
-  // Then confirm the board rendered (race name in header is always shown once loaded)
   await expect(page.getByText(raceName, { exact: false })).toBeVisible({ timeout: 15_000 });
 }
 
