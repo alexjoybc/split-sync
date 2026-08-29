@@ -84,13 +84,16 @@ function fmtElapsedMs(ms: number): string {
 }
 
 /** Play a short beep via Web Audio API. freq: Hz, dur: ms */
-function beep(audioCtx: AudioContext, freq: number, dur: number) {
+function beep(audioCtx: AudioContext, freq: number, dur: number, gainPeak = 0.2) {
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
+  osc.type = "square";
   osc.connect(gain);
   gain.connect(audioCtx.destination);
   osc.frequency.value = freq;
-  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  // 2ms linear attack to avoid the click/pop of square wave at full amplitude
+  gain.gain.setValueAtTime(0, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(gainPeak, audioCtx.currentTime + 0.002);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur / 1000);
   osc.start(audioCtx.currentTime);
   osc.stop(audioCtx.currentTime + dur / 1000);
@@ -174,10 +177,10 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
       remaining -= 1;
       setCountdown(remaining);
       if (remaining > 0) {
-        beep(ctx, 880, 100);
+        beep(ctx, 660, 80, 0.18);
       } else {
         // Final beep + fire start
-        beep(ctx, 1200, 200);
+        beep(ctx, 880, 200, 0.25);
         clearInterval(countdownRef.current!);
         countdownRef.current = null;
         setCountdown(null);
