@@ -543,42 +543,100 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
 
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
   const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
+  // Tracks the previous numerical rank (position) of each bib so we can
+  // detect whether a row moved up or down between standings updates.
+  const prevRanksRef = useRef<Map<string, number>>(new Map());
+  // Tracks which bib held P1 on the previous render; null on first render
+  // so we never fire a spurious leader-change transition on load.
+  const prevLeaderBibRef = useRef<string | null>(null);
 
   // FLIP animation: whenever the standings order changes, smoothly slide each
   // row from its previous position to its new position instead of snapping.
+  // Also applies rank-change flash (up = improved, down = dropped) and a
+  // distinct leader-change transition when P1 passes to a different rider.
   useLayoutEffect(() => {
     const nextRects = new Map<string, DOMRect>();
     rowRefs.current.forEach((el, bib) => {
       nextRects.set(bib, el.getBoundingClientRect());
     });
 
+    // Build the current rank map from standings (only ranked, on-lap rows).
+    const nextRanks = new Map<string, number>();
+    standings.forEach((row) => {
+      if (row.position != null && row.laps > 0) nextRanks.set(row.bib, row.position);
+    });
+
+    // Identify current leader bib.
+    const nextLeaderBib = standings.find((row) => row.position === 1 && row.laps > 0)?.bib ?? null;
+
     rowRefs.current.forEach((el, bib) => {
       const prevRect = prevRectsRef.current.get(bib);
       const nextRect = nextRects.get(bib);
-      if (!prevRect || !nextRect) return;
-      const deltaY = prevRect.top - nextRect.top;
-      if (Math.abs(deltaY) < 1) return;
 
-      el.style.transition = "none";
-      el.style.transform = `translateY(${deltaY}px)`;
-      el.style.zIndex = "1";
-      // Force a reflow so the browser registers the starting position
-      // before we transition back to the resting position.
-      el.getBoundingClientRect();
+      // ── FLIP slide ──────────────────────────────────────────────────────
+      if (prevRect && nextRect) {
+        const deltaY = prevRect.top - nextRect.top;
+        if (Math.abs(deltaY) >= 1) {
+          el.style.transition = "none";
+          el.style.transform = `translateY(${deltaY}px)`;
+          el.style.zIndex = "1";
+          // Force a reflow so the browser registers the starting position
+          // before we transition back to the resting position.
+          el.getBoundingClientRect();
 
-      requestAnimationFrame(() => {
-        el.style.transition = "transform 500ms cubic-bezier(0.22, 1, 0.36, 1)";
-        el.style.transform = "";
-      });
+          requestAnimationFrame(() => {
+            el.style.transition = "transform 500ms cubic-bezier(0.22, 1, 0.36, 1)";
+            el.style.transform = "";
+          });
 
-      const clearZIndex = () => {
-        el.style.zIndex = "";
-        el.removeEventListener("transitionend", clearZIndex);
-      };
-      el.addEventListener("transitionend", clearZIndex);
+          const clearZIndex = () => {
+            el.style.zIndex = "";
+            el.removeEventListener("transitionend", clearZIndex);
+          };
+          el.addEventListener("transitionend", clearZIndex);
+        }
+      }
+
+      // ── Rank-change flash ────────────────────────────────────────────────
+      const oldRank = prevRanksRef.current.get(bib);
+      const newRank = nextRanks.get(bib);
+      if (oldRank != null && newRank != null && oldRank !== newRank) {
+        requestAnimationFrame(() => {
+          // Remove any in-flight flash first, then force reflow to restart.
+          el.classList.remove("race-rank-flash-up", "race-rank-flash-down");
+          void el.offsetWidth;
+          el.classList.add(newRank < oldRank ? "race-rank-flash-up" : "race-rank-flash-down");
+          setTimeout(() => {
+            el.classList.remove("race-rank-flash-up", "race-rank-flash-down");
+          }, 300); // 280 ms duration + small buffer
+        });
+      }
     });
 
+    // ── Leader-change transition ─────────────────────────────────────────
+    // Only fire when a genuine rider-to-rider change occurs (not on first
+    // render where prevLeaderBibRef is still null).
+    if (
+      nextLeaderBib != null &&
+      prevLeaderBibRef.current != null &&
+      nextLeaderBib !== prevLeaderBibRef.current
+    ) {
+      const leaderEl = rowRefs.current.get(nextLeaderBib);
+      if (leaderEl) {
+        requestAnimationFrame(() => {
+          leaderEl.classList.remove("race-leader-change");
+          void leaderEl.offsetWidth;
+          leaderEl.classList.add("race-leader-change");
+          setTimeout(() => {
+            leaderEl.classList.remove("race-leader-change");
+          }, 400); // 380 ms duration + small buffer
+        });
+      }
+    }
+
     prevRectsRef.current = nextRects;
+    prevRanksRef.current = nextRanks;
+    prevLeaderBibRef.current = nextLeaderBib;
   }, [standings]);
 
   if (loading || !race) {
@@ -609,6 +667,9 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
           <div className="pr-3 sm:pr-5">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Race status</p>
             <p className={classNames("mt-1 text-base font-black uppercase", race.status === "active" ? "text-race-red" : "text-race-ink")}>
+              {race.status === "active" && (
+                <span className="race-live-pulse mr-1.5 align-middle" aria-hidden="true" />
+              )}
               {race.status === "active" ? "Live now" : race.status}
             </p>
           </div>
