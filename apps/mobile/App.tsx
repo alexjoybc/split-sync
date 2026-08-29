@@ -29,6 +29,37 @@ function formatElapsed(ms: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
+/** Per-runner card with its own independent elapsed timer (React Native). */
+function RunnerTimer({ runner, onFinish }: { runner: Entry; onFinish: (bib: string) => void }) {
+  const startedAtRef = useRef<number | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  useEffect(() => {
+    const t0 = Date.now();
+    startedAtRef.current = t0;
+    const interval = setInterval(() => {
+      const ref = startedAtRef.current;
+      if (ref !== null) setElapsedMs(Date.now() - ref);
+    }, 1000);
+    return () => {
+      clearInterval(interval);
+      startedAtRef.current = null;
+    };
+  }, [runner.id]);
+
+  return (
+    <View style={styles.ttRunnerCard}>
+      <View style={styles.ttRunnerCardInfo}>
+        <Text style={styles.ttRunnerBib}>#{runner.bib}</Text>
+        <Text style={styles.ttRunnerName}>{runner.name}</Text>
+        <Text style={styles.ttElapsed}>{formatElapsed(elapsedMs)}</Text>
+      </View>
+      <Pressable onPress={() => onFinish(runner.bib)} style={styles.ttFinishBtn}>
+        <Text style={styles.ttFinishBtnText}>FINISH</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function Button({ title, onPress, variant = "dark", disabled = false }: { title: string; onPress: () => void; variant?: "dark" | "red" | "yellow" | "outline"; disabled?: boolean }) {
   return <Pressable onPress={onPress} disabled={disabled} style={[styles.button, styles[`button_${variant}`], disabled && styles.disabled]}><Text style={[styles.buttonText, variant === "yellow" || variant === "outline" ? styles.buttonTextDark : undefined]}>{title}</Text></Pressable>;
 }
@@ -68,8 +99,6 @@ function Tracker() {
   const [search, setSearch] = useState("");
 
   // ── Time trial state ──────────────────────────────────────────────────────
-  const runnerStartedAtRef = useRef<number | null>(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
   const [ttCountdown, setTtCountdown] = useState<number | null>(null);
   const ttCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -89,28 +118,15 @@ function Tracker() {
       .sort((a, b) => sortBibNatural(a.bib, b.bib));
   }, [selectedRace, entries, lapCounts]);
 
-  const ttRunning = useMemo(() => {
-    if (!selectedRace?.is_time_trial) return null;
-    return entries.find(e => (lapCounts[e.bib] ?? 0) === 1) ?? null;
+  const ttRunningEntries = useMemo(() => {
+    if (!selectedRace?.is_time_trial) return [];
+    return entries.filter(e => (lapCounts[e.bib] ?? 0) === 1);
   }, [selectedRace, entries, lapCounts]);
 
   const ttFinished = useMemo(() => {
     if (!selectedRace?.is_time_trial) return [];
     return entries.filter(e => (lapCounts[e.bib] ?? 0) >= 2).sort((a, b) => sortBibNatural(a.bib, b.bib));
   }, [selectedRace, entries, lapCounts]);
-
-  // Elapsed timer — approximate (tracks from when the app detects the running rider)
-  useEffect(() => {
-    if (ttRunning) {
-      if (!runnerStartedAtRef.current) runnerStartedAtRef.current = Date.now();
-      const interval = setInterval(() => setElapsedMs(Date.now() - (runnerStartedAtRef.current ?? Date.now())), 1000);
-      return () => clearInterval(interval);
-    } else {
-      runnerStartedAtRef.current = null;
-      setElapsedMs(0);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ttRunning?.bib]);
 
   const consumeLink = useCallback(async (url: string) => {
     const isRecovery = url.includes("auth/reset-password");
@@ -338,7 +354,6 @@ function Tracker() {
   // Active race: time-trial view or mass-start bib grid
   if (selectedRace.status === "active" && selectedRace.is_time_trial) {
     const nextUp = ttQueue[0] ?? null;
-    const progressPct = selectedRace.laps_planned ? Math.min(1, elapsedMs / (selectedRace.laps_planned * 1000)) : 0;
     return (
       <SafeAreaView style={styles.screen}>
         <Header title={selectedRace.name} onBack={() => setSelectedRace(null)} />
@@ -356,35 +371,38 @@ function Tracker() {
           </View>
 
           {/* ON COURSE */}
-          <View style={[styles.ttSectionBox, { backgroundColor: ttRunning ? colors.ink : colors.ttSection }]}>
-            <Text style={[styles.ttSectionHeader, ttRunning && { color: colors.yellow }]}>ON COURSE</Text>
-            {ttRunning ? (
-              <>
-                <Text style={styles.ttRunnerBib}>#{ttRunning.bib}</Text>
-                <Text style={styles.ttRunnerName}>{ttRunning.name}</Text>
-                <Text style={styles.ttElapsed}>{formatElapsed(elapsedMs)}</Text>
-                <View style={styles.ttProgressBg}>
-                  <View style={[styles.ttProgressFill, { width: `${Math.round(progressPct * 100)}%` as unknown as number }]} />
-                </View>
-                <View style={styles.space} />
-                <Button title="FINISH" onPress={() => handleTTFinish(ttRunning.bib)} variant="red" />
-              </>
-            ) : nextUp ? (
-              <>
-                <Text style={styles.ttEmptyHint}>No rider on course.</Text>
-                <View style={styles.space} />
-                <Button title={`START NOW  ·  #${nextUp.bib} ${nextUp.name}`} onPress={() => handleTTStart(nextUp.bib)} variant="yellow" />
-                {(selectedRace.time_trial_countdown_seconds ?? 0) > 0 && (
-                  <>
-                    <View style={styles.space} />
-                    <Button title={`START COUNTDOWN (${selectedRace.time_trial_countdown_seconds}s)`} onPress={() => startCountdown(nextUp.bib)} variant="dark" />
-                  </>
-                )}
-              </>
-            ) : (
+          <View style={[styles.ttSectionBox, { backgroundColor: ttRunningEntries.length > 0 ? colors.ink : colors.ttSection }]}>
+            <Text style={[styles.ttSectionHeader, ttRunningEntries.length > 0 && { color: colors.yellow }]}>ON COURSE ({ttRunningEntries.length})</Text>
+            {ttRunningEntries.map(runner => (
+              <RunnerTimer key={runner.id} runner={runner} onFinish={handleTTFinish} />
+            ))}
+            {ttRunningEntries.length === 0 && !nextUp && (
               <Text style={styles.ttEmptyHint}>Queue empty — all riders accounted for.</Text>
             )}
+            {ttRunningEntries.length === 0 && nextUp && (
+              <Text style={styles.ttEmptyHint}>No rider on course.</Text>
+            )}
           </View>
+
+          {/* START CONTROLS — always shown when queue is non-empty */}
+          {nextUp && (
+            <View style={[styles.ttSectionBox, { backgroundColor: colors.ttSection }]}>
+              <Text style={styles.ttSectionHeader}>START NEXT RIDER</Text>
+              <View style={styles.ttQueueRow}>
+                <Text style={styles.ttQueueBib}>#{nextUp.bib}</Text>
+                <Text style={styles.ttQueueName}>{nextUp.name}</Text>
+                <Text style={styles.ttNextBadge}>NEXT</Text>
+              </View>
+              <View style={styles.space} />
+              <Button title={`START NOW`} onPress={() => handleTTStart(nextUp.bib)} variant="yellow" />
+              {(selectedRace.time_trial_countdown_seconds ?? 0) > 0 && (
+                <>
+                  <View style={styles.space} />
+                  <Button title={`START COUNTDOWN (${selectedRace.time_trial_countdown_seconds}s)`} onPress={() => startCountdown(nextUp.bib)} variant="dark" />
+                </>
+              )}
+            </View>
+          )}
 
           {/* UP NEXT */}
           <View style={[styles.ttSectionBox, { backgroundColor: colors.ttSection }]}>
@@ -474,4 +492,8 @@ const styles = StyleSheet.create({
   ttNextBadge: { color: colors.red, fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   ttPosition: { color: colors.muted, fontSize: 15, fontWeight: "900", minWidth: 28 },
   ttEmptyHint: { color: colors.muted, fontSize: 13, fontWeight: "700" },
+  ttRunnerCard: { flexDirection: "row", alignItems: "center", borderTopWidth: 1, borderColor: "rgba(255,255,255,0.2)", paddingTop: 12, marginTop: 8 },
+  ttRunnerCardInfo: { flex: 1 },
+  ttFinishBtn: { borderWidth: 2, borderColor: colors.yellow, paddingHorizontal: 18, paddingVertical: 10, alignItems: "center", justifyContent: "center" },
+  ttFinishBtnText: { color: colors.yellow, fontSize: 13, fontWeight: "900", letterSpacing: 1 },
 });
