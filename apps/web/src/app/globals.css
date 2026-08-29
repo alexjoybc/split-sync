@@ -8,6 +8,33 @@
   --race-muted: #71717a;
   --race-red: #ec1c24;
   --race-yellow: #f6d428;
+
+  /* ── Broadcast depth tokens ─────────────────────────────────────────── */
+  --race-accent-glow:   rgba(220, 38, 38, 0.14);
+  --race-leader-glow:   rgba(246, 212, 40, 0.22);
+  --race-live-shadow:   0 2px 12px rgba(220, 38, 38, 0.20);
+  --race-leader-shadow: 0 2px 12px rgba(246, 212, 40, 0.28);
+
+  /* ── Section line ────────────────────────────────────────────────────── */
+  --race-line: #d4d1ca;
+
+  /* ── Angled accent geometry ──────────────────────────────────────────── */
+  --race-angle-offset: 14px;
+
+  /* ── Live-pulse color ────────────────────────────────────────────────── */
+  --race-pulse-color: var(--race-red);
+
+  /* ── Motion tokens ───────────────────────────────────────────────────── */
+  --motion-live-pulse-duration:    1.4s;
+  --motion-live-pulse-easing:      ease-in-out;
+  --motion-rank-flash-duration:    280ms;
+  --motion-rank-flash-easing:      ease-out;
+  --motion-leader-change-duration: 380ms;
+  --motion-leader-change-easing:   cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ── Display font (Barlow Condensed, wired by #163) ─────────────────── */
+  --font-display: var(--font-barlow-condensed);
+
   --background: var(--race-paper);
   --foreground: var(--race-ink);
 }
@@ -24,6 +51,9 @@
   --color-race-muted: var(--race-muted);
   --color-race-red: var(--race-red);
   --color-race-yellow: var(--race-yellow);
+  --color-race-line:         var(--race-line);
+  --color-race-accent-glow:  var(--race-accent-glow);
+  --color-race-leader-glow:  var(--race-leader-glow);
 }
 
 body {
@@ -118,6 +148,26 @@ body {
    Used for Undo / Edit / Restore / Cancel links in the scorer lists. */
 .race-inline-action {
   @apply inline-flex min-h-[44px] items-center px-3 font-black uppercase text-sm text-race-ink underline decoration-2 underline-offset-4 hover:no-underline active:opacity-70;
+}
+
+/* Angled trailing-edge cut for hero panels only.
+   DO NOT apply to table rows, admin panels, or static content. */
+.race-angle-cut {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--race-angle-offset)) 0,
+    100% var(--race-angle-offset),
+    100% 100%,
+    0 100%
+  );
+}
+
+/* Tabular condensed numerals — rank, lap count, gap, elapsed-time cells. */
+.race-numeral {
+  font-family: var(--font-display, var(--font-geist-mono));
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* Printable pages (e.g. the per-race start list) hide chrome that only
