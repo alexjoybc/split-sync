@@ -83,8 +83,14 @@ export function useRaceData(raceId: string) {
       .on("postgres_changes", { event: "*", schema: "public", table: "race_entry_penalties" }, () => refetch())
       .subscribe();
 
+    // Polling fallback: refetch every 4 s so the board stays current even if
+    // a Realtime postgres_changes event is dropped (e.g. anon-key publication
+    // filter miss or transient WebSocket gap).
+    const poll = setInterval(() => refetch(), 4000);
+
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(poll);
     };
   }, [raceId, refetch]);
 

@@ -282,81 +282,35 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
 
   return (
     <div className="mt-6 space-y-6">
-      {/* ── Section: Up Next ── */}
-      <section>
-        <p className="race-kicker--muted mb-2">Up next</p>
-        {queue.length === 0 ? (
-          <p className="text-xs font-bold text-race-muted">Queue empty — all riders started.</p>
-        ) : (
-          <ul className="divide-y divide-zinc-300 border-2 border-race-ink">
-            {queue.map((row, idx) => (
-              <li
-                key={row.bib}
-                className="flex items-center gap-3 px-3 py-2 text-sm font-bold text-race-muted"
-              >
-                {idx === 0 && (
-                  <span className="shrink-0 bg-race-ink px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
-                    NEXT
-                  </span>
-                )}
-                <span className="tabular-nums">
-                  #{row.bib} {row.name}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ── Section: On Course ── */}
-      <section>
-        <p className="race-kicker--muted mb-2">On course</p>
-
-        {/* Countdown overlay */}
-        {countdown !== null && (
-          <div className="mb-4 flex flex-col items-center gap-3 border-2 border-race-ink bg-race-panel p-6">
+      {/* ── Section: Countdown / Next up (always at the top) ── */}
+      {countdown !== null ? (
+        <section>
+          <p className="race-kicker--muted mb-2">Starting…</p>
+          <div className="flex flex-col items-center gap-3 border-2 border-race-ink bg-race-panel p-8">
             <p className="text-xs font-black uppercase tracking-wide text-race-muted">
-              Countdown — #{nextInQueue?.bib} {nextInQueue?.name}
+              #{nextInQueue?.bib} {nextInQueue?.name}
             </p>
             <p className="text-7xl font-black tabular-nums text-race-ink">{countdown}</p>
             <button
               type="button"
               onClick={cancelCountdown}
-              className="race-action--muted"
+              className="race-inline-action"
             >
               Cancel
             </button>
           </div>
-        )}
-
-        {/* All on-course runners */}
-        {runningEntries.length > 0 && (
-          <div className="space-y-3 mb-3">
-            {runningEntries.map((runner) => (
-              <RunnerCard
-                key={runner.bib}
-                runner={runner}
-                fastestMs={bestMs}
-                results={results}
-                onFinish={onFinish}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Start controls — always shown when queue is non-empty */}
-        {nextInQueue && countdown === null && (
-          <div className="border-2 border-race-ink bg-race-panel p-4 space-y-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-wide text-race-muted mb-1">
-                Ready to start
-              </p>
-              <p className="text-2xl font-black tabular-nums text-race-ink">
-                #{nextInQueue.bib}
-              </p>
-              <p className="text-sm font-black uppercase text-race-ink">{nextInQueue.name}</p>
-            </div>
-            <div className="flex gap-3 flex-wrap">
+        </section>
+      ) : nextInQueue ? (
+        <section>
+          <p className="race-kicker--muted mb-2">Next up</p>
+          <div className="border-2 border-race-ink bg-race-panel p-4">
+            <p className="text-xl font-black tabular-nums">
+              #{nextInQueue.bib} {nextInQueue.name}
+            </p>
+            {nextInQueue.team && (
+              <p className="text-xs font-bold text-race-muted uppercase">{nextInQueue.team}</p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => onStart(nextInQueue.bib)}
@@ -370,17 +324,52 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
                   onClick={() => startCountdown(nextInQueue.bib, race.time_trial_countdown_seconds)}
                   className="race-action--muted min-h-[44px]"
                 >
-                  Start countdown ({race.time_trial_countdown_seconds}s)
+                  Countdown {race.time_trial_countdown_seconds}s
                 </button>
               )}
             </div>
           </div>
-        )}
+        </section>
+      ) : null}
 
-        {runningEntries.length === 0 && !nextInQueue && (
-          <p className="text-xs font-bold text-race-muted">All riders have finished.</p>
-        )}
-      </section>
+      {/* ── Section: Queue (riders 2 onwards) ── */}
+      {queue.length > 1 && (
+        <section>
+          <p className="race-kicker--muted mb-2">Queue</p>
+          <ul className="divide-y divide-zinc-300 border-2 border-race-ink">
+            {queue.slice(1).map((row) => (
+              <li
+                key={row.bib}
+                className="flex items-center gap-3 px-3 py-2 text-sm font-bold"
+              >
+                #{row.bib} {row.name}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* ── Section: On Course ── */}
+      {(runningEntries.length > 0 || (!nextInQueue && runningEntries.length === 0)) && (
+        <section>
+          <p className="race-kicker--muted mb-2">On course</p>
+          {runningEntries.length > 0 ? (
+            <div className="space-y-3">
+              {runningEntries.map((runner) => (
+                <RunnerCard
+                  key={runner.bib}
+                  runner={runner}
+                  fastestMs={bestMs}
+                  results={results}
+                  onFinish={onFinish}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs font-bold text-race-muted">All riders have finished.</p>
+          )}
+        </section>
+      )}
 
       {/* ── Section: Finished ── */}
       {finished.length > 0 && (
