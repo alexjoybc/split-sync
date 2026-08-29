@@ -356,8 +356,10 @@ test.describe('Crossing idempotency', () => {
     expect(dupeError?.code).toBe('23505');
 
     // Confirm only one crossing exists for this client_id.
-    // The anon client can read crossings for active races (public read policy).
-    const { data: rows } = await anonClient
+    // Use the authenticated client — the public read policy for crossings was
+    // removed in migration 20260825000004_organizer_auth.sql, so the anon
+    // client receives an RLS block (data: null) instead of an empty array.
+    const { data: rows } = await db
       .from('crossings')
       .select('id')
       .eq('race_id', raceId)
