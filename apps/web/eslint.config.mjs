@@ -3,7 +3,10 @@ import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 const eslintConfig = [
   ...nextCoreWebVitals,
   {
-    ignores: [".next/**", "node_modules/**"],
+    // Exclude generated Next.js output, dependencies, and Playwright test
+    // files. Test fixtures use Playwright's `use()` (not React's), which
+    // would otherwise trigger react-hooks/rules-of-hooks false positives.
+    ignores: [".next/**", "node_modules/**", "tests/**"],
   },
   {
     rules: {
