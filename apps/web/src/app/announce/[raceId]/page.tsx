@@ -503,9 +503,11 @@ function computeAnnouncerRunningEntries(crossings: Crossing[], entries: Entry[])
 }
 
 function TimeTrialAnnouncer({
+  race,
   entries,
   crossings,
 }: {
+  race: Race;
   entries: Entry[];
   crossings: Crossing[];
 }) {
@@ -542,61 +544,63 @@ function TimeTrialAnnouncer({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
-      {/* Now Running section */}
-      <section className="mb-8 border-4 border-race-yellow bg-black/40 p-6">
-        <p className="text-xs font-black uppercase tracking-[0.24em] text-race-yellow">
-          Now on course{runningEntries.length > 1 ? ` (${runningEntries.length})` : ""}
-        </p>
-        {runningEntries.length === 0 ? (
-          <p className="mt-3 text-2xl font-black uppercase text-white/50">
-            Waiting for next rider
+      {/* Now Running section — hidden once the race is finished */}
+      {race.status !== "finished" && (
+        <section className="mb-8 border-4 border-race-yellow bg-black/40 p-6">
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-race-yellow">
+            Now on course{runningEntries.length > 1 ? ` (${runningEntries.length})` : ""}
           </p>
-        ) : runningEntries.length === 1 && singleRunner ? (
-          /* Hero layout for single runner */
-          <div className="mt-3">
-            <div className="flex items-baseline gap-4">
-              <span className="inline-flex min-w-16 justify-center bg-race-yellow px-3 py-1.5 text-3xl font-black tabular-nums text-race-ink sm:text-4xl">
-                {singleRunner.bib}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-3xl font-black uppercase text-white sm:text-5xl">
-                  {singleRunner.name}
-                </p>
-                {singleRunner.team && (
-                  <p className="mt-1 truncate text-sm font-bold uppercase tracking-wide text-white/60 sm:text-base">
-                    {singleRunner.team}
+          {runningEntries.length === 0 ? (
+            <p className="mt-3 text-2xl font-black uppercase text-white/50">
+              Waiting for next rider
+            </p>
+          ) : runningEntries.length === 1 && singleRunner ? (
+            /* Hero layout for single runner */
+            <div className="mt-3">
+              <div className="flex items-baseline gap-4">
+                <span className="inline-flex min-w-16 justify-center bg-race-yellow px-3 py-1.5 text-3xl font-black tabular-nums text-race-ink sm:text-4xl">
+                  {singleRunner.bib}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-3xl font-black uppercase text-white sm:text-5xl">
+                    {singleRunner.name}
                   </p>
+                  {singleRunner.team && (
+                    <p className="mt-1 truncate text-sm font-bold uppercase tracking-wide text-white/60 sm:text-base">
+                      {singleRunner.team}
+                    </p>
+                  )}
+                </div>
+                <span className="shrink-0 text-4xl font-black tabular-nums text-race-yellow sm:text-5xl">
+                  {fmtElapsedMs(heroElapsedMs)}
+                </span>
+              </div>
+              <div className="mt-4 h-4 w-full bg-white/20">
+                {heroProgress?.indeterminate ? (
+                  <div className="h-4 w-full animate-pulse bg-race-yellow" />
+                ) : (
+                  <div
+                    className="h-4 bg-race-yellow transition-all"
+                    style={{ width: `${heroProgress?.pct ?? 0}%` }}
+                  />
                 )}
               </div>
-              <span className="shrink-0 text-4xl font-black tabular-nums text-race-yellow sm:text-5xl">
-                {fmtElapsedMs(heroElapsedMs)}
-              </span>
-            </div>
-            <div className="mt-4 h-4 w-full bg-white/20">
-              {heroProgress?.indeterminate ? (
-                <div className="h-4 w-full animate-pulse bg-race-yellow" />
-              ) : (
-                <div
-                  className="h-4 bg-race-yellow transition-all"
-                  style={{ width: `${heroProgress?.pct ?? 0}%` }}
-                />
+              {heroProgress?.overtimeMs != null && (
+                <p className="mt-2 text-sm font-black text-race-red">
+                  +{fmtElapsedMs(heroProgress.overtimeMs)} over best time
+                </p>
               )}
             </div>
-            {heroProgress?.overtimeMs != null && (
-              <p className="mt-2 text-sm font-black text-race-red">
-                +{fmtElapsedMs(heroProgress.overtimeMs)} over best time
-              </p>
-            )}
-          </div>
-        ) : (
-          /* Compact rows for 2+ runners */
-          <div>
-            {runningEntries.map((runner) => (
-              <AnnouncerRunnerRow key={runner.bib} runner={runner} fastestMs={fastestMs} />
-            ))}
-          </div>
-        )}
-      </section>
+          ) : (
+            /* Compact rows for 2+ runners */
+            <div>
+              {runningEntries.map((runner) => (
+                <AnnouncerRunnerRow key={runner.bib} runner={runner} fastestMs={fastestMs} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Results table */}
       <div className="overflow-hidden border-2 border-white/20">
@@ -790,7 +794,7 @@ function AnnouncerView({ raceId }: { raceId: string }) {
       </header>
 
       {race.is_time_trial ? (
-        <TimeTrialAnnouncer entries={entries} crossings={crossings} />
+        <TimeTrialAnnouncer race={race} entries={entries} crossings={crossings} />
       ) : (
         <>
           <CategoryTabs categories={categories} category={category} onChange={setCategory} />
