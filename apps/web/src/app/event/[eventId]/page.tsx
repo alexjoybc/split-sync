@@ -505,7 +505,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
             <input type="checkbox" checked={cloneRoster} onChange={(e) => setCloneRoster(e.target.checked)} className="size-4 border-2 border-race-ink accent-race-ink" />
             <span className="text-sm font-bold">Include participant roster</span>
           </label>
-          {cloneError && <p className="mt-2 text-sm font-bold text-race-red">{cloneError}</p>}
+          {cloneError && <p className="mt-2 text-sm font-bold text-race-ink">{cloneError}</p>}
           <div className="mt-3 flex gap-3">
             <button onClick={cloneEvent} disabled={cloneSaving || !cloneTitle.trim()} className="race-action--muted race-action--yellow disabled:opacity-40">
               {cloneSaving ? "Cloning…" : "Confirm clone"}
@@ -559,7 +559,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       </section>}
 
       {manage && <section className="race-panel mt-6 p-4">
-        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">2. Event roster</h2><span className="text-sm font-bold text-race-muted">{participants.length} racers</span></div>
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">2. Event roster</h2><span className="tabular-nums text-sm font-bold text-race-muted">{participants.length} racers</span></div>
         <p className="mt-1 text-sm text-race-muted">Add each racer once, then place them in one or more races below.</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-[80px_1fr_1fr_1fr_150px_72px_auto]">
           <input ref={bibInputRef} value={rider.bib} onChange={(e) => setRider({ ...rider, bib: e.target.value })} onKeyDown={handleRiderKeyDown} placeholder="Bib" inputMode="numeric" className={inputCls} />
@@ -637,7 +637,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       </section>}
 
       {checkin && <section className="race-panel mt-6 p-4">
-        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">3. Check-in</h2><span className="text-sm font-bold text-race-muted">{checkedInCount} / {participants.length} checked in</span></div>
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">3. Check-in</h2><span className="tabular-nums text-sm font-bold text-race-muted">{checkedInCount} / {participants.length} checked in</span></div>
         <p className="mt-1 text-sm text-race-muted">One tap to confirm a racer has arrived and collected their bib.</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_150px_150px]">
           <input value={checkinQuery} onChange={(e) => setCheckinQuery(e.target.value)} placeholder="Search bib, name, or team" className={inputCls} />
@@ -734,7 +734,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-race-muted">
                       <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${raceStatusStyle[race.status]}`}>{race.status}</span>
                       <span>{race.is_time_trial ? "Time trial" : race.laps_planned ? `${race.laps_planned} laps` : "Open-ended"}</span>
-                      <span>· {raceEntries.length}/{participants.length} assigned</span>
+                      <span className="tabular-nums">· {raceEntries.length}/{participants.length} assigned</span>
                       {race.is_points_race && <span>· sprint every {race.sprint_interval_laps} laps</span>}
                       {race.is_time_trial && <span>· countdown {race.time_trial_countdown_seconds}s</span>}
                     </div>
@@ -765,7 +765,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
 
                     {assignCategory && (
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-race-muted">
-                        <span>{categoryAssignedCount}/{categoryAssignedCount + categoryUnassignedCount} of {assignCategory} assigned</span>
+                        <span className="tabular-nums">{categoryAssignedCount}/{categoryAssignedCount + categoryUnassignedCount} of {assignCategory} assigned</span>
                         <button
                           onClick={() => assignCategoryToRace(race, assignCategory)}
                           disabled={categoryUnassignedCount === 0}
@@ -804,7 +804,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                     {raceEntries.map((entry) => (
                       <span key={entry.id} className="bg-race-panel-alt px-2.5 py-0.5 text-xs font-bold text-race-ink">
                         <b>#{entry.bib}</b> {entry.name}
-                        {entry.status !== "ok" && <b className="ml-1 uppercase text-race-red">{entry.status}</b>}
+                        {entry.status !== "ok" && <b className="ml-1 uppercase text-race-ink">{entry.status}</b>}
                       </span>
                     ))}
                   </div>
@@ -890,7 +890,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
       </section>
 
       {manage && <section className="race-panel mt-6 p-4">
-        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">5. Volunteers</h2><span className="text-sm font-bold text-race-muted">{members.length} active</span></div>
+        <div className="flex items-baseline justify-between"><h2 className="text-base font-black uppercase">5. Volunteers</h2><span className="tabular-nums text-sm font-bold text-race-muted">{members.length} active</span></div>
         <p className="mt-1 text-sm text-race-muted">Generate a role-scoped invite link for people helping you run the event. <Link href="/help" className="underline decoration-2 underline-offset-4">What can each role do?</Link></p>
 
         <div className="mt-4 flex flex-wrap items-end gap-2">
