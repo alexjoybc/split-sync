@@ -22,6 +22,10 @@ export async function seedTimeTrialRace(
   });
   if (signInError) throw new Error(`Sign-in failed: ${signInError.message}`);
 
+  // Get the authenticated user so we can set owner_id (required by RLS)
+  const { data: { user } } = await client.auth.getUser();
+  if (!user) throw new Error('No authenticated user after sign-in');
+
   // Create event (status: live so spectator RLS allows reads)
   const { data: event, error: eventError } = await client
     .from('events')
@@ -30,6 +34,7 @@ export async function seedTimeTrialRace(
       sport_type: 'General',
       status: 'live',
       location: 'Test Venue',
+      owner_id: user.id,
     })
     .select()
     .single();
