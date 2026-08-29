@@ -52,13 +52,16 @@ test.describe('Time Trial live board', () => {
 
     await expect(page.getByText(/up next/i)).toBeVisible({ timeout: 10_000 });
 
+    // The Up Next section renders bibs as plain numbers (no # prefix).
+    // Use rider names (Alice=bib2, Bob=bib9, Carol=bib10) which are unique
+    // and appear in natural bib sort order in the queue.
     const pageText = await page.locator('body').textContent() ?? '';
-    const idx2  = pageText.indexOf('#2');
-    const idx9  = pageText.indexOf('#9');
-    const idx10 = pageText.indexOf('#10');
-    expect(idx2, 'bib 2 should appear in page').toBeGreaterThanOrEqual(0);
-    expect(idx9, 'bib 9 should appear after bib 2').toBeGreaterThan(idx2);
-    expect(idx10, 'bib 10 should appear after bib 9').toBeGreaterThan(idx9);
+    const idxAlice = pageText.indexOf('Alice'); // bib 2
+    const idxBob   = pageText.indexOf('Bob');   // bib 9
+    const idxCarol = pageText.indexOf('Carol'); // bib 10
+    expect(idxAlice, 'Alice (bib 2) should appear in queue').toBeGreaterThanOrEqual(0);
+    expect(idxBob,   'Bob (bib 9) should appear after Alice').toBeGreaterThan(idxAlice);
+    expect(idxCarol, 'Carol (bib 10) should appear after Bob').toBeGreaterThan(idxBob);
   });
 
   test('shows idle state when no one is on course', async ({ page }) => {
