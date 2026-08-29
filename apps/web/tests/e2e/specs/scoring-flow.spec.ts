@@ -21,7 +21,6 @@
  */
 import { test as base, type Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { createClient } from '@supabase/supabase-js';
 import {
   uniqueTestEmail,
   createTestOrganizer,
@@ -33,17 +32,8 @@ import { authedDb, buildEvent } from '../helpers/fixtures';
 // Local helpers
 // ---------------------------------------------------------------------------
 
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
-const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7b6b7xNHPnjyxvFnDpvnuN51o4MXVToypGc';
-
 // `authedDb` is imported from helpers/fixtures — no need to duplicate the
 // client-construction logic here.
-
-/** Anon client for reads that don't require authentication. */
-const anonClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ---------------------------------------------------------------------------
 // Combined fixture: authenticated page + owned event
@@ -290,6 +280,48 @@ test.describe('Entry status changes', () => {
     await page.getByRole('button', { name: 'Close rider detail' }).click();
 
     await expect(page.getByText('DNS').first()).toBeVisible({
+      timeout: 8_000,
+    });
+  });
+
+  test('set entry to DSQ via detail sheet; tile reflects DSQ status', async ({
+    scoringContext: { page, raceId },
+  }) => {
+    await page.goto(`/score/${raceId}`);
+    await expect(
+      page.getByRole('button', { name: 'Start race' }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // Start the race first (DSQ is applied during an active race).
+    await page.getByRole('button', { name: 'Start race' }).click();
+    await expect(
+      page.getByRole('button', { name: 'Finish' }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // Open the detail sheet for bib 10 via the ••• corner button.
+    await page
+      .getByRole('button', { name: /Open detail for #10/ })
+      .click();
+
+    // The rider detail sheet should appear.
+    await expect(page.getByText('Rider detail')).toBeVisible({
+      timeout: 5_000,
+    });
+
+    // Click the DSQ status chip.
+    // The button uses aria-label "Set status to DSQ for #10 Rider 10".
+    // window.prompt is called for the reason; we accept the default (empty).
+    page.once('dialog', (dialog) => dialog.accept(''));
+    await page
+      .getByRole('button', { name: /Set status to DSQ for #10/ })
+      .click();
+
+    // Close the sheet.
+    await page.getByRole('button', { name: 'Close rider detail' }).click();
+
+    // After closing, the tile for bib 10 should show "DSQ".
+    // The tile text falls through to entry.status.toUpperCase() when statused.
+    await expect(page.getByText('DSQ').first()).toBeVisible({
       timeout: 8_000,
     });
   });
