@@ -614,7 +614,7 @@ function RiderDetailSheet({
                   </label>
 
                   {penaltyForm.error && (
-                    <p className="text-xs font-bold text-race-red">{penaltyForm.error}</p>
+                    <p className="text-xs font-bold text-race-ink">{penaltyForm.error}</p>
                   )}
 
                   <div className="flex gap-3">
@@ -884,7 +884,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
             className="mt-3 w-full border-2 border-race-ink bg-white p-2 text-sm"
             rows={2}
           />
-          {reopenError && <p className="mt-2 text-sm font-bold text-race-red">{reopenError}</p>}
+          {reopenError && <p className="mt-2 text-sm font-bold text-race-ink">{reopenError}</p>}
           <div className="mt-3 flex gap-3">
             <button
               onClick={reopenRace}
@@ -925,7 +925,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Find bib / rider"
-              className="w-full border-2 border-race-ink bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-race-muted focus:border-race-red"
+              className="w-full border-2 border-race-ink bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-race-muted focus:border-race-ink"
             />
             <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-race-muted" />
           </div>
@@ -1057,7 +1057,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                     rows={2}
                   />
                 </label>
-                {editing.error && <p className="mt-2 text-sm font-bold text-race-red">{editing.error}</p>}
+                {editing.error && <p className="mt-2 text-sm font-bold text-race-ink">{editing.error}</p>}
                 <div className="mt-3 flex gap-3">
                   <button
                     onClick={saveEdit}
@@ -1114,7 +1114,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
                         rows={2}
                       />
                     </label>
-                    {restoring.error && <p className="mt-2 text-sm font-bold text-race-red">{restoring.error}</p>}
+                    {restoring.error && <p className="mt-2 text-sm font-bold text-race-ink">{restoring.error}</p>}
                     <div className="mt-3 flex gap-3">
                       <button
                         onClick={confirmRestore}
