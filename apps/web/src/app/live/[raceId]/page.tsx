@@ -313,68 +313,70 @@ function TimeTrialBoard({
 
   return (
     <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
-      {/* Now Running section */}
-      <div className="mb-6 border-4 border-zinc-950 bg-white">
-        <div className="border-b-2 border-zinc-950 bg-zinc-950 px-4 py-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-race-yellow">
-            Now on course{runningEntries.length > 1 ? ` (${runningEntries.length})` : ""}
-          </p>
-        </div>
-        {runningEntries.length === 0 ? (
-          <p className="px-4 py-5 text-sm font-black uppercase text-zinc-500">
-            Waiting for next rider
-          </p>
-        ) : runningEntries.length === 1 && singleRunner ? (
-          /* Hero layout for a single runner */
-          <div className="p-4">
-            <div className="flex items-baseline gap-3">
-              <span className="inline-flex min-w-10 justify-center bg-zinc-950 px-2 py-1 text-xl font-black tabular-nums text-white">
-                #{singleRunner.bib}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xl font-black uppercase">{singleRunner.name}</p>
-                {singleRunner.team && (
-                  <p className="text-xs font-bold uppercase text-zinc-500">{singleRunner.team}</p>
+      {/* Now Running section — hidden once the race is finished */}
+      {race.status !== "finished" && (
+        <div className="mb-6 border-4 border-zinc-950 bg-white">
+          <div className="border-b-2 border-zinc-950 bg-zinc-950 px-4 py-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.24em] text-race-yellow">
+              Now on course{runningEntries.length > 1 ? ` (${runningEntries.length})` : ""}
+            </p>
+          </div>
+          {runningEntries.length === 0 ? (
+            <p className="px-4 py-5 text-sm font-black uppercase text-zinc-500">
+              Waiting for next rider
+            </p>
+          ) : runningEntries.length === 1 && singleRunner ? (
+            /* Hero layout for a single runner */
+            <div className="p-4">
+              <div className="flex items-baseline gap-3">
+                <span className="inline-flex min-w-10 justify-center bg-zinc-950 px-2 py-1 text-xl font-black tabular-nums text-white">
+                  #{singleRunner.bib}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xl font-black uppercase">{singleRunner.name}</p>
+                  {singleRunner.team && (
+                    <p className="text-xs font-bold uppercase text-zinc-500">{singleRunner.team}</p>
+                  )}
+                </div>
+                <span className="ml-auto flex items-baseline gap-2">
+                  <span className="text-3xl font-black tabular-nums text-race-red">
+                    {fmtElapsedMs(heroElapsedMs)}
+                  </span>
+                  {showRank && projectedPosition != null && (
+                    <span
+                      className={`inline-block px-2 py-0.5 text-xs font-black tabular-nums ${projectedPosition === 1 ? "bg-race-yellow text-race-ink" : "bg-zinc-200 text-zinc-800"}`}
+                    >
+                      P{projectedPosition}
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="mt-3 h-3 w-full bg-zinc-300">
+                {heroProgress?.indeterminate ? (
+                  <div className="h-3 w-full animate-pulse bg-race-yellow" />
+                ) : (
+                  <div
+                    className={`h-3 transition-all ${heroProgress?.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
+                    style={{ width: `${heroProgress?.pct ?? 0}%` }}
+                  />
                 )}
               </div>
-              <span className="ml-auto flex items-baseline gap-2">
-                <span className="text-3xl font-black tabular-nums text-race-red">
-                  {fmtElapsedMs(heroElapsedMs)}
-                </span>
-                {showRank && projectedPosition != null && (
-                  <span
-                    className={`inline-block px-2 py-0.5 text-xs font-black tabular-nums ${projectedPosition === 1 ? "bg-race-yellow text-race-ink" : "bg-zinc-200 text-zinc-800"}`}
-                  >
-                    P{projectedPosition}
-                  </span>
-                )}
-              </span>
-            </div>
-            <div className="mt-3 h-3 w-full bg-zinc-300">
-              {heroProgress?.indeterminate ? (
-                <div className="h-3 w-full animate-pulse bg-race-yellow" />
-              ) : (
-                <div
-                  className={`h-3 transition-all ${heroProgress?.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
-                  style={{ width: `${heroProgress?.pct ?? 0}%` }}
-                />
+              {heroProgress?.overtimeMs != null && (
+                <p className="mt-1 text-xs font-black text-race-red">
+                  +{fmtElapsedMs(heroProgress.overtimeMs)} over best
+                </p>
               )}
             </div>
-            {heroProgress?.overtimeMs != null && (
-              <p className="mt-1 text-xs font-black text-race-red">
-                +{fmtElapsedMs(heroProgress.overtimeMs)} over best
-              </p>
-            )}
-          </div>
-        ) : (
-          /* Compact rows for 2+ runners */
-          <div>
-            {runningEntries.map((runner) => (
-              <LiveRunnerCard key={runner.bib} runner={runner} fastestMs={fastestMs} />
-            ))}
-          </div>
-        )}
-      </div>
+          ) : (
+            /* Compact rows for 2+ runners */
+            <div>
+              {runningEntries.map((runner) => (
+                <LiveRunnerCard key={runner.bib} runner={runner} fastestMs={fastestMs} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Up Next */}
       {queue.length > 0 && (

@@ -281,36 +281,59 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
 
 
   return (
-    <div className="mt-6 space-y-6">
-      {/* ── Section: Countdown / Next up (always at the top) ── */}
-      {countdown !== null ? (
+    <div className="mt-6 space-y-4">
+      {countdown !== null && nextInQueue ? (
+        /* ── Countdown overlay (replaces queue + start buttons) ── */
         <section>
           <p className="race-kicker--muted mb-2">Starting…</p>
           <div className="flex flex-col items-center gap-3 border-2 border-race-ink bg-race-panel p-8">
             <p className="text-xs font-black uppercase tracking-wide text-race-muted">
-              #{nextInQueue?.bib} {nextInQueue?.name}
+              #{nextInQueue.bib} {nextInQueue.name}
             </p>
             <p className="text-7xl font-black tabular-nums text-race-ink">{countdown}</p>
-            <button
-              type="button"
-              onClick={cancelCountdown}
-              className="race-inline-action"
-            >
+            <button type="button" onClick={cancelCountdown} className="race-inline-action">
               Cancel
             </button>
           </div>
         </section>
-      ) : nextInQueue ? (
-        <section>
-          <p className="race-kicker--muted mb-2">Next up</p>
-          <div className="border-2 border-race-ink bg-race-panel p-4">
-            <p className="text-xl font-black tabular-nums">
-              #{nextInQueue.bib} {nextInQueue.name}
-            </p>
-            {nextInQueue.team && (
-              <p className="text-xs font-bold text-race-muted uppercase">{nextInQueue.team}</p>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
+      ) : (
+        <>
+          {/* ── Queue block — reversed so next rider is at the bottom ── */}
+          {queue.length > 0 && (
+            <section>
+              <p className="race-kicker--muted mb-2">Up next</p>
+              {queue.length > 5 && (
+                <p className="mb-1 text-[10px] font-bold text-race-muted">
+                  +{queue.length - 5} more above
+                </p>
+              )}
+              <ul className="divide-y divide-zinc-300 border-2 border-race-ink">
+                {queue.slice(0, 5).reverse().map((row, idx, arr) => {
+                  const isNext = idx === arr.length - 1;
+                  return (
+                    <li
+                      key={row.bib}
+                      className={`flex items-center gap-3 px-3 py-2 text-sm font-bold ${isNext ? "bg-race-panel" : "text-race-muted"}`}
+                    >
+                      {isNext && (
+                        <span className="shrink-0 bg-race-ink px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+                          NEXT
+                        </span>
+                      )}
+                      <span className="tabular-nums">#{row.bib} {row.name}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="mt-1 text-[10px] font-bold text-race-muted">
+                {queue.length} rider{queue.length !== 1 ? "s" : ""} remaining
+              </p>
+            </section>
+          )}
+
+          {/* ── Start buttons — directly below queue, no section wrapper ── */}
+          {nextInQueue && (
+            <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => onStart(nextInQueue.bib)}
@@ -328,50 +351,34 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
                 </button>
               )}
             </div>
+          )}
+        </>
+      )}
+
+      {/* ── Divider — only when there is something above and something below ── */}
+      {(queue.length > 0 || runningEntries.length > 0) && (
+        <hr className="border-race-ink/20" />
+      )}
+
+      {/* ── On Course ── */}
+      {runningEntries.length > 0 && (
+        <section>
+          <p className="text-[10px] font-black uppercase tracking-wide text-race-muted mb-2">On course</p>
+          <div className="space-y-3">
+            {runningEntries.map((runner) => (
+              <RunnerCard
+                key={runner.bib}
+                runner={runner}
+                fastestMs={bestMs}
+                results={results}
+                onFinish={onFinish}
+              />
+            ))}
           </div>
         </section>
-      ) : null}
-
-      {/* ── Section: Queue (riders 2 onwards) ── */}
-      {queue.length > 1 && (
-        <section>
-          <p className="race-kicker--muted mb-2">Queue</p>
-          <ul className="divide-y divide-zinc-300 border-2 border-race-ink">
-            {queue.slice(1).map((row) => (
-              <li
-                key={row.bib}
-                className="flex items-center gap-3 px-3 py-2 text-sm font-bold"
-              >
-                #{row.bib} {row.name}
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
 
-      {/* ── Section: On Course ── */}
-      {(runningEntries.length > 0 || (!nextInQueue && runningEntries.length === 0)) && (
-        <section>
-          <p className="race-kicker--muted mb-2">On course</p>
-          {runningEntries.length > 0 ? (
-            <div className="space-y-3">
-              {runningEntries.map((runner) => (
-                <RunnerCard
-                  key={runner.bib}
-                  runner={runner}
-                  fastestMs={bestMs}
-                  results={results}
-                  onFinish={onFinish}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs font-bold text-race-muted">All riders have finished.</p>
-          )}
-        </section>
-      )}
-
-      {/* ── Section: Finished ── */}
+      {/* ── Finished ── */}
       {finished.length > 0 && (
         <section>
           <p className="race-kicker--muted mb-2">Finished</p>
