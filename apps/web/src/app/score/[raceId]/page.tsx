@@ -189,9 +189,23 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
     }, 1000);
   }
 
+  // Reset nowMs immediately when a new runner starts so elapsed is correct right away
+  // (placed after `running` is computed so the dependency reference is valid)
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, [running?.bib]);
+
   // Progress bar for running rider
   const elapsedMs = running?.startedAt != null ? nowMs - running.startedAt : 0;
   const progress = running ? getProgress(elapsedMs, bestMs) : null;
+
+  // How many finished riders are currently faster → projectedPosition = that count + 1
+  const projectedPosition: number | null = running
+    ? results.filter(
+        (r) => r.phase === "finished" && r.elapsedMs != null && r.elapsedMs < elapsedMs
+      ).length + 1
+    : null;
+  const showRank = results.some((r) => r.phase === "finished");
 
   return (
     <div className="mt-6 space-y-6">
@@ -250,6 +264,13 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
                 <p className="text-sm font-black uppercase text-race-ink">{running.name}</p>
                 <p className="mt-1 text-lg font-black tabular-nums text-race-muted">
                   {fmtElapsedMs(elapsedMs)}
+                  {showRank && projectedPosition != null && (
+                    <span
+                      className={`ml-2 inline-block px-2 py-0.5 text-xs font-black tabular-nums ${projectedPosition === 1 ? "bg-race-yellow text-race-ink" : "bg-zinc-200 text-zinc-800"}`}
+                    >
+                      P{projectedPosition}
+                    </span>
+                  )}
                 </p>
                 {progress?.overtimeMs != null && (
                   <p className="text-xs font-bold text-race-red">
@@ -272,7 +293,7 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
                 <div className="h-full w-1/3 bg-race-yellow animate-pulse" />
               ) : (
                 <div
-                  className="h-full bg-race-yellow transition-all duration-1000"
+                  className={`h-full transition-all duration-1000 ${progress?.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
                   style={{ width: `${progress?.pct ?? 0}%` }}
                 />
               )}
