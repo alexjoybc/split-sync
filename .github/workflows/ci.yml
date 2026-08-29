@@ -8,17 +8,16 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # apps/web reads these at module load time (see src/lib/supabase.ts) even
-  # for a static/CI build, so a placeholder is required for `next build` to
-  # succeed. No real Supabase project is contacted during the build.
-  NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-key
-
 jobs:
   web:
     name: web (lint, typecheck, build)
     runs-on: ubuntu-latest
+    env:
+      # apps/web reads these at module load time (see src/lib/supabase.ts) even
+      # for a static/CI build, so a placeholder is required for `next build` to
+      # succeed. No real Supabase project is contacted during the build.
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-key
     steps:
       - uses: actions/checkout@v4
 
@@ -66,3 +65,58 @@ jobs:
 
       - name: Typecheck
         run: pnpm --filter mobile typecheck
+
+  e2e:
+    name: e2e (Playwright + Supabase)
+    runs-on: ubuntu-latest
+    env:
+      # Local Supabase stack — standard well-known anon key for the demo project
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7b6b7xNHPnjyxvFnDpvnuN51o4MXVToypGc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.23.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Supabase local stack
+        run: supabase start
+        working-directory: .
+
+      - name: Reset DB (apply migrations + seed)
+        run: supabase db reset
+        working-directory: .
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/web/package.json') }}
+
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: pnpm --filter web test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 7

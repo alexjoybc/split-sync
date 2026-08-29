@@ -23,7 +23,7 @@ test.describe('Login form', () => {
     await page.goto('/login');
     await page.fill('input[type="email"]', email);
     await page.fill('input[type="password"]', password);
-    await page.click('button:has-text("Sign in")');
+    await page.press('input[type="password"]', 'Enter');
 
     // After a successful sign-in the app redirects to /events.
     await expect(page).toHaveURL(/\/events/, { timeout: 10_000 });
@@ -39,7 +39,7 @@ test.describe('Password reset email flow', () => {
 
     await page.goto('/auth/forgot-password');
     await page.fill('input[type="email"]', email);
-    await page.click('button[type="submit"]');
+    await page.click('button:has-text("Send reset link")');
 
     // The page should show a confirmation message.
     await expect(page.getByText(/check your/i)).toBeVisible({

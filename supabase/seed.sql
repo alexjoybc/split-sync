@@ -15,15 +15,15 @@ values (
 );
 
 -- Roster: participants first (domain invariant #3)
-insert into participants (id, event_id, bib, name, team) values
-  ('c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '12', 'Maya Chen',      'Tripleshot'),
-  ('c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', '7',  'Liam O''Brien',  'UVic Cycling'),
-  ('c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', '23', 'Sofia Marchetti','Broad Street'),
-  ('c0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000001', '41', 'Dev Patel',      'Independent'),
-  ('c0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000001', '3',  'Emma Larsen',    'Tripleshot'),
-  ('c0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000001', '55', 'Noah Kim',       'UVic Cycling'),
-  ('c0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000001', '61', 'Olivia Reyes',   'Independent'),
-  ('c0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000001', '78', 'Jack Thompson',  'Broad Street');
+insert into participants (id, event_id, bib, first_name, last_name, team) values
+  ('c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '12', 'Maya',    'Chen',      'Tripleshot'),
+  ('c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', '7',  'Liam',    'O''Brien',  'UVic Cycling'),
+  ('c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', '23', 'Sofia',   'Marchetti', 'Broad Street'),
+  ('c0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000001', '41', 'Dev',     'Patel',     'Independent'),
+  ('c0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000001', '3',  'Emma',    'Larsen',    'Tripleshot'),
+  ('c0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000001', '55', 'Noah',    'Kim',       'UVic Cycling'),
+  ('c0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000001', '61', 'Olivia',  'Reyes',     'Independent'),
+  ('c0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000001', '78', 'Jack',    'Thompson',  'Broad Street');
 
 -- Races
 insert into races (id, event_id, name, sequence_order, laps_planned, status) values
@@ -59,8 +59,8 @@ values (
   '9999'
 );
 
-insert into participants (id, event_id, bib, name) values
-  ('c0000000-0000-0000-0000-000000000009', 'a0000000-0000-0000-0000-000000000002', '1', 'Test Rider');
+insert into participants (id, event_id, bib, first_name, last_name) values
+  ('c0000000-0000-0000-0000-000000000009', 'a0000000-0000-0000-0000-000000000002', '1', 'Test', 'Rider');
 
 insert into races (id, event_id, name, sequence_order, status) values
   ('b0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000002', 'Draft Race', 1, 'upcoming');
