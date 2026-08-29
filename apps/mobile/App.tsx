@@ -64,36 +64,80 @@ function Button({ title, onPress, variant = "dark", disabled = false }: { title:
   return <Pressable onPress={onPress} disabled={disabled} style={[styles.button, styles[`button_${variant}`], disabled && styles.disabled]}><Text style={[styles.buttonText, variant === "yellow" || variant === "outline" ? styles.buttonTextDark : undefined]}>{title}</Text></Pressable>;
 }
 
-/** Tiny icon mark: two angled bars (ink + yellow) simulated with skewX. */
-function Mark({ size = 14 }: { size?: number }) {
+/**
+ * SplitSync wordmark — "SPLIT" on the dark panel, "SYNC" on the yellow panel,
+ * separated by a diagonal slash created with a skewX-transformed overlay View.
+ * The two text labels sit on top in absolute position, outside the skewed views.
+ */
+function Logo() {
+  const W = 82;
+  const H = 22;
+  // The ink panel's right edge runs from x≈50 (top) to x≈42 (bottom).
+  // skewX(-21.8deg) ≈ tan⁻¹(8/20) shifts x by -8px over H=20px of height.
   return (
-    <View style={{ width: size, height: size, overflow: "hidden" }}>
-      {/* Yellow right panel (full background) */}
+    <View style={{ width: W, height: H, overflow: "hidden", borderRadius: 2 }}>
+      {/* Yellow base — fills the entire logo (right panel) */}
       <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.yellow }} />
-      {/* Ink left panel angled via skewX over the yellow base */}
+      {/* Ink panel — covers left side with angled right edge */}
       <View
         style={{
           position: "absolute",
-          left: -(size * 0.4),
+          left: -6,
           top: 0,
           bottom: 0,
-          width: size * 1.05,
+          width: 56,
           backgroundColor: colors.ink,
-          transform: [{ skewX: "-18deg" }],
+          transform: [{ skewX: "-21.8deg" }],
         }}
       />
-    </View>
-  );
-}
-
-function Logo() {
-  return (
-    <View style={styles.logo}>
-      <View style={[styles.logoSplit, { flexDirection: "row", alignItems: "center", gap: 4 }]}>
-        <Mark size={12} />
-        <Text style={styles.logoText}>SPLIT</Text>
-      </View>
-      <View style={styles.logoSync}><Text style={styles.logoTextDark}>SYNC</Text></View>
+      {/* Paper diagonal cut — thin sliver between panels */}
+      <View
+        style={{
+          position: "absolute",
+          left: 43,
+          top: 0,
+          bottom: 0,
+          width: 3,
+          backgroundColor: colors.paper,
+          transform: [{ skewX: "-21.8deg" }],
+        }}
+      />
+      {/* "SPLIT" text — over the dark panel */}
+      <Text
+        style={{
+          position: "absolute",
+          left: 0,
+          width: 44,
+          top: 0,
+          height: H,
+          textAlign: "center",
+          lineHeight: H,
+          color: "white",
+          fontSize: 9,
+          fontWeight: "900",
+          letterSpacing: 1,
+        }}
+      >
+        SPLIT
+      </Text>
+      {/* "SYNC" text — over the yellow panel */}
+      <Text
+        style={{
+          position: "absolute",
+          left: 46,
+          right: 0,
+          top: 0,
+          height: H,
+          textAlign: "center",
+          lineHeight: H,
+          color: colors.ink,
+          fontSize: 9,
+          fontWeight: "900",
+          letterSpacing: 1,
+        }}
+      >
+        SYNC
+      </Text>
     </View>
   );
 }

@@ -1,8 +1,12 @@
-<svg width="32" height="32" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Black left panel -->
-  <polygon points="0,0 12,0 8,20 0,20" fill="#18181b"/>
-  <!-- Yellow right panel -->
-  <polygon points="12,0 20,0 20,20 8,20" fill="#f6d428"/>
-  <!-- Paper-coloured diagonal cut -->
-  <polygon points="10,0 12,0 8,20 6,20" fill="#f4f1ea"/>
+<svg viewBox="0 0 86 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark SPLIT panel -->
+  <polygon points="0,0 50,0 42,20 0,20" fill="#18181b"/>
+  <!-- Yellow SYNC panel -->
+  <polygon points="50,0 86,0 86,20 42,20" fill="#f6d428"/>
+  <!-- Paper diagonal cut -->
+  <polygon points="48,0 50,0 42,20 40,20" fill="#f4f1ea"/>
+  <!-- SPLIT text -->
+  <text x="21" y="13.5" fill="white" font-size="7.5" font-weight="900" letter-spacing="0.8" text-anchor="middle" font-family="system-ui,-apple-system,Arial,sans-serif">SPLIT</text>
+  <!-- SYNC text -->
+  <text x="66" y="13.5" fill="#18181b" font-size="7.5" font-weight="900" letter-spacing="0.8" text-anchor="middle" font-family="system-ui,-apple-system,Arial,sans-serif">SYNC</text>
 </svg>
