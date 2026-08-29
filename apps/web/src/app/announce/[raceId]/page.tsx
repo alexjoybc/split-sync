@@ -210,11 +210,11 @@ function AnnouncerBody({
   return (
     <div className="mx-auto grid max-w-5xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.3fr_1fr]">
       <div className="space-y-6">
-        <section ref={leaderSectionRef} className="border-4 border-race-yellow bg-black/40 p-6">
+        <section ref={leaderSectionRef} className="race-angle-cut border-4 border-race-yellow bg-black/40 p-6">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-race-yellow">Current leader</p>
           {leader ? (
             <div className="mt-3 flex items-baseline gap-4">
-              <span className="inline-flex min-w-16 justify-center bg-race-yellow px-3 py-1.5 text-3xl font-black tabular-nums text-race-ink sm:text-4xl">{leader.bib}</span>
+              <span className="race-numeral inline-flex min-w-16 justify-center bg-race-yellow px-3 py-1.5 text-3xl font-black text-race-ink sm:text-4xl">{leader.bib}</span>
               <div className="min-w-0">
                 <p className="truncate text-3xl font-black uppercase leading-tight text-white sm:text-5xl">{leader.name}<PenaltyBadge row={leader} /></p>
                 <p className="mt-1 truncate text-sm font-bold uppercase tracking-wide text-white/60 sm:text-base">
@@ -233,10 +233,10 @@ function AnnouncerBody({
             <ol className="mt-2 divide-y-2 divide-white/10 border-y-2 border-white/10">
               {podium.map((row) => (
                 <li key={row.bib} className="flex items-center gap-4 py-3">
-                  <span className="w-8 text-center text-xl font-black tabular-nums text-race-yellow">{row.position}</span>
-                  <span className="inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-lg font-black tabular-nums text-white">{row.bib}</span>
+                  <span className="race-numeral w-8 text-center text-xl font-black text-race-yellow">{row.position}</span>
+                  <span className="race-numeral inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-lg font-black text-white">{row.bib}</span>
                   <span className="min-w-0 flex-1 truncate text-lg font-black uppercase text-white sm:text-xl">{row.name}<PenaltyBadge row={row} /></span>
-                  <span className="shrink-0 text-base font-bold tabular-nums text-white/70">{row.position === 1 ? "Leader" : row.gapText}</span>
+                  <span className="race-numeral shrink-0 text-base font-bold text-white/70">{row.position === 1 ? "Leader" : row.gapText}</span>
                 </li>
               ))}
             </ol>
@@ -249,10 +249,10 @@ function AnnouncerBody({
             {recent.length === 0 && <li className="py-3 text-base font-bold uppercase text-white/40">No crossings recorded yet</li>}
             {recent.map((crossing, i) => (
               <li key={`${crossing.bib}-${crossing.atMs}-${i}`} className="flex items-center gap-4 py-3">
-                <span className="inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-lg font-black tabular-nums text-white">{crossing.bib}</span>
+                <span className="race-numeral inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-lg font-black text-white">{crossing.bib}</span>
                 <span className="min-w-0 flex-1 truncate text-lg font-black uppercase text-white sm:text-xl">{crossing.name}</span>
-                <span className="shrink-0 text-sm font-bold uppercase tracking-wide text-white/50">Lap {crossing.lap}</span>
-                <span className="shrink-0 text-sm font-bold tabular-nums text-race-yellow">{timeAgo(crossing.atMs, now)}</span>
+                <span className="shrink-0 text-sm font-bold uppercase tracking-wide text-white/50">Lap <span className="race-numeral">{crossing.lap}</span></span>
+                <span className="race-numeral shrink-0 text-sm font-bold text-race-yellow">{timeAgo(crossing.atMs, now)}</span>
               </li>
             ))}
           </ol>
@@ -284,21 +284,21 @@ function AnnouncerBody({
             <dl className="mt-4 grid grid-cols-2 gap-4 border-t-2 border-white/10 pt-4">
               <div>
                 <dt className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Standing</dt>
-                <dd className="mt-1 text-2xl font-black tabular-nums text-white">
+                <dd className="race-numeral mt-1 text-2xl font-black text-white">
                   {match.status !== "ok" ? STATUS_LABEL[match.status] ?? match.status : match.laps > 0 ? `${match.position}${match.position === 1 ? "st" : ""}` : "—"}
                 </dd>
               </div>
               <div>
                 <dt className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Laps</dt>
-                <dd className="mt-1 text-2xl font-black tabular-nums text-white">{match.laps}</dd>
+                <dd className="race-numeral mt-1 text-2xl font-black text-white">{match.laps}</dd>
               </div>
               <div>
                 <dt className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Last lap</dt>
-                <dd className="mt-1 text-lg font-black tabular-nums text-white">{fmtLapTime(match.lastLapMs)}</dd>
+                <dd className="race-numeral mt-1 text-lg font-black text-white">{fmtLapTime(match.lastLapMs)}</dd>
               </div>
               <div>
                 <dt className="text-[10px] font-black uppercase tracking-[0.16em] text-white/40">Gap</dt>
-                <dd className="mt-1 text-lg font-black tabular-nums text-white">{match.status !== "ok" ? "—" : match.position === 1 ? "Leader" : match.gapText || "—"}</dd>
+                <dd className="race-numeral mt-1 text-lg font-black text-white">{match.status !== "ok" ? "—" : match.position === 1 ? "Leader" : match.gapText || "—"}</dd>
               </div>
             </dl>
           </div>
@@ -329,15 +329,15 @@ function TvBody({ standings }: { standings: ReturnType<typeof computeStandings> 
               const statused = row.status !== "ok";
               return (
                 <tr key={row.bib} className={classNames("border-t border-white/10", isLeader ? "bg-race-yellow text-race-ink" : index % 2 === 0 ? "bg-white/5" : "bg-transparent", statused && "opacity-60")}>
-                  <td className="py-4 text-center text-2xl font-black tabular-nums">
+                   <td className="race-numeral py-4 text-center text-2xl font-black">
                     {statused ? STATUS_LABEL[row.status] ?? row.status : row.laps > 0 ? row.position : "—"}
                   </td>
                   <td className="border-l border-white/10 py-4 text-center">
-                    <span className={classNames("inline-flex min-w-12 justify-center px-2 py-1 text-xl font-black tabular-nums", isLeader ? "bg-race-ink text-race-yellow" : "bg-white/10 text-white")}>{row.bib}</span>
+                    <span className={classNames("race-numeral inline-flex min-w-12 justify-center px-2 py-1 text-xl font-black", isLeader ? "bg-race-ink text-race-yellow" : "bg-white/10 text-white")}>{row.bib}</span>
                   </td>
                   <td className="border-l border-white/10 px-4 py-4 text-xl font-black uppercase">{row.name}<PenaltyBadge row={row} /></td>
-                  <td className="border-l border-white/10 py-4 text-center text-xl font-black tabular-nums">{row.laps}</td>
-                  <td className="border-l border-white/10 py-4 pr-4 text-right text-xl font-black tabular-nums">{statused ? "" : isLeader ? "Leader" : row.gapText}</td>
+                  <td className="race-numeral border-l border-white/10 py-4 text-center text-xl font-black">{row.laps}</td>
+                  <td className="race-numeral border-l border-white/10 py-4 pr-4 text-right text-xl font-black">{statused ? "" : isLeader ? "Leader" : row.gapText}</td>
                 </tr>
               );
             })}
@@ -369,15 +369,20 @@ function PointsOverlay({ race, crossings, entries }: { race: Race; crossings: Cr
   return (
     <div className="mx-auto max-w-5xl px-4 pt-6 sm:px-6">
       {activeSprint && (
-        <div className={classNames("border-2 border-race-yellow px-4 py-3", activeSprint.isFinal ? "bg-[#ec1c24]" : "bg-race-yellow text-race-ink")}>
+        <div className={classNames(
+          "race-angle-cut border-2 border-race-yellow px-4 py-3",
+          activeSprint.isFinal ? "bg-[#ec1c24]" : "bg-race-yellow text-race-ink"
+        )} style={{ boxShadow: "var(--race-live-shadow)" }}>
           <p className="text-xs font-black uppercase tracking-[0.24em]">
-            {activeSprint.isFinal ? `Final sprint — lap ${activeSprint.lap} — double points` : `Sprint lap ${activeSprint.lap}`}
+            {activeSprint.isFinal
+              ? <>Final sprint — <span className="race-numeral">lap {activeSprint.lap}</span> — double points</>
+              : <>Sprint <span className="race-numeral">lap {activeSprint.lap}</span></>}
           </p>
           {sprintResult.length > 0 && (
             <ol className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
               {sprintResult.map((row) => (
-                <li key={row.bib} className="text-sm font-black uppercase tabular-nums">
-                  {row.place}. #{row.bib} {row.name}
+                <li key={row.bib} className="text-sm font-black uppercase">
+                  <span className="race-numeral">{row.place}. #{row.bib}</span> {row.name}
                 </li>
               ))}
             </ol>
@@ -391,10 +396,10 @@ function PointsOverlay({ race, crossings, entries }: { race: Race; crossings: Cr
       <ol className="mt-2 divide-y-2 divide-white/10 border-y-2 border-white/10">
         {pointsStandings.slice(0, 8).map((row) => (
           <li key={row.bib} className="flex items-center gap-4 py-2">
-            <span className="w-8 text-center text-lg font-black tabular-nums text-race-yellow">{row.position ?? "—"}</span>
-            <span className="inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-base font-black tabular-nums text-white">{row.bib}</span>
+            <span className="race-numeral w-8 text-center text-lg font-black text-race-yellow">{row.position ?? "—"}</span>
+            <span className="race-numeral inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-base font-black text-white">{row.bib}</span>
             <span className="min-w-0 flex-1 truncate text-base font-black uppercase text-white">{row.name}</span>
-            <span className="shrink-0 text-base font-bold tabular-nums text-white/70">{row.points} pts</span>
+            <span className="race-numeral shrink-0 text-base font-bold text-white/70">{row.points} pts</span>
           </li>
         ))}
       </ol>
@@ -620,13 +625,13 @@ function TimeTrialAnnouncer({
                         : "bg-transparent"
                   )}
                 >
-                  <td className="py-4 text-center text-2xl font-black tabular-nums">
+                  <td className="race-numeral py-4 text-center text-2xl font-black">
                     {row.position ?? "—"}
                   </td>
                   <td className="border-l border-white/10 py-4 text-center">
                     <span
                       className={classNames(
-                        "inline-flex min-w-12 justify-center px-2 py-1 text-xl font-black tabular-nums",
+                        "race-numeral inline-flex min-w-12 justify-center px-2 py-1 text-xl font-black",
                         isLeader ? "bg-race-ink text-race-yellow" : "bg-white/10 text-white"
                       )}
                     >
@@ -644,10 +649,10 @@ function TimeTrialAnnouncer({
                       </span>
                     )}
                   </td>
-                  <td className="border-l border-white/10 py-4 text-center text-xl font-black tabular-nums">
+                  <td className="race-numeral border-l border-white/10 py-4 text-center text-xl font-black">
                     {row.elapsedMs != null ? fmtElapsedMs(row.elapsedMs) : "—"}
                   </td>
-                  <td className="border-l border-white/10 py-4 pr-4 text-right text-xl font-black tabular-nums">
+                  <td className="race-numeral border-l border-white/10 py-4 pr-4 text-right text-xl font-black">
                     {row.gapText || "—"}
                   </td>
                 </tr>
@@ -773,11 +778,11 @@ function AnnouncerView({ raceId }: { raceId: string }) {
                 )}
                 Race time
               </p>
-              <p className="text-2xl font-black tabular-nums">{race.status === "active" && race.started_at ? <RaceClock startedAt={race.started_at} /> : "—"}</p>
+              <p className="race-numeral text-2xl font-black">{race.status === "active" && race.started_at ? <RaceClock startedAt={race.started_at} /> : "—"}</p>
             </div>
             <div className="text-right">
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50">Laps to go</p>
-              <p className="text-2xl font-black tabular-nums">{lapsToGo ?? "—"}</p>
+              <p className="race-numeral text-2xl font-black">{lapsToGo ?? "—"}</p>
             </div>
             <ModeToggle mode={mode} onChange={setMode} />
           </div>
