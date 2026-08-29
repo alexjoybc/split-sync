@@ -41,26 +41,30 @@ test.describe('Public spectator surfaces', () => {
   test('live board renders standings for a published race', async ({ page }) => {
     await page.goto(`/live/${SEED.RACE_A_ID}`);
 
-    // Page should render the live classification heading.
+    // The race name is the h1 inside the live board header — it renders as
+    // soon as useRaceData resolves the race row. Use it as the "page loaded"
+    // anchor before asserting on standings data.
     await expect(
-      page.getByText(/live classification/i).first()
+      page.getByRole('heading', { name: 'A Race — Scratch 20 laps' })
     ).toBeVisible({ timeout: 10_000 });
 
-    // A Race has 3 crossings (bibs 12, 7, 23) — Maya Chen led lap 1.
+    // A Race has 3 crossings (bibs 12, 7, 23) — these riders appear in the
+    // standings table. All three assertions need their own timeout because
+    // entries + crossings are fetched in the same Promise.all as the race row.
     await expect(page.getByText('Maya Chen')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByText('Liam O\'Brien')).toBeVisible();
-    await expect(page.getByText('Sofia Marchetti')).toBeVisible();
+    await expect(page.getByText("Liam O'Brien")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Sofia Marchetti')).toBeVisible({ timeout: 10_000 });
   });
 
   test('live board shows race name and classification section', async ({ page }) => {
     await page.goto(`/live/${SEED.RACE_A_ID}`);
 
-    // Race name from seed
+    // Race name in the h1 — hard-coded from seed data.
     await expect(page.getByText('A Race — Scratch 20 laps')).toBeVisible({
       timeout: 10_000,
     });
 
-    // Classification header
+    // The standings section renders an h2 "Classification" below the header.
     await expect(
       page.getByRole('heading', { name: /classification/i })
     ).toBeVisible({ timeout: 10_000 });
@@ -74,14 +78,18 @@ test.describe('Public spectator surfaces', () => {
     await page.goto(`/results/${SEED.PUBLISHED_EVENT_ID}`);
     await expect(page).toHaveURL(/\/results\//);
 
-    // Event title from seed
+    // Event title in the h1 masthead — renders after the event row loads.
     await expect(
       page.getByText('Friday Night Racing — E2E Test Event')
     ).toBeVisible({ timeout: 10_000 });
 
-    // Both races listed
-    await expect(page.getByText('A Race — Scratch 20 laps')).toBeVisible();
-    await expect(page.getByText('B Race — Scratch 15 laps')).toBeVisible();
+    // Both races are listed below the event header.
+    await expect(page.getByText('A Race — Scratch 20 laps')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText('B Race — Scratch 15 laps')).toBeVisible({
+      timeout: 10_000,
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -91,26 +99,30 @@ test.describe('Public spectator surfaces', () => {
   test('announce page renders for a published race', async ({ page }) => {
     await page.goto(`/announce/${SEED.RACE_A_ID}`);
 
-    // Announcer masthead kicker
+    // The race name is the h1 inside the announcer header — same data-load
+    // signal as the live board. Use it as the primary anchor.
+    await expect(
+      page.getByRole('heading', { name: 'A Race — Scratch 20 laps' })
+    ).toBeVisible({ timeout: 10_000 });
+
+    // The kicker paragraph "SplitSync // announcer view" is rendered by the
+    // same AnnouncerView component, so it appears at the same time.
     await expect(
       page.getByText(/announcer view/i)
     ).toBeVisible({ timeout: 10_000 });
-
-    // Race name
-    await expect(page.getByText('A Race — Scratch 20 laps')).toBeVisible({
-      timeout: 10_000,
-    });
   });
 
   test('announce page shows current leader from seed crossings', async ({ page }) => {
     await page.goto(`/announce/${SEED.RACE_A_ID}`);
 
-    // Leader section is present
+    // The announcer "Current leader" section always renders once data loads.
+    // Wait for it as the primary anchor before checking rider-specific content.
     await expect(page.getByText(/current leader/i)).toBeVisible({
       timeout: 10_000,
     });
 
-    // Maya Chen (bib 12) crossed first — she should be the leader
+    // Maya Chen (bib 12) crossed first in the seed data — she should be
+    // shown in the leader hero section of the announcer view.
     await expect(page.getByText('Maya Chen')).toBeVisible({ timeout: 10_000 });
   });
 
@@ -121,7 +133,8 @@ test.describe('Public spectator surfaces', () => {
   test('startlist is not accessible to unauthenticated spectators', async ({ page }) => {
     await page.goto(`/startlist/${SEED.RACE_A_ID}`);
 
-    // The page should gate entry with a sign-in prompt.
+    // The startlist page gates unauthenticated visitors with an h1
+    // "Sign-in required" message (rendered by the !user || !role branch).
     await expect(page.getByText(/sign.?in required/i)).toBeVisible({
       timeout: 10_000,
     });
@@ -138,14 +151,19 @@ test.describe('Public spectator surfaces', () => {
     await page.goto('/help');
     await expect(page).toHaveURL('/help');
 
-    // Help page has an h1
+    // The help page is statically rendered (no Supabase), so a short timeout
+    // is enough. The h1 reads "Help".
     await expect(
       page.locator('h1').filter({ hasText: /help/i })
     ).toBeVisible({ timeout: 5_000 });
 
-    // Contains spectator and organizer sections
-    await expect(page.getByText(/for spectators/i).first()).toBeVisible();
-    await expect(page.getByText(/for organizers/i).first()).toBeVisible();
+    // Two sections labelled "For spectators" and "For organizers".
+    await expect(page.getByText(/for spectators/i).first()).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page.getByText(/for organizers/i).first()).toBeVisible({
+      timeout: 5_000,
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -169,10 +187,13 @@ test.describe('Public spectator surfaces', () => {
   test('live board exposes no organizer controls', async ({ page }) => {
     await page.goto(`/live/${SEED.RACE_A_ID}`);
 
-    // Wait for data to load so we're not asserting on a blank page.
-    await expect(page.getByText('Maya Chen')).toBeVisible({ timeout: 10_000 });
+    // The race name h1 is the earliest reliable "data loaded" signal — it
+    // renders as soon as the race row loads, before entries/crossings.
+    await expect(
+      page.getByRole('heading', { name: 'A Race — Scratch 20 laps' })
+    ).toBeVisible({ timeout: 10_000 });
 
-    // Organizer-only actions must not be present.
+    // Organizer-only actions must not be present on the public live board.
     await expect(
       page.getByRole('button', { name: /start race/i })
     ).not.toBeVisible();
@@ -187,10 +208,12 @@ test.describe('Public spectator surfaces', () => {
   test('announce page exposes no organizer controls', async ({ page }) => {
     await page.goto(`/announce/${SEED.RACE_A_ID}`);
 
-    await expect(page.getByText(/announcer view/i)).toBeVisible({
-      timeout: 10_000,
-    });
+    // Wait for the announcer page to fully load using the race name h1.
+    await expect(
+      page.getByRole('heading', { name: 'A Race — Scratch 20 laps' })
+    ).toBeVisible({ timeout: 10_000 });
 
+    // Organizer-only actions must not be present on the public announcer view.
     await expect(
       page.getByRole('button', { name: /start race/i })
     ).not.toBeVisible();
