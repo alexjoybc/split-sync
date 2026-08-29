@@ -12,11 +12,13 @@ Downhill MTB, ski racing, and similar disciplines use a different format entirel
 
 This ADR defines how that format fits into SplitSync's existing data model and UI conventions, and deliberately scopes the first milestone down to keep the change small.
 
-## Scope decision: solo only
+## Scope decision: free-start (multiple riders on course simultaneously)
 
-This milestone supports exactly **one rider on course at a time**. Dual/pair time-trial formats (two riders released together, e.g. dual-slalom-style) are a real, requested future need but are explicitly deferred — the queue, on-course, and progress-bar model below all assume a single current rider. Extending to pairs later is expected to need its own ADR (likely a `riders_per_start` config plus pairing logic for the queue), not a reinterpretation of this one.
+Riders are released one at a time by an operator tap, but any number may be on course simultaneously — each with their own independent elapsed timer. This supports real alpine/ski start protocols where the starter releases a new rider as soon as the previous rider has cleared the first gate, without waiting for a finish.
 
-Starts are always **operator-triggered** — either an immediate tap or an on-screen 5-4-3-2-1 countdown that fires the start tap automatically at zero. There is no clock-scheduled/interval-start mode in this milestone (e.g. "everyone starts automatically every 30 seconds from a fixed race start time"); a human always initiates each start, matching how these events are actually run in the field (a starter releases each rider when the course/gate is clear).
+Dual/pair starts (two riders released together and timed as a pair) remain deferred.
+
+Starts are always **operator-triggered** — immediate tap or countdown-to-tap. No clock-scheduled interval starts.
 
 ## Decision
 
@@ -63,7 +65,7 @@ This gives spectators and organizers a meaningful "how's this run going" signal 
 
 Following the project's existing spectator/organizer styling split (`globals.css`'s `race-*` vs. `race-*--muted` tokens):
 
-- **Organizer scorer** (`/score/[raceId]`, muted styling) and the **mobile tracker** (same flow, native): three row-style sections — **Up Next** (queue), **On Course** (current rider, live timer, progress bar, Start/Finish controls), **Finished** (results so far). Start offers both an immediate tap and a countdown-then-tap (length from `time_trial_countdown_seconds`, with an audible beep each second and a distinct final beep, cancelable mid-countdown). Only one entry may be `running` at a time — the UI hides/disables Start while that's true, enforcing the solo-only scope decision above at the UI layer (the data model doesn't need to enforce it, since nothing stops two riders from technically having overlapping crossings — this milestone simply never produces that state through the UI).
+- **Organizer scorer** (`/score/[raceId]`, muted styling) and the **mobile tracker** (same flow, native): three row-style sections — **Up Next** (queue), **On Course** (all current runners, each with their own live timer, progress bar, and Finish button), **Finished** (results so far). Start offers both an immediate tap and a countdown-then-tap (length from `time_trial_countdown_seconds`, with an audible beep each second and a distinct final beep, cancelable mid-countdown). Start controls are always visible as long as the queue is non-empty — any number of entries may be `running` simultaneously, each tracked by an independent per-rider timer sub-component.
 - **Spectator live board** (`/live/[raceId]`, full red/yellow styling): a "Now Running" hero row (live timer + progress bar), an "Up Next" row list, and a results table ranked by elapsed time, with the same DNS/DNF/DSQ handling convention as the mass-start board.
 - **Results page** (`/results/[eventId]`): labels these races "Time trial" instead of "N laps" / "Timed race".
 - **Announcer view** (`/announce/[raceId]`): must not render lap-based standings for a time-trial race — at minimum it shows the elapsed-time results table and the current on-course rider. A fully announcer-optimized time-trial layout is an acceptable fast-follow, but misleading lap counts are not.

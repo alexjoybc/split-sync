@@ -183,6 +183,82 @@ function fmtElapsedMs(ms: number): string {
   return `${s}.${tenths}s`;
 }
 
+/** Per-runner card on the live spectator board with its own timer. */
+function LiveRunnerCard({
+  runner,
+  fastestMs,
+}: {
+  runner: TimeTrialRow;
+  fastestMs: number | null;
+}) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => { setNowMs(Date.now()); }, [runner.bib]);
+  useEffect(() => {
+    if (!runner.startedAt) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [runner.bib, runner.startedAt]);
+
+  const elapsedMs = runner.startedAt != null ? nowMs - runner.startedAt : 0;
+  const progress = getProgress(elapsedMs, fastestMs);
+
+  return (
+    <div className="flex items-center gap-3 border-t border-zinc-200 px-4 py-3">
+      <span className="inline-flex min-w-10 justify-center bg-zinc-950 px-2 py-1 text-sm font-black tabular-nums text-white">
+        #{runner.bib}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-black uppercase">{runner.name}</p>
+        {runner.team && (
+          <p className="text-xs font-bold uppercase text-zinc-500">{runner.team}</p>
+        )}
+        <div className="mt-1 h-2 w-full bg-zinc-200">
+        {progress.indeterminate ? (
+          <div className="h-2 w-full animate-pulse bg-race-yellow" />
+        ) : (
+          <div
+            className={`h-2 transition-all ${progress.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
+            style={{ width: `${progress.pct}%` }}
+          />
+        )}
+        </div>
+        {progress.overtimeMs != null && (
+          <p className="text-[10px] font-black text-race-red">+{fmtElapsedMs(progress.overtimeMs)} over best</p>
+        )}
+      </div>
+      <span className="ml-auto shrink-0 text-lg font-black tabular-nums text-race-red">
+        {fmtElapsedMs(elapsedMs)}
+      </span>
+    </div>
+  );
+}
+
+function computeRunningEntries(crossings: Crossing[], entries: Entry[]): TimeTrialRow[] {
+  const crossingCountByBib = new Map<string, number>();
+  for (const cr of crossings) {
+    if (!cr.deleted_at) crossingCountByBib.set(cr.bib, (crossingCountByBib.get(cr.bib) ?? 0) + 1);
+  }
+  return entries
+    .filter((e) => e.status === "ok" && crossingCountByBib.get(e.bib) === 1)
+    .map((e) => {
+      const startCrossing = crossings
+        .filter((cr) => cr.bib === e.bib && !cr.deleted_at)
+        .sort((a, b) => new Date(a.client_recorded_at).getTime() - new Date(b.client_recorded_at).getTime())[0];
+      return {
+        bib: e.bib,
+        name: e.name,
+        team: e.team ?? null,
+        phase: "running" as const,
+        startedAt: startCrossing ? new Date(startCrossing.client_recorded_at).getTime() : null,
+        finishedAt: null,
+        elapsedMs: null,
+        position: null,
+        gapText: "",
+        status: "ok" as const,
+      } satisfies TimeTrialRow;
+    });
+}
+
 function TimeTrialBoard({
   race,
   entries,
@@ -195,61 +271,33 @@ function TimeTrialBoard({
   const queue = useMemo(() => computeTimeTrialQueue(crossings, entries), [crossings, entries]);
   const results = useMemo(() => computeTimeTrialResults(crossings, entries), [crossings, entries]);
 
-  const running: TimeTrialRow | null = useMemo(() => {
-    const crossingCountByBib = new Map<string, number>();
-    for (const cr of crossings) {
-      if (!cr.deleted_at) crossingCountByBib.set(cr.bib, (crossingCountByBib.get(cr.bib) ?? 0) + 1);
-    }
-    const runningBib = [...crossingCountByBib.entries()].find(([, count]) => count === 1)?.[0] ?? null;
-    if (!runningBib) return null;
-    const entry = entries.find((e) => e.bib === runningBib);
-    if (!entry || entry.status !== "ok") return null;
-    const startedAt = (() => {
-      const first = crossings
-        .filter((cr) => cr.bib === runningBib && !cr.deleted_at)
-        .sort(
-          (a, b) =>
-            new Date(a.client_recorded_at).getTime() - new Date(b.client_recorded_at).getTime()
-        )[0];
-      return first ? new Date(first.client_recorded_at).getTime() : null;
-    })();
-    return {
-      bib: entry.bib,
-      name: entry.name,
-      team: entry.team ?? null,
-      phase: "running",
-      startedAt,
-      finishedAt: null,
-      elapsedMs: null,
-      position: null,
-      gapText: "",
-      status: "ok",
-    } satisfies TimeTrialRow;
-  }, [crossings, entries]);
+  const runningEntries: TimeTrialRow[] = useMemo(
+    () => computeRunningEntries(crossings, entries),
+    [crossings, entries]
+  );
 
   const fastestMs: number | null = useMemo(() => {
     const finished = results.filter((r) => r.phase === "finished" && r.elapsedMs != null);
     return finished.length > 0 ? Math.min(...finished.map((r) => r.elapsedMs!)) : null;
   }, [results]);
 
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  // Reset nowMs immediately when a new runner starts so elapsed is correct right away
+  // Single hero runner (used when exactly 1 runner is on course)
+  const singleRunner = runningEntries.length === 1 ? runningEntries[0] : null;
+  const [heroNowMs, setHeroNowMs] = useState(() => Date.now());
+  useEffect(() => { setHeroNowMs(Date.now()); }, [singleRunner?.bib]);
   useEffect(() => {
-    setNowMs(Date.now());
-  }, [running?.bib]);
-  useEffect(() => {
-    if (!running) return;
-    const timer = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, [running?.bib]);
+    if (!singleRunner?.startedAt) return;
+    const t = setInterval(() => setHeroNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [singleRunner?.bib, singleRunner?.startedAt]);
 
-  const elapsedMs = running?.startedAt != null ? nowMs - running.startedAt : 0;
-  const progress = getProgress(elapsedMs, fastestMs);
+  const heroElapsedMs = singleRunner?.startedAt != null ? heroNowMs - singleRunner.startedAt : 0;
+  const heroProgress = singleRunner ? getProgress(heroElapsedMs, fastestMs) : null;
 
   // How many finished riders are currently faster → projectedPosition = that count + 1
-  const projectedPosition: number | null = running
+  const projectedPosition: number | null = singleRunner
     ? results.filter(
-        (r) => r.phase === "finished" && r.elapsedMs != null && r.elapsedMs < elapsedMs
+        (r) => r.phase === "finished" && r.elapsedMs != null && r.elapsedMs < heroElapsedMs
       ).length + 1
     : null;
   const showRank = results.some((r) => r.phase === "finished");
@@ -261,28 +309,33 @@ function TimeTrialBoard({
 
   return (
     <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
-      {/* Now Running hero */}
+      {/* Now Running section */}
       <div className="mb-6 border-4 border-zinc-950 bg-white">
         <div className="border-b-2 border-zinc-950 bg-zinc-950 px-4 py-2">
           <p className="text-[10px] font-black uppercase tracking-[0.24em] text-race-yellow">
-            Now on course
+            Now on course{runningEntries.length > 1 ? ` (${runningEntries.length})` : ""}
           </p>
         </div>
-        {running ? (
+        {runningEntries.length === 0 ? (
+          <p className="px-4 py-5 text-sm font-black uppercase text-zinc-500">
+            Waiting for next rider
+          </p>
+        ) : runningEntries.length === 1 && singleRunner ? (
+          /* Hero layout for a single runner */
           <div className="p-4">
             <div className="flex items-baseline gap-3">
               <span className="inline-flex min-w-10 justify-center bg-zinc-950 px-2 py-1 text-xl font-black tabular-nums text-white">
-                #{running.bib}
+                #{singleRunner.bib}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xl font-black uppercase">{running.name}</p>
-                {running.team && (
-                  <p className="text-xs font-bold uppercase text-zinc-500">{running.team}</p>
+                <p className="truncate text-xl font-black uppercase">{singleRunner.name}</p>
+                {singleRunner.team && (
+                  <p className="text-xs font-bold uppercase text-zinc-500">{singleRunner.team}</p>
                 )}
               </div>
               <span className="ml-auto flex items-baseline gap-2">
                 <span className="text-3xl font-black tabular-nums text-race-red">
-                  {fmtElapsedMs(elapsedMs)}
+                  {fmtElapsedMs(heroElapsedMs)}
                 </span>
                 {showRank && projectedPosition != null && (
                   <span
@@ -294,25 +347,28 @@ function TimeTrialBoard({
               </span>
             </div>
             <div className="mt-3 h-3 w-full bg-zinc-300">
-              {progress.indeterminate ? (
+              {heroProgress?.indeterminate ? (
                 <div className="h-3 w-full animate-pulse bg-race-yellow" />
               ) : (
                 <div
-                  className={`h-3 transition-all ${progress.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
-                  style={{ width: `${progress.pct}%` }}
+                  className={`h-3 transition-all ${heroProgress?.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
+                  style={{ width: `${heroProgress?.pct ?? 0}%` }}
                 />
               )}
             </div>
-            {progress.overtimeMs != null && (
+            {heroProgress?.overtimeMs != null && (
               <p className="mt-1 text-xs font-black text-race-red">
-                +{fmtElapsedMs(progress.overtimeMs)} over best
+                +{fmtElapsedMs(heroProgress.overtimeMs)} over best
               </p>
             )}
           </div>
         ) : (
-          <p className="px-4 py-5 text-sm font-black uppercase text-zinc-500">
-            Waiting for next rider
-          </p>
+          /* Compact rows for 2+ runners */
+          <div>
+            {runningEntries.map((runner) => (
+              <LiveRunnerCard key={runner.bib} runner={runner} fastestMs={fastestMs} />
+            ))}
+          </div>
         )}
       </div>
 

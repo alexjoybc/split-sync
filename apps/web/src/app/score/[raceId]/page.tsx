@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/useAuth";
 import { canManageEvent, canManagePenalties, canScore, useEventAccess } from "@/lib/useEventAccess";
 import { RaceNav } from "@/components/RaceNav";
 import type { Entry, EntryStatus, PenaltyType, Race, Crossing } from "@/lib/types";
-import { computeTimeTrialQueue, computeTimeTrialResults, getProgress } from "@/lib/timeTrial";
+import { computeTimeTrialQueue, computeTimeTrialResults, getProgress, type TimeTrialRow } from "@/lib/timeTrial";
 
 const STATUS_OPTIONS: { value: EntryStatus; label: string }[] = [
   { value: "ok", label: "OK" },
@@ -108,17 +108,81 @@ interface TimeTrialScorerProps {
   onUndo: (crossingId: string) => Promise<void>;
 }
 
-function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTrialScorerProps) {
+/** Per-runner card with its own independent elapsed timer. */
+function RunnerCard({
+  runner,
+  fastestMs,
+  results,
+  onFinish,
+}: {
+  runner: TimeTrialRow;
+  fastestMs: number | null;
+  results: TimeTrialRow[];
+  onFinish: (bib: string) => void;
+}) {
   const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => { setNowMs(Date.now()); }, [runner.bib]);
+  useEffect(() => {
+    if (!runner.startedAt) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [runner.bib, runner.startedAt]);
+
+  const elapsedMs = runner.startedAt != null ? nowMs - runner.startedAt : 0;
+  const progress = getProgress(elapsedMs, fastestMs);
+  const projectedPosition = results.filter(
+    (r) => r.phase === "finished" && r.elapsedMs != null && r.elapsedMs < elapsedMs
+  ).length + 1;
+  const showRank = results.some((r) => r.phase === "finished");
+
+  return (
+    <div className="border-2 border-race-ink bg-race-panel p-4 space-y-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-2xl font-black tabular-nums text-race-ink">#{runner.bib}</p>
+          <p className="text-sm font-black uppercase text-race-ink">{runner.name}</p>
+          <p className="mt-1 text-lg font-black tabular-nums text-race-muted">
+            {fmtElapsedMs(elapsedMs)}
+          </p>
+          {showRank && (
+            <p className="text-xs font-bold text-race-muted">
+              Projected P{projectedPosition}
+            </p>
+          )}
+          {progress.overtimeMs != null && (
+            <p className="text-xs font-bold text-race-red">
+              +{fmtElapsedMs(progress.overtimeMs)} over best
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => onFinish(runner.bib)}
+          className="race-action--muted race-action--yellow min-h-[44px]"
+        >
+          Finish
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-3 w-full border border-race-muted bg-zinc-100 overflow-hidden">
+        {progress.indeterminate ? (
+          <div className="h-full w-1/3 bg-race-yellow animate-pulse" />
+        ) : (
+          <div
+            className={`h-full transition-all duration-1000 ${progress.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
+            style={{ width: `${progress.pct ?? 0}%` }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTrialScorerProps) {
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-
-  // Live clock tick — every second
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   // Cleanup countdown interval on unmount
   useEffect(() => {
@@ -130,7 +194,33 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
   const queue = useMemo(() => computeTimeTrialQueue(crossings, entries), [crossings, entries]);
   const results = useMemo(() => computeTimeTrialResults(crossings, entries), [crossings, entries]);
 
-  const running = useMemo(() => results.find((r) => r.phase === "running") ?? null, [results]);
+  // All entries currently on course (exactly 1 crossing each)
+  const runningEntries: TimeTrialRow[] = useMemo(() => {
+    const crossingCountByBib = new Map<string, number>();
+    for (const c of crossings) {
+      if (!c.deleted_at) crossingCountByBib.set(c.bib, (crossingCountByBib.get(c.bib) ?? 0) + 1);
+    }
+    return entries
+      .filter((e) => e.status === "ok" && crossingCountByBib.get(e.bib) === 1)
+      .map((e) => {
+        const startCrossing = crossings
+          .filter((c) => c.bib === e.bib && !c.deleted_at)
+          .sort((a, b) => new Date(a.client_recorded_at).getTime() - new Date(b.client_recorded_at).getTime())[0];
+        return {
+          bib: e.bib,
+          name: e.name,
+          team: e.team ?? null,
+          phase: "running" as const,
+          startedAt: startCrossing ? new Date(startCrossing.client_recorded_at).getTime() : null,
+          finishedAt: null,
+          elapsedMs: null,
+          position: null,
+          gapText: "",
+          status: "ok" as const,
+        };
+      });
+  }, [crossings, entries]);
+
   const finished = useMemo(
     () =>
       results
@@ -189,23 +279,6 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
     }, 1000);
   }
 
-  // Reset nowMs immediately when a new runner starts so elapsed is correct right away
-  // (placed after `running` is computed so the dependency reference is valid)
-  useEffect(() => {
-    setNowMs(Date.now());
-  }, [running?.bib]);
-
-  // Progress bar for running rider
-  const elapsedMs = running?.startedAt != null ? nowMs - running.startedAt : 0;
-  const progress = running ? getProgress(elapsedMs, bestMs) : null;
-
-  // How many finished riders are currently faster → projectedPosition = that count + 1
-  const projectedPosition: number | null = running
-    ? results.filter(
-        (r) => r.phase === "finished" && r.elapsedMs != null && r.elapsedMs < elapsedMs
-      ).length + 1
-    : null;
-  const showRank = results.some((r) => r.phase === "finished");
 
   return (
     <div className="mt-6 space-y-6">
@@ -256,82 +329,55 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
           </div>
         )}
 
-        {running ? (
+        {/* All on-course runners */}
+        {runningEntries.length > 0 && (
+          <div className="space-y-3 mb-3">
+            {runningEntries.map((runner) => (
+              <RunnerCard
+                key={runner.bib}
+                runner={runner}
+                fastestMs={bestMs}
+                results={results}
+                onFinish={onFinish}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Start controls — always shown when queue is non-empty */}
+        {nextInQueue && countdown === null && (
           <div className="border-2 border-race-ink bg-race-panel p-4 space-y-3">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-2xl font-black tabular-nums text-race-ink">#{running.bib}</p>
-                <p className="text-sm font-black uppercase text-race-ink">{running.name}</p>
-                <p className="mt-1 text-lg font-black tabular-nums text-race-muted">
-                  {fmtElapsedMs(elapsedMs)}
-                  {showRank && projectedPosition != null && (
-                    <span
-                      className={`ml-2 inline-block px-2 py-0.5 text-xs font-black tabular-nums ${projectedPosition === 1 ? "bg-race-yellow text-race-ink" : "bg-zinc-200 text-zinc-800"}`}
-                    >
-                      P{projectedPosition}
-                    </span>
-                  )}
-                </p>
-                {progress?.overtimeMs != null && (
-                  <p className="text-xs font-bold text-race-red">
-                    +{fmtElapsedMs(progress.overtimeMs)} over best
-                  </p>
-                )}
-              </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-wide text-race-muted mb-1">
+                Ready to start
+              </p>
+              <p className="text-2xl font-black tabular-nums text-race-ink">
+                #{nextInQueue.bib}
+              </p>
+              <p className="text-sm font-black uppercase text-race-ink">{nextInQueue.name}</p>
+            </div>
+            <div className="flex gap-3 flex-wrap">
               <button
                 type="button"
-                onClick={() => onFinish(running.bib)}
+                onClick={() => onStart(nextInQueue.bib)}
                 className="race-action--muted race-action--yellow min-h-[44px]"
               >
-                Finish
+                Start now
               </button>
-            </div>
-
-            {/* Progress bar */}
-            <div className="h-3 w-full border border-race-muted bg-zinc-100 overflow-hidden">
-              {progress?.indeterminate ? (
-                <div className="h-full w-1/3 bg-race-yellow animate-pulse" />
-              ) : (
-                <div
-                  className={`h-full transition-all duration-1000 ${progress?.overtimeMs != null ? "bg-race-red" : "bg-race-yellow"}`}
-                  style={{ width: `${progress?.pct ?? 0}%` }}
-                />
+              {race.time_trial_countdown_seconds > 0 && (
+                <button
+                  type="button"
+                  onClick={() => startCountdown(nextInQueue.bib, race.time_trial_countdown_seconds)}
+                  className="race-action--muted min-h-[44px]"
+                >
+                  Start countdown ({race.time_trial_countdown_seconds}s)
+                </button>
               )}
             </div>
           </div>
-        ) : nextInQueue ? (
-          countdown === null && (
-            <div className="border-2 border-race-ink bg-race-panel p-4 space-y-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-wide text-race-muted mb-1">
-                  Ready to start
-                </p>
-                <p className="text-2xl font-black tabular-nums text-race-ink">
-                  #{nextInQueue.bib}
-                </p>
-                <p className="text-sm font-black uppercase text-race-ink">{nextInQueue.name}</p>
-              </div>
-              <div className="flex gap-3 flex-wrap">
-                <button
-                  type="button"
-                  onClick={() => onStart(nextInQueue.bib)}
-                  className="race-action--muted race-action--yellow min-h-[44px]"
-                >
-                  Start now
-                </button>
-                {race.time_trial_countdown_seconds > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => startCountdown(nextInQueue.bib, race.time_trial_countdown_seconds)}
-                    className="race-action--muted min-h-[44px]"
-                  >
-                    Start countdown ({race.time_trial_countdown_seconds}s)
-                  </button>
-                )}
-              </div>
-            </div>
-          )
-        ) : (
+        )}
+
+        {runningEntries.length === 0 && !nextInQueue && (
           <p className="text-xs font-bold text-race-muted">All riders have finished.</p>
         )}
       </section>
