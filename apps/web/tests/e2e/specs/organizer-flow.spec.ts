@@ -71,13 +71,13 @@ test.describe('Organizer flow', () => {
     // ── 4. Add participants to the roster ──────────────────────────────────
     // The roster form has Bib / First name / Last name inputs.
     // Pressing Enter on any input calls addParticipant (handleRiderKeyDown).
-    await page.getByPlaceholder('Bib').fill('1');
+    await page.getByPlaceholder('Bib', { exact: true }).fill('1');
     await page.getByPlaceholder('First name').fill('Alice');
     await page.getByPlaceholder('Last name').fill('Smith');
     await page.getByPlaceholder('Last name').press('Enter');
 
     // After submit the bib input regains focus; fill the second rider.
-    await page.getByPlaceholder('Bib').fill('2');
+    await page.getByPlaceholder('Bib', { exact: true }).fill('2');
     await page.getByPlaceholder('First name').fill('Bob');
     await page.getByPlaceholder('Last name').fill('Jones');
     await page.getByPlaceholder('Last name').press('Enter');
