@@ -81,6 +81,22 @@ export default function HelpPage() {
               bonus.
             </li>
             <li>
+              A <strong>time trial</strong> live board replaces the lap-count
+              standings with an elapsed-time view. The top hero shows the
+              rider currently on course with a live elapsed timer and a
+              progress bar relative to the best finished time so far. Once the
+              reference time exists, the bar turns red when a rider goes over
+              it. An <strong>Up Next</strong> queue lists the riders yet to
+              start in bib order. Below that, the <strong>Results</strong>{" "}
+              table ranks finishers by elapsed time ascending, with the leader
+              highlighted in yellow and gap times shown for every other
+              finisher. Riders with a{" "}
+              <strong>Review</strong> badge had more than two crossings
+              recorded — their best elapsed time is used but the organizer
+              should verify the data. DNS/DNF/DSQ riders appear below the
+              ranked finishers with their status badge.
+            </li>
+            <li>
               A red <strong>Penalty</strong> badge next to a rider&apos;s name
               means an official applied a time penalty, lap penalty, or
               relegation. Hover or tap the badge to see the reason. The

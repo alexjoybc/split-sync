@@ -15,6 +15,7 @@ import {
   getSprintLaps,
   getSprintResult,
 } from "@/lib/pointsRace";
+import { computeTimeTrialQueue, computeTimeTrialResults, getProgress, type TimeTrialRow } from "@/lib/timeTrial";
 import type { Crossing, Entry, Race } from "@/lib/types";
 
 type Mode = "announcer" | "tv";
@@ -376,6 +377,253 @@ function PointsOverlay({ race, crossings, entries }: { race: Race; crossings: Cr
   );
 }
 
+/** Format an elapsed millisecond value at tenths-of-a-second precision. */
+function fmtElapsedMs(ms: number): string {
+  const totalTenths = Math.round(ms / 100);
+  const tenths = totalTenths % 10;
+  const totalSecs = Math.floor(totalTenths / 10);
+  const s = totalSecs % 60;
+  const m = Math.floor(totalSecs / 60);
+  if (m > 0) return `${m}:${String(s).padStart(2, "0")}.${tenths}`;
+  return `${s}.${tenths}s`;
+}
+
+function TimeTrialAnnouncer({
+  entries,
+  crossings,
+}: {
+  entries: Entry[];
+  crossings: Crossing[];
+}) {
+  const results = useMemo(() => computeTimeTrialResults(crossings, entries), [crossings, entries]);
+  const queue = useMemo(() => computeTimeTrialQueue(crossings, entries), [crossings, entries]);
+
+  const running: TimeTrialRow | null = useMemo(() => {
+    const crossingCountByBib = new Map<string, number>();
+    for (const cr of crossings) {
+      if (!cr.deleted_at) crossingCountByBib.set(cr.bib, (crossingCountByBib.get(cr.bib) ?? 0) + 1);
+    }
+    const runningBib = [...crossingCountByBib.entries()].find(([, count]) => count === 1)?.[0] ?? null;
+    if (!runningBib) return null;
+    const entry = entries.find((e) => e.bib === runningBib);
+    if (!entry || entry.status !== "ok") return null;
+    const startedAt = (() => {
+      const first = crossings
+        .filter((cr) => cr.bib === runningBib && !cr.deleted_at)
+        .sort(
+          (a, b) =>
+            new Date(a.client_recorded_at).getTime() - new Date(b.client_recorded_at).getTime()
+        )[0];
+      return first ? new Date(first.client_recorded_at).getTime() : null;
+    })();
+    return {
+      bib: entry.bib,
+      name: entry.name,
+      team: entry.team ?? null,
+      phase: "running",
+      startedAt,
+      finishedAt: null,
+      elapsedMs: null,
+      position: null,
+      gapText: "",
+      status: "ok",
+    } satisfies TimeTrialRow;
+  }, [crossings, entries]);
+
+  const fastestMs: number | null = useMemo(() => {
+    const finished = results.filter((r) => r.phase === "finished" && r.elapsedMs != null);
+    return finished.length > 0 ? Math.min(...finished.map((r) => r.elapsedMs!)) : null;
+  }, [results]);
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running?.bib]);
+
+  const elapsedMs = running?.startedAt != null ? nowMs - running.startedAt : 0;
+  const progress = getProgress(elapsedMs, fastestMs);
+
+  const finishedResults = results.filter(
+    (r) => (r.phase === "finished" || r.phase === "needs-review") && r.status === "ok"
+  );
+  const dnsRows = results.filter((r) => r.status !== "ok");
+
+  return (
+    <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6">
+      {/* Now Running hero */}
+      <section className="mb-8 border-4 border-race-yellow bg-black/40 p-6">
+        <p className="text-xs font-black uppercase tracking-[0.24em] text-race-yellow">
+          Now on course
+        </p>
+        {running ? (
+          <div className="mt-3">
+            <div className="flex items-baseline gap-4">
+              <span className="inline-flex min-w-16 justify-center bg-race-yellow px-3 py-1.5 text-3xl font-black tabular-nums text-race-ink sm:text-4xl">
+                {running.bib}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-3xl font-black uppercase text-white sm:text-5xl">
+                  {running.name}
+                </p>
+                {running.team && (
+                  <p className="mt-1 truncate text-sm font-bold uppercase tracking-wide text-white/60 sm:text-base">
+                    {running.team}
+                  </p>
+                )}
+              </div>
+              <span className="shrink-0 text-4xl font-black tabular-nums text-race-yellow sm:text-5xl">
+                {fmtElapsedMs(elapsedMs)}
+              </span>
+            </div>
+            <div className="mt-4 h-4 w-full bg-white/20">
+              {progress.indeterminate ? (
+                <div className="h-4 w-full animate-pulse bg-race-yellow" />
+              ) : (
+                <div
+                  className="h-4 bg-race-yellow transition-all"
+                  style={{ width: `${progress.pct}%` }}
+                />
+              )}
+            </div>
+            {progress.overtimeMs != null && (
+              <p className="mt-2 text-sm font-black text-race-red">
+                +{fmtElapsedMs(progress.overtimeMs)} over best time
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="mt-3 text-2xl font-black uppercase text-white/50">
+            Waiting for next rider
+          </p>
+        )}
+      </section>
+
+      {/* Results table */}
+      <div className="overflow-hidden border-2 border-white/20">
+        <table className="w-full table-fixed border-collapse text-white">
+          <thead className="sticky top-0">
+            <tr className="bg-black text-left text-xs font-black uppercase tracking-[0.14em] text-white/60">
+              <th className="w-16 py-3 text-center">Pos</th>
+              <th className="w-20 border-l border-white/20 py-3 text-center">Bib</th>
+              <th className="border-l border-white/20 px-4 py-3">Rider</th>
+              <th className="w-28 border-l border-white/20 py-3 text-center">Elapsed</th>
+              <th className="w-24 border-l border-white/20 py-3 pr-4 text-right">Gap</th>
+            </tr>
+          </thead>
+          <tbody>
+            {finishedResults.map((row, index) => {
+              const isLeader = row.position === 1;
+              return (
+                <tr
+                  key={row.bib}
+                  className={classNames(
+                    "border-t border-white/10",
+                    isLeader
+                      ? "bg-race-yellow text-race-ink"
+                      : index % 2 === 0
+                        ? "bg-white/5"
+                        : "bg-transparent"
+                  )}
+                >
+                  <td className="py-4 text-center text-2xl font-black tabular-nums">
+                    {row.position ?? "—"}
+                  </td>
+                  <td className="border-l border-white/10 py-4 text-center">
+                    <span
+                      className={classNames(
+                        "inline-flex min-w-12 justify-center px-2 py-1 text-xl font-black tabular-nums",
+                        isLeader ? "bg-race-ink text-race-yellow" : "bg-white/10 text-white"
+                      )}
+                    >
+                      {row.bib}
+                    </span>
+                  </td>
+                  <td className="border-l border-white/10 px-4 py-4">
+                    <p className="truncate text-xl font-black uppercase">{row.name}</p>
+                    {row.team && (
+                      <p className="text-sm font-bold uppercase text-white/50">{row.team}</p>
+                    )}
+                    {row.phase === "needs-review" && (
+                      <span className="inline-flex px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] bg-white/20">
+                        Review
+                      </span>
+                    )}
+                  </td>
+                  <td className="border-l border-white/10 py-4 text-center text-xl font-black tabular-nums">
+                    {row.elapsedMs != null ? fmtElapsedMs(row.elapsedMs) : "—"}
+                  </td>
+                  <td className="border-l border-white/10 py-4 pr-4 text-right text-xl font-black tabular-nums">
+                    {row.gapText || "—"}
+                  </td>
+                </tr>
+              );
+            })}
+            {dnsRows.map((row) => (
+              <tr key={row.bib} className="border-t border-white/10 bg-transparent opacity-60">
+                <td className="py-4 text-center text-lg font-black uppercase text-white/50">
+                  {STATUS_LABEL[row.status] ?? row.status}
+                </td>
+                <td className="border-l border-white/10 py-4 text-center">
+                  <span className="inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-xl font-black tabular-nums text-white">
+                    {row.bib}
+                  </span>
+                </td>
+                <td className="border-l border-white/10 px-4 py-4 text-xl font-black uppercase">
+                  {row.name}
+                </td>
+                <td className="border-l border-white/10 py-4 text-center text-xl font-black tabular-nums">
+                  —
+                </td>
+                <td className="border-l border-white/10 py-4 pr-4 text-right text-xl font-black tabular-nums">
+                  —
+                </td>
+              </tr>
+            ))}
+            {finishedResults.length === 0 && dnsRows.length === 0 && (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="py-8 text-center text-base font-bold uppercase text-white/40"
+                >
+                  No results yet
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Up Next */}
+      {queue.length > 0 && (
+        <div className="mt-6">
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-white/50">
+            Up next
+          </p>
+          <ol className="divide-y-2 divide-white/10 border-y-2 border-white/10">
+            {queue.slice(0, 5).map((r) => (
+              <li key={r.bib} className="flex items-center gap-4 py-2">
+                <span className="inline-flex min-w-12 justify-center bg-white/10 px-2 py-1 text-lg font-black tabular-nums text-white">
+                  {r.bib}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-lg font-black uppercase text-white">
+                  {r.name}
+                </span>
+              </li>
+            ))}
+          </ol>
+          {queue.length > 5 && (
+            <p className="mt-2 text-xs font-bold uppercase text-white/40">
+              +{queue.length - 5} more
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AnnouncerView({ raceId }: { raceId: string }) {
   const { race, entries, crossings, penalties, loading } = useRaceData(raceId);
   const searchParams = useSearchParams();
@@ -438,11 +686,15 @@ function AnnouncerView({ raceId }: { raceId: string }) {
         </div>
       </header>
 
-      <CategoryTabs categories={categories} category={category} onChange={setCategory} />
-
-      {mode === "announcer" ? <AnnouncerBody standings={standings} recent={recent} now={now} /> : <TvBody standings={standings} />}
-
-      {race.is_points_race && <PointsOverlay race={race} crossings={scopedCrossings} entries={scopedEntries} />}
+      {race.is_time_trial ? (
+        <TimeTrialAnnouncer entries={entries} crossings={crossings} />
+      ) : (
+        <>
+          <CategoryTabs categories={categories} category={category} onChange={setCategory} />
+          {mode === "announcer" ? <AnnouncerBody standings={standings} recent={recent} now={now} /> : <TvBody standings={standings} />}
+          {race.is_points_race && <PointsOverlay race={race} crossings={scopedCrossings} entries={scopedEntries} />}
+        </>
+      )}
 
       <p className="mx-auto max-w-5xl px-4 pb-6 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-white/30 sm:px-6">
         Live unofficial classification · Updates automatically ·{" "}
