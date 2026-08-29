@@ -80,6 +80,7 @@ const test = base.extend<ScoringFixtures>({
       status: 'live',
       bibs: ['10', '20', '30'],
       accessToken,
+      userId: session.user.id,
     });
 
     // 3. Inject the Supabase session into the browser via localStorage so

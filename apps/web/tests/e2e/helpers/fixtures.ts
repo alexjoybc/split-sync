@@ -59,26 +59,35 @@ export async function buildEvent(opts: {
   bibs?: string[];
   /** JWT access token for the organizer who will own this event. */
   accessToken?: string;
+  /** JWT sub (user.id) — required when accessToken is provided so owner_id satisfies the RLS WITH CHECK. */
+  userId?: string;
 } = {}): Promise<{ eventId: string; raceId: string }> {
   const title  = opts.title  ?? `Test Event ${Date.now()}`;
   const status = opts.status ?? 'draft';
   const bibs   = opts.bibs   ?? ['1', '2', '3'];
   const client = opts.accessToken ? authedDb(opts.accessToken) : db();
 
-  // Event
+  // Event — include owner_id so the RLS WITH CHECK (owner_id = auth.jwt()->>'sub') passes.
+  const eventInsert: Record<string, unknown> = { title, sport_type: 'velodrome', status };
+  if (opts.userId) {
+    eventInsert.owner_id = opts.userId;
+  }
   const { data: event, error: eventErr } = await client
     .from('events')
-    .insert({ title, sport_type: 'velodrome', status })
+    .insert(eventInsert)
     .select('id')
     .single();
   if (eventErr) throw eventErr;
   const eventId = event.id as string;
 
-  // Participants — roster first (domain invariant #3)
+  // Participants — roster first (domain invariant #3).
+  // participants.name was replaced by first_name (NOT NULL) + last_name in
+  // migration 20260827000002_participant_first_last_name.sql.
   const participants = bibs.map((bib, i) => ({
     event_id: eventId,
     bib,
-    name: `Rider ${bib}`,
+    first_name: `Rider ${bib}`,
+    last_name: null as string | null,
     team: i % 2 === 0 ? 'Team A' : 'Team B',
   }));
   const { error: pErr } = await client.from('participants').insert(participants);
@@ -93,7 +102,7 @@ export async function buildEvent(opts: {
   if (raceErr) throw raceErr;
   const raceId = race.id as string;
 
-  // Entries from roster
+  // Entries from roster — entries.name is a frozen full-name snapshot (still valid).
   const entries = bibs.map((bib) => ({ race_id: raceId, bib, name: `Rider ${bib}` }));
   const { error: eErr } = await client.from('entries').insert(entries);
   if (eErr) throw eErr;
