@@ -13,7 +13,7 @@ type RecentCrossing = { client_id: string; bib: string; client_recorded_at: stri
 
 WebBrowser.maybeCompleteAuthSession();
 
-const colors = { paper: "#f4f1ea", panel: "#ffffff", ink: "#18181b", muted: "#71717a", red: "#ec1c24", yellow: "#f6d428", line: "#d4d1ca", ttSection: "#f0ece3", ttGreen: "#22c55e" };
+const colors = { paper: "#f4f1ea", panel: "#ffffff", ink: "#18181b", muted: "#71717a", red: "#ec1c24", yellow: "#f6d428", line: "#d4d1ca", ttSection: "#f0ece3" };
 
 function sortBibNatural(a: string, b: string): number {
   const na = parseInt(a, 10), nb = parseInt(b, 10);
