@@ -11,9 +11,12 @@
  *                            see a "Sign-in required" prompt, not rider data)
  *   /help                 — self-service help page
  *
- * Realtime assertion: a crossing inserted directly via the Supabase anon
- * client should trigger the Realtime subscription in `useRaceData` and
- * cause the live board to update without a page reload.
+ * Realtime assertion: a crossing inserted via an authenticated Supabase
+ * client (organizer role) should trigger the Realtime subscription in
+ * `useRaceData` and cause the live board to update without a page reload.
+ * The anon client cannot insert crossings — migration 20260825000004 revoked
+ * anon writes and the organizer_manage_crossings policy requires event
+ * ownership — so the test builds a fresh owned event.
  *
  * Seed data (from supabase/seed.sql):
  *   Published event  : a0000000-0000-0000-0000-000000000001
@@ -22,8 +25,13 @@
  *   B Race (3 entries, no crossings): b0000000-0000-0000-0000-000000000002
  */
 import { test, expect } from '@playwright/test';
+import { createClient } from '@supabase/supabase-js';
 import { SEED } from '../helpers/fixtures';
-import { createTestSupabaseClient } from '../helpers/supabase';
+import {
+  createTestOrganizer,
+  uniqueTestEmail,
+  signInProgrammatically,
+} from '../helpers/supabase';
 
 test.describe('Public spectator surfaces', () => {
   // ---------------------------------------------------------------------------
@@ -198,57 +206,98 @@ test.describe('Public spectator surfaces', () => {
   test('realtime: crossing appears on live board without page reload', async ({
     browser,
   }) => {
-    // B Race starts with no crossings (seed is clean).
-    // Open the live board in a spectator context first.
+    // The anon client cannot insert crossings: migration 20260825000004 revokes
+    // anon writes and the `organizer manage crossings` RLS policy requires
+    // events.owner_id = auth.jwt()->>'sub'. Seed events have owner_id = null,
+    // so we must build a fresh owned event with an authenticated client.
+
+    const email = uniqueTestEmail('realtime-scorer');
+    const password = 'TestPass123!';
+    await createTestOrganizer(email, password);
+    const session = await signInProgrammatically(email, password);
+
+    const SUPABASE_URL =
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
+    const SUPABASE_ANON_KEY =
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7b6b7xNHPnjyxvFnDpvnuN51o4MXVToypGc';
+
+    // Pass the organizer's JWT in every request so RLS policies are satisfied.
+    const authedDb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: { Authorization: `Bearer ${session.session?.access_token}` },
+      },
+    });
+
+    // Create a 'live' event owned by the test user so:
+    //   • spectator RLS (status in ('live','finished')) allows reads
+    //   • organizer RLS (owner_id = jwt sub) allows crossing inserts
+    const ownerSub = session.user?.id ?? '';
+    const { data: event, error: eventErr } = await authedDb
+      .from('events')
+      .insert({
+        title: `Realtime Test Event ${Date.now()}`,
+        sport_type: 'velodrome',
+        status: 'live',
+        owner_id: ownerSub,
+      })
+      .select('id')
+      .single();
+    expect(eventErr).toBeNull();
+    const eventId = (event as { id: string }).id;
+
+    // Participants — first_name/last_name columns (name was dropped in
+    // migration 20260827000002).
+    const { error: pErr } = await authedDb.from('participants').insert([
+      { event_id: eventId, bib: '1', first_name: 'Alice', last_name: 'Scorer', team: 'Team A' },
+      { event_id: eventId, bib: '2', first_name: 'Bob',   last_name: 'Scorer', team: 'Team B' },
+    ]);
+    expect(pErr).toBeNull();
+
+    // Race (default status is 'upcoming'; entries are what matter for the board).
+    const { data: race, error: raceErr } = await authedDb
+      .from('races')
+      .insert({ event_id: eventId, name: 'Realtime Race', sequence_order: 1, laps_planned: 5 })
+      .select('id')
+      .single();
+    expect(raceErr).toBeNull();
+    const raceId = (race as { id: string }).id;
+
+    // Entries (entries.name is still a single text column).
+    const { error: eErr } = await authedDb.from('entries').insert([
+      { race_id: raceId, bib: '1', name: 'Alice Scorer', team: 'Team A' },
+      { race_id: raceId, bib: '2', name: 'Bob Scorer',   team: 'Team B' },
+    ]);
+    expect(eErr).toBeNull();
+
+    // Open the spectator live board in a separate browser context.
     const spectatorCtx = await browser.newContext();
     const spectatorPage = await spectatorCtx.newPage();
+    await spectatorPage.goto(`/live/${raceId}`);
 
-    await spectatorPage.goto(`/live/${SEED.RACE_B_ID}`);
-
-    // Wait for the board to load (shows entries even with 0 laps).
-    await expect(spectatorPage.getByText('Noah Kim')).toBeVisible({
+    // Wait for the board to load — entries are visible with 0 laps.
+    await expect(spectatorPage.getByText('Alice Scorer')).toBeVisible({
       timeout: 10_000,
     });
 
-    // Noah Kim should be in the standings with 0 laps initially.
-    // (The lap count cell for bib 55 shows "0".)
-    await expect(spectatorPage.getByText('Noah Kim')).toBeVisible();
-
-    // Insert a crossing via the Supabase anon client — this exercises the
-    // full realtime path (INSERT → Supabase Realtime → refetch → re-render).
-    const db = createTestSupabaseClient();
-    const { error } = await db.from('crossings').insert({
-      race_id: SEED.RACE_B_ID,
-      bib: '55', // Noah Kim
+    // Insert a crossing via the authenticated scorer client.
+    // This exercises the full realtime path:
+    //   authenticated INSERT → Supabase Realtime → useRaceData refetch → re-render
+    const { error: crossingErr } = await authedDb.from('crossings').insert({
+      race_id: raceId,
+      bib: '1', // Alice Scorer — no prior crossings in this fresh race
       client_id: crypto.randomUUID(),
       client_recorded_at: new Date().toISOString(),
     });
+    expect(crossingErr).toBeNull(); // hard assertion: fail explicitly if RLS blocks this
 
-    // If the insert failed (e.g., RLS blocks anon writes in this environment),
-    // skip the realtime assertion and note it — the page-render tests above
-    // already validate the surface.
-    if (error) {
-      // Anon client cannot insert crossings (RLS active) — realtime insert
-      // path not testable without scorer auth. The static render tests pass.
-      await spectatorCtx.close();
-      return;
-    }
-
-    // The live board subscribes to `crossings` changes via Supabase Realtime.
-    // After the insert, `useRaceData` refetches and Noah Kim's lap count
-    // should advance to 1 — the standings row is always present (just laps=0→1).
-    // We wait for the laps cell to show "1" near Noah Kim's row.
-    await expect(spectatorPage.getByText('Noah Kim')).toBeVisible({
-      timeout: 15_000,
-    });
-
-    // Verify Noah Kim now has 1 lap recorded. The standings table renders each
-    // row's lap count in a `<td>` adjacent to the rider name. We look for the
-    // lap count "1" to appear in the table body after the realtime update.
-    const noahRow = spectatorPage
+    // The live board subscribes to crossings changes via Supabase Realtime.
+    // After the insert, useRaceData refetches and Alice Scorer's lap count
+    // should advance to 1 — without any page reload.
+    const aliceRow = spectatorPage
       .locator('tbody tr')
-      .filter({ hasText: 'Noah Kim' });
-    await expect(noahRow.getByText('1')).toBeVisible({ timeout: 15_000 });
+      .filter({ hasText: 'Alice Scorer' });
+    await expect(aliceRow.getByText('1')).toBeVisible({ timeout: 15_000 });
 
     await spectatorCtx.close();
   });
