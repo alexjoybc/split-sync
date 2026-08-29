@@ -576,7 +576,7 @@ function TimeTrialAnnouncer({
               <th className="w-16 py-3 text-center">Pos</th>
               <th className="w-20 border-l border-white/20 py-3 text-center">Bib</th>
               <th className="border-l border-white/20 px-4 py-3">Rider</th>
-              <th className="w-28 border-l border-white/20 py-3 text-center">Elapsed</th>
+              <th className="w-28 border-l border-white/20 py-3 text-center">Time</th>
               <th className="w-24 border-l border-white/20 py-3 pr-4 text-right">Gap</th>
             </tr>
           </thead>

@@ -402,7 +402,7 @@ function TimeTrialBoard({
       <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-zinc-950 pb-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ec1c24]">
-            Elapsed time results
+            Live ranking by time
           </p>
           <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Classification</h2>
         </div>
@@ -414,7 +414,7 @@ function TimeTrialBoard({
               <th className="w-12 py-2 text-center sm:w-16">Pos</th>
               <th className="w-14 border-l border-zinc-700 py-2 text-center sm:w-16">Bib</th>
               <th className="border-l border-zinc-700 px-3 py-2">Rider</th>
-              <th className="w-24 border-l border-zinc-700 py-2 text-center sm:w-28">Elapsed</th>
+              <th className="w-24 border-l border-zinc-700 py-2 text-center sm:w-28">Time</th>
               <th className="w-20 border-l border-zinc-700 py-2 pr-2 text-right sm:w-24">Gap</th>
             </tr>
           </thead>
