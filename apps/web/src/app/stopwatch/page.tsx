@@ -25,10 +25,33 @@ export default function StopwatchPage() {
   const [displayMs, setDisplayMs] = useState(0);
   const [laps, setLaps] = useState<Lap[]>([]);
 
+  // Large-display mode (#230) — enlarged timer, best-effort browser fullscreen
+  const [largeMode, setLargeMode] = useState(false);
+  const enteredFullscreenRef = useRef(false);
+
   // Timing refs — not React state so they don't trigger re-renders in the RAF
   const startRef = useRef<number>(0);      // performance.now() at last resume
   const accRef = useRef<number>(0);        // ms accumulated before last pause
   const rafRef = useRef<number | null>(null);
+
+  // Screen wake lock (#230) — keep display on while running; feature-detected,
+  // degrades silently where unsupported (Firefox, older Safari)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  const acquireWakeLock = useCallback(async () => {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request("screen");
+      }
+    } catch {
+      // Unsupported, denied, or page not visible — degrade silently.
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(() => {
+    wakeLockRef.current?.release().catch(() => undefined);
+    wakeLockRef.current = null;
+  }, []);
 
   // Derived elapsed ms from refs
   const getElapsed = useCallback(() => {
@@ -63,17 +86,19 @@ export default function StopwatchPage() {
       if (state !== "running") return;
       if (document.hidden) {
         // Tab backgrounded: accumulate what we have, stop RAF
+        // (the browser auto-releases the wake lock on visibility loss)
         accRef.current = getElapsed();
         stopLoop();
       } else {
-        // Tab foregrounded: reset start anchor, restart RAF
+        // Tab foregrounded: reset start anchor, restart RAF, re-acquire wake lock
         startRef.current = performance.now();
         startLoop();
+        void acquireWakeLock();
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [state, getElapsed, startLoop, stopLoop]);
+  }, [state, getElapsed, startLoop, stopLoop, acquireWakeLock]);
 
   // ---------------------------------------------------------------------------
   // Controls
@@ -85,14 +110,16 @@ export default function StopwatchPage() {
       startRef.current = performance.now();
       setState("running");
       startLoop();
+      void acquireWakeLock();
     } else {
       // Stop / Pause
       accRef.current = getElapsed();
       stopLoop();
       setState("stopped");
       setDisplayMs(accRef.current);
+      releaseWakeLock();
     }
-  }, [state, getElapsed, startLoop, stopLoop]);
+  }, [state, getElapsed, startLoop, stopLoop, acquireWakeLock, releaseWakeLock]);
 
   const handleLap = useCallback(() => {
     if (state !== "running") return;
@@ -112,12 +139,51 @@ export default function StopwatchPage() {
 
   const handleReset = useCallback(() => {
     stopLoop();
+    releaseWakeLock();
     accRef.current = 0;
     startRef.current = 0;
     setState("idle");
     setDisplayMs(0);
     setLaps([]);
-  }, [stopLoop]);
+  }, [stopLoop, releaseWakeLock]);
+
+  // ---------------------------------------------------------------------------
+  // Large-display mode (#230)
+  // ---------------------------------------------------------------------------
+
+  const toggleLargeMode = useCallback(() => {
+    setLargeMode((prev) => {
+      const next = !prev;
+      if (next) {
+        // Best-effort fullscreen; large layout applies regardless of outcome
+        const el = document.documentElement;
+        if (typeof el.requestFullscreen === "function") {
+          el.requestFullscreen()
+            .then(() => {
+              enteredFullscreenRef.current = true;
+            })
+            .catch(() => undefined);
+        }
+      } else if (document.fullscreenElement) {
+        enteredFullscreenRef.current = false;
+        document.exitFullscreen().catch(() => undefined);
+      }
+      return next;
+    });
+  }, []);
+
+  // Leaving browser fullscreen (Esc / system UI) also exits large mode
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement && enteredFullscreenRef.current) {
+        enteredFullscreenRef.current = false;
+        setLargeMode(false);
+      }
+    };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () =>
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
 
   // Secondary pusher: lap when running, reset when stopped/idle
   const handleSecondary = useCallback(() => {
@@ -150,8 +216,14 @@ export default function StopwatchPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleStartStop, handleSecondary]);
 
-  // Cleanup RAF on unmount
-  useEffect(() => () => stopLoop(), [stopLoop]);
+  // Cleanup RAF + wake lock on unmount
+  useEffect(
+    () => () => {
+      stopLoop();
+      releaseWakeLock();
+    },
+    [stopLoop, releaseWakeLock]
+  );
 
   // ---------------------------------------------------------------------------
   // Derived display values
@@ -178,18 +250,20 @@ export default function StopwatchPage() {
       {/* Red topline — spectator surface */}
       <div className="race-topline" />
 
-      {/* Masthead */}
-      <header className="race-masthead no-print">
-        <div className="mx-auto flex max-w-lg items-end justify-between gap-4">
-          <div>
-            <p className="race-kicker">Solo timer</p>
-            <h1 className="race-title">Stopwatch</h1>
+      {/* Masthead — hidden in large-display mode to maximise the timer */}
+      {!largeMode && (
+        <header className="race-masthead no-print">
+          <div className="mx-auto flex max-w-lg items-end justify-between gap-4">
+            <div>
+              <p className="race-kicker">Solo timer</p>
+              <h1 className="race-title">Stopwatch</h1>
+            </div>
+            <Link href="/" className="race-action race-action--outline text-sm">
+              SplitSync
+            </Link>
           </div>
-          <Link href="/" className="race-action race-action--outline text-sm">
-            SplitSync
-          </Link>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Main content */}
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center px-4 pt-8 pb-12 sm:px-6">
@@ -210,7 +284,7 @@ export default function StopwatchPage() {
 
         {/* ── Dial ───────────────────────────────────────────────────────── */}
         <div
-          className="sw-dial"
+          className={largeMode ? "sw-dial sw-dial--large" : "sw-dial"}
           role="timer"
           aria-label={`Elapsed time: ${main}${sub}`}
           aria-live="off"
@@ -219,9 +293,13 @@ export default function StopwatchPage() {
             <span
               className="block"
               style={{
-                fontSize: showsHours
-                  ? "clamp(30px, 8.5vw, 46px)"
-                  : "clamp(44px, 12vw, 64px)",
+                fontSize: largeMode
+                  ? showsHours
+                    ? "clamp(48px, 16vmin, 132px)"
+                    : "clamp(64px, 22vmin, 180px)"
+                  : showsHours
+                    ? "clamp(30px, 8.5vw, 46px)"
+                    : "clamp(44px, 12vw, 64px)",
               }}
               aria-hidden="true"
             >
@@ -230,7 +308,9 @@ export default function StopwatchPage() {
             <span
               className="block"
               style={{
-                fontSize: "clamp(28px, 7vw, 38px)",
+                fontSize: largeMode
+                  ? "clamp(36px, 12vmin, 100px)"
+                  : "clamp(28px, 7vw, 38px)",
                 color: "var(--sw-digit-sub-color)",
               }}
               aria-hidden="true"
@@ -280,11 +360,26 @@ export default function StopwatchPage() {
         </div>
 
         {/* Keyboard hint */}
-        <p className="mt-4 text-center text-xs font-semibold text-race-muted">
-          <span className="sw-kbd">Space</span> start/stop
-          {" · "}
-          <span className="sw-kbd">L</span> lap
-        </p>
+        {!largeMode && (
+          <p className="mt-4 text-center text-xs font-semibold text-race-muted">
+            <span className="sw-kbd">Space</span> start/stop
+            {" · "}
+            <span className="sw-kbd">L</span> lap
+          </p>
+        )}
+
+        {/* Large-display / fullscreen toggle (#230) */}
+        <button
+          type="button"
+          className="race-action race-action--outline mt-4 text-xs"
+          onClick={toggleLargeMode}
+          aria-pressed={largeMode}
+          aria-label={
+            largeMode ? "Exit large display mode" : "Enter large display mode"
+          }
+        >
+          {largeMode ? "Exit large display" : "Large display"}
+        </button>
 
         {/* ── Lap list ───────────────────────────────────────────────────── */}
         {laps.length > 0 && (
@@ -336,8 +431,8 @@ export default function StopwatchPage() {
           </section>
         )}
 
-        {/* ── "Time together" stub ───────────────────────────────────────── */}
-        <div className="mt-10 text-center">
+        {/* ── "Time together" stub — hidden in large-display mode ────────── */}
+        <div className={largeMode ? "hidden" : "mt-10 text-center"}>
           <span
             className="sw-together-btn"
             title="Shared sessions coming soon (#182)"

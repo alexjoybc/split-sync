@@ -366,6 +366,17 @@ export default function HelpPage() {
               stopwatch anchors to a monotonic clock ({"`"}
               performance.now(){"`"}), not accumulated intervals.
             </li>
+            <li>
+              Tap <strong>Large display</strong> to enlarge the timer so it is
+              readable from a distance (the browser goes fullscreen where
+              supported). Press <strong>Esc</strong> or tap{" "}
+              <strong>Exit large display</strong> to return.
+            </li>
+            <li>
+              While the stopwatch is running, the screen is kept awake in
+              browsers that support the wake lock API — no need to fight the
+              screen-off timeout during a long effort.
+            </li>
           </ul>
         </section>
 
@@ -435,6 +446,12 @@ export default function HelpPage() {
               stopwatch; it disappears on stop or reset. The app asks for
               notification permission once — declining it never blocks timing
               and you won&apos;t be asked again.
+            </li>
+            <li>
+              Rotate the phone to <strong>landscape</strong> for a larger
+              display readable from a distance — the LCD digits grow to fill
+              the width while the buttons and lap list stay usable. Works on
+              both the shared session and solo stopwatch screens.
             </li>
           </ul>
         </section>

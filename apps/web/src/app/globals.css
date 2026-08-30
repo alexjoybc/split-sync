@@ -294,6 +294,12 @@ body {
   box-shadow: inset 0 4px 20px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(255,255,255,0.04);
 }
 
+/* Large-display mode (#230): dial grows toward the viewport's short axis so
+   the timer is readable from a distance in either orientation */
+.sw-dial--large {
+  --sw-bezel-size: min(86vmin, 640px);
+}
+
 /* 12-o'clock crown pip */
 .sw-dial::after {
   content: "";
