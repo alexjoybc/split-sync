@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { formatTime, formatLapTime } from "@/lib/stopwatchFormat";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,34 +14,6 @@ interface Lap {
   n: number;
   lapMs: number;      // this lap's duration
   totalMs: number;    // cumulative time at end of this lap
-}
-
-// ---------------------------------------------------------------------------
-// Timing helpers
-// ---------------------------------------------------------------------------
-
-/** Format milliseconds → MM:SS.hh */
-function formatTime(ms: number): { main: string; sub: string } {
-  const totalHundredths = Math.floor(ms / 10);
-  const hundredths = totalHundredths % 100;
-  const totalSeconds = Math.floor(ms / 1000);
-  const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60);
-  return {
-    main: `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
-    sub: `.${String(hundredths).padStart(2, "0")}`,
-  };
-}
-
-/** Format a lap duration → M:SS.hh (no leading zero on minutes) */
-function formatLapTime(ms: number): string {
-  const hundredths = Math.floor((ms % 1000) / 10);
-  const totalSeconds = Math.floor(ms / 1000);
-  const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60);
-  return minutes > 0
-    ? `${minutes}:${String(seconds).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`
-    : `${seconds}.${String(hundredths).padStart(2, "0")}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -185,6 +158,9 @@ export default function StopwatchPage() {
   // ---------------------------------------------------------------------------
 
   const { main, sub } = formatTime(displayMs);
+  // Past 1 hour the main readout grows from "MM:SS" to "H:MM:SS" — shrink the
+  // digits so the dial still fits on small screens (#225).
+  const showsHours = main.length > 5;
 
   const bestLapMs = laps.length > 0 ? Math.min(...laps.map((l) => l.lapMs)) : null;
 
@@ -228,7 +204,11 @@ export default function StopwatchPage() {
           <div className="sw-digits flex flex-col items-center">
             <span
               className="block"
-              style={{ fontSize: "clamp(44px, 12vw, 64px)" }}
+              style={{
+                fontSize: showsHours
+                  ? "clamp(30px, 8.5vw, 46px)"
+                  : "clamp(44px, 12vw, 64px)",
+              }}
               aria-hidden="true"
             >
               {main}

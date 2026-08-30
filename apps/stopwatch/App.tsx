@@ -150,8 +150,12 @@ function p2(n: number) {
 function fmtParts(ms: number) {
   const cs = Math.floor(ms / 10) % 100;
   const s = Math.floor(ms / 1000) % 60;
-  const m = Math.floor(ms / 60000);
-  return { main: `${m}:${p2(s)}`, cs: p2(cs) };
+  const totalM = Math.floor(ms / 60000);
+  const h = Math.floor(totalM / 60);
+  const m = totalM % 60;
+  // Roll over to H:MM:SS once elapsed >= 1 hour (#225)
+  const main = h > 0 ? `${h}:${p2(m)}:${p2(s)}` : `${m}:${p2(s)}`;
+  return { main, cs: p2(cs) };
 }
 
 function fmtCompact(ms: number) {
@@ -163,8 +167,11 @@ function fmtDelta(d: number) {
   const abs = Math.abs(d);
   const cs = Math.floor(abs / 10) % 100;
   const s = Math.floor(abs / 1000) % 60;
-  const m = Math.floor(abs / 60000);
+  const totalM = Math.floor(abs / 60000);
+  const h = Math.floor(totalM / 60);
+  const m = totalM % 60;
   const sign = d >= 0 ? "+" : "-";
+  if (h > 0) return `${sign}${h}:${p2(m)}:${p2(s)}.${p2(cs)}`;
   return m > 0
     ? `${sign}${m}:${p2(s)}.${p2(cs)}`
     : `${sign}${s}.${p2(cs)}`;
@@ -207,11 +214,16 @@ function LcdDisplay({
   fontLoaded: boolean;
 }) {
   const { main, cs } = fmtParts(ms);
-  const csSize = Math.round(mainSize * csRatio);
+  // The layout is sized for up to "MM:SS" (5 chars). Once hours kick in the
+  // main string grows to "H:MM:SS" (7+ chars); shrink digits proportionally so
+  // the 7-segment display still fits its row (#225).
+  const fitSize =
+    main.length > 5 ? Math.round((mainSize * 5) / main.length) : mainSize;
+  const csSize = Math.round(fitSize * csRatio);
   const font = fontLoaded ? "DSEG7Classic-Regular" : "monospace";
   const mainDim = main.replace(/\d/g, "8");
   const csDim = cs.replace(/\d/g, "8");
-  const baselineOffset = Math.round((mainSize - csSize) * 0.78);
+  const baselineOffset = Math.round((fitSize - csSize) * 0.78);
 
   return (
     <View
@@ -221,7 +233,7 @@ function LcdDisplay({
         <Text
           style={{
             fontFamily: font,
-            fontSize: mainSize,
+            fontSize: fitSize,
             color: dimColor,
             letterSpacing: 3,
             includeFontPadding: false,
@@ -234,7 +246,7 @@ function LcdDisplay({
         <Text
           style={{
             fontFamily: font,
-            fontSize: mainSize,
+            fontSize: fitSize,
             color,
             letterSpacing: 3,
             includeFontPadding: false,
@@ -251,7 +263,7 @@ function LcdDisplay({
       <View
         style={{
           flexShrink: 0,
-          marginBottom: Math.round(mainSize * 0.08),
+          marginBottom: Math.round(fitSize * 0.08),
           // baselineOffset is calculated but not used as a margin-bottom style here;
           // the parent alignItems:"flex-end" handles vertical alignment
           display: "flex",
