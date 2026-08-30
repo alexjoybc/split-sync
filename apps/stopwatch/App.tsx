@@ -73,6 +73,9 @@ const C = {
   btnDimBody:   "#1E1E1E",
   btnDimHi:     "#2A2A2A",
   btnDimLo:     "#0A0A0A",
+  btnBlueBody:  "#5BC8F5",
+  btnBlueHi:    "#8DDBFB",
+  btnBlueLo:    "#2E86C1",
 };
 
 // ── Domain types ───────────────────────────────────────────────────────────────
@@ -1662,9 +1665,10 @@ function SessionScreen({
         ) : (
           <DeviceBtn
             label={isStopped ? "STOPPED" : "START"}
-            body={C.btnInkBody}
-            hi={C.btnInkHi}
-            lo={C.btnInkLo}
+            body={C.btnBlueBody}
+            hi={C.btnBlueHi}
+            lo={C.btnBlueLo}
+            textColor={C.ink}
             disabled={isStopped}
             onPress={handleStart}
             flex={1.4}
@@ -1969,9 +1973,10 @@ function SoloScreen({
         ) : (
           <DeviceBtn
             label={isPaused ? "RESUME" : "START"}
-            body={C.btnInkBody}
-            hi={C.btnInkHi}
-            lo={C.btnInkLo}
+            body={C.btnBlueBody}
+            hi={C.btnBlueHi}
+            lo={C.btnBlueLo}
+            textColor={C.ink}
             onPress={handleStart}
             flex={1.4}
           />
