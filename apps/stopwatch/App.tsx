@@ -31,6 +31,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import type { AppStateStatus } from "react-native";
+import * as Crypto from "expo-crypto";
 import * as ExpoLinking from "expo-linking";
 import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
@@ -73,6 +74,9 @@ const C = {
   btnDimBody:   "#1E1E1E",
   btnDimHi:     "#2A2A2A",
   btnDimLo:     "#0A0A0A",
+  btnBlueBody:  "#5BC8F5",
+  btnBlueHi:    "#8DDBFB",
+  btnBlueLo:    "#2E86C1",
 };
 
 // ── Domain types ───────────────────────────────────────────────────────────────
@@ -137,11 +141,9 @@ interface JoinNavParams {
 
 // ── Utility helpers ────────────────────────────────────────────────────────────
 function generateUUID(): string {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  // Crypto-strength UUID: these become idempotency keys
+  // (casual_session_events.client_id), so weak randomness risks collisions.
+  return Crypto.randomUUID();
 }
 
 function p2(n: number) {
@@ -151,8 +153,12 @@ function p2(n: number) {
 function fmtParts(ms: number) {
   const cs = Math.floor(ms / 10) % 100;
   const s = Math.floor(ms / 1000) % 60;
-  const m = Math.floor(ms / 60000);
-  return { main: `${m}:${p2(s)}`, cs: p2(cs) };
+  const totalM = Math.floor(ms / 60000);
+  const h = Math.floor(totalM / 60);
+  const m = totalM % 60;
+  // Roll over to H:MM:SS once elapsed >= 1 hour (#225)
+  const main = h > 0 ? `${h}:${p2(m)}:${p2(s)}` : `${m}:${p2(s)}`;
+  return { main, cs: p2(cs) };
 }
 
 function fmtCompact(ms: number) {
@@ -164,8 +170,11 @@ function fmtDelta(d: number) {
   const abs = Math.abs(d);
   const cs = Math.floor(abs / 10) % 100;
   const s = Math.floor(abs / 1000) % 60;
-  const m = Math.floor(abs / 60000);
+  const totalM = Math.floor(abs / 60000);
+  const h = Math.floor(totalM / 60);
+  const m = totalM % 60;
   const sign = d >= 0 ? "+" : "-";
+  if (h > 0) return `${sign}${h}:${p2(m)}:${p2(s)}.${p2(cs)}`;
   return m > 0
     ? `${sign}${m}:${p2(s)}.${p2(cs)}`
     : `${sign}${s}.${p2(cs)}`;
@@ -208,11 +217,16 @@ function LcdDisplay({
   fontLoaded: boolean;
 }) {
   const { main, cs } = fmtParts(ms);
-  const csSize = Math.round(mainSize * csRatio);
+  // The layout is sized for up to "MM:SS" (5 chars). Once hours kick in the
+  // main string grows to "H:MM:SS" (7+ chars); shrink digits proportionally so
+  // the 7-segment display still fits its row (#225).
+  const fitSize =
+    main.length > 5 ? Math.round((mainSize * 5) / main.length) : mainSize;
+  const csSize = Math.round(fitSize * csRatio);
   const font = fontLoaded ? "DSEG7Classic-Regular" : "monospace";
   const mainDim = main.replace(/\d/g, "8");
   const csDim = cs.replace(/\d/g, "8");
-  const baselineOffset = Math.round((mainSize - csSize) * 0.78);
+  const baselineOffset = Math.round((fitSize - csSize) * 0.78);
 
   return (
     <View
@@ -222,7 +236,7 @@ function LcdDisplay({
         <Text
           style={{
             fontFamily: font,
-            fontSize: mainSize,
+            fontSize: fitSize,
             color: dimColor,
             letterSpacing: 3,
             includeFontPadding: false,
@@ -235,7 +249,7 @@ function LcdDisplay({
         <Text
           style={{
             fontFamily: font,
-            fontSize: mainSize,
+            fontSize: fitSize,
             color,
             letterSpacing: 3,
             includeFontPadding: false,
@@ -252,7 +266,7 @@ function LcdDisplay({
       <View
         style={{
           flexShrink: 0,
-          marginBottom: Math.round(mainSize * 0.08),
+          marginBottom: Math.round(fitSize * 0.08),
           // baselineOffset is calculated but not used as a margin-bottom style here;
           // the parent alignItems:"flex-end" handles vertical alignment
           display: "flex",
@@ -1136,6 +1150,13 @@ function SessionScreen({
   const lastSequenceRef = useRef(
     events.length > 0 ? Math.max(...events.map((e) => e.sequence)) : 0
   );
+  // The realtime channel effect deliberately does not depend on `events`
+  // (re-subscribing on every event would churn the channel), so broadcast
+  // handlers must read the current event list through this ref.
+  const eventsRef = useRef(events);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
 
   // ── Derived lap table ───────────────────────────────────────────────────────
   const laps = useMemo<DerivedLap[]>(() => {
@@ -1300,8 +1321,10 @@ function SessionScreen({
         { event: "sync_request" },
         (msg: { type: string; event: string; payload: Record<string, unknown> }) => {
           const lastSeq = (msg.payload as { last_sequence: number }).last_sequence ?? 0;
-          // Respond with events this client has that are newer
-          const missing = events.filter((e) => e.sequence > lastSeq);
+          // Respond with events this client has that are newer.
+          // Read through eventsRef: the closure's `events` would be stale
+          // because this effect doesn't re-run on event changes.
+          const missing = eventsRef.current.filter((e) => e.sequence > lastSeq);
           if (missing.length > 0) {
             channel.send({
               type: "broadcast",
@@ -1684,9 +1707,10 @@ function SessionScreen({
         ) : (
           <DeviceBtn
             label={isStopped ? "STOPPED" : "START"}
-            body={C.btnInkBody}
-            hi={C.btnInkHi}
-            lo={C.btnInkLo}
+            body={C.btnBlueBody}
+            hi={C.btnBlueHi}
+            lo={C.btnBlueLo}
+            textColor={C.ink}
             disabled={isStopped}
             onPress={handleStart}
             flex={1.4}
@@ -1991,9 +2015,10 @@ function SoloScreen({
         ) : (
           <DeviceBtn
             label={isPaused ? "RESUME" : "START"}
-            body={C.btnInkBody}
-            hi={C.btnInkHi}
-            lo={C.btnInkLo}
+            body={C.btnBlueBody}
+            hi={C.btnBlueHi}
+            lo={C.btnBlueLo}
+            textColor={C.ink}
             onPress={handleStart}
             flex={1.4}
           />
