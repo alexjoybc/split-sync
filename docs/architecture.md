@@ -188,6 +188,52 @@ Migration 00004 introduces the ownership policies. Migration 00005 enforces the 
 
 `apps/web/src/lib/useEventAccess.ts` resolves, for the signed-in user and one event, whether they are the `owner`, an `event_members` role, or have no access — this drives both the event setup page and the scorer page. It is a UX convenience only; the RLS policies above are the actual enforcement boundary.
 
+## Casual Stopwatch
+
+The casual stopwatch is the **fourth surface**, independent of the three event-management surfaces (Spectator, Organizer, Mobile tracker). It lives in `apps/stopwatch` (native Expo app, `org.splitsync.stopwatch`) and `apps/web/src/app/stopwatch` (web entry point). See ADR 0017 for full rationale.
+
+### Data model
+
+Three tables support this surface (migration `20260830000001_casual_stopwatch_sessions.sql`):
+
+| Table | Purpose |
+| --- | --- |
+| `casual_sessions` | A timed session: owner, human-readable name, unique 6-char join code, status, expiry, participant cap, and server-anchored T0 |
+| `casual_session_participants` | Everyone in a session — owner plus joiners. `client_id` UUID is the idempotency key for re-join |
+| `casual_session_events` | The event log (`start` / `lap` / `stop` / `reset`). Client-generated `id` is the idempotency key. Elapsed time and lap splits are **always derived** from this log — never persisted |
+
+### Auth and access control
+
+- **Creator must be authenticated.** `create_casual_session(p_name, p_display_name)` validates `auth.uid() IS NOT NULL` inside the security-definer RPC and stores `auth.uid()::text` as `casual_sessions.owner_id` — the same pattern as `events.owner_id`.
+- **Joiners are anonymous.** `join_casual_session(code, display_name, client_id)` is callable by the anon role; no account required.
+- **No direct table grants.** RLS is enabled on all three tables as defense in depth, but the anon role has zero direct SELECT/INSERT/UPDATE grants. All anon access flows through four security-definer RPCs:
+
+| RPC | Caller | Description |
+| --- | --- | --- |
+| `create_casual_session(name, display_name)` | Authenticated | Creates session + owner participant; generates unique 6-char code |
+| `join_casual_session(code, display_name, client_id)` | Anon | Validates code, checks expiry/cap, creates participant row (idempotent) |
+| `record_session_event(session_id, participant_id, event_type, client_recorded_at, client_event_id)` | Anon | Validates membership, enforces concurrency rules, upserts event (idempotent on client id) |
+| `get_session_state(session_id, participant_id)` | Anon | Returns full session + participants + events for catch-up on reconnect |
+
+The `participant_id` UUID returned on join acts as a bearer token: calls without a valid `(session_id, participant_id)` pair are rejected. The owner RLS policy (`owner_id = auth.uid()::text`) allows authenticated creators to list their own sessions directly.
+
+### Event log is source of truth
+
+Elapsed time and lap splits are computed entirely on the client from the event log:
+
+```
+elapsed_ms = (Date.now() + offset_ms) - t0_server.getTime()
+split_ms   = client_recorded_at[lap_N] - client_recorded_at[lap_N-1]
+```
+
+`t0_server` is set atomically by the server when the first `start` event is accepted and is never changed thereafter. No `standings`, `laps`, or `elapsed` column is ever persisted — this mirrors domain invariant #2.
+
+### Realtime
+
+Both `casual_session_events` and `casual_session_participants` are added to the `supabase_realtime` publication. The Broadcast channel key is `stopwatch:<code>` (e.g., `stopwatch:AB3K9X`). All participants in the same session subscribe to the same channel. The anon role can use Broadcast channels without table SELECT grants, which is why Broadcast is preferred over `postgres_changes` for this surface.
+
+Migration `20260829000001_realtime_publication.sql` first enabled the publication; `20260830000001_casual_stopwatch_sessions.sql` adds the three casual-stopwatch tables.
+
 ## UI System
 
 The visual design system is a shared contract across web and mobile, documented in [`docs/adr/0015-broadcast-ui-refresh.md`](adr/0015-broadcast-ui-refresh.md).
