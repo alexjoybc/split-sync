@@ -2,10 +2,17 @@
   "expo": {
     "name": "SplitSync Stopwatch",
     "slug": "splitsync-stopwatch",
+    "owner": "split-sync",
     "version": "1.0.0",
     "orientation": "default",
     "scheme": "org.splitsync.stopwatch",
     "userInterfaceStyle": "light",
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/3617f3ce-e97b-497f-90fe-af489ea86aac"
+    },
     "android": {
       "package": "org.splitsync.stopwatch",
       "permissions": ["android.permission.POST_NOTIFICATIONS"],
@@ -29,7 +36,10 @@
       ]
     },
     "extra": {
-      "EXPO_PUBLIC_SUPABASE_URL": "https://bsihlrzncucrglqltjrc.supabase.co"
+      "EXPO_PUBLIC_SUPABASE_URL": "https://bsihlrzncucrglqltjrc.supabase.co",
+      "eas": {
+        "projectId": "3617f3ce-e97b-497f-90fe-af489ea86aac"
+      }
     },
     "platforms": ["android"],
     "plugins": ["expo-font"]

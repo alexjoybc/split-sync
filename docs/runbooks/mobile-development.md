@@ -89,3 +89,28 @@ Changing anything under `modules/stopwatch-notification` (or first pulling this 
 ### Deep-link scheme
 
 The stopwatch registers the scheme `org.splitsync.stopwatch://` and an Android App Links intent filter for `https://splitsync.org/stopwatch/s/`. Both open the Join screen. See `docs/runbooks/stopwatch-release.md` for how to configure `assetlinks.json` for verified App Links.
+
+### Previewing a PR on your phone (EAS Update)
+
+Every pull request that touches `apps/stopwatch/**` automatically publishes an EAS Update preview (see ADR 0018) and comments a QR code + link on the PR. This is the fastest way to check a change on a real device without running Metro locally:
+
+1. Open the PR on GitHub and find the "EAS Update" bot comment.
+2. Install **Expo Go** from the Play Store or App Store (make sure it's up to date — an outdated Expo Go is the most common cause of an "incompatible" error).
+3. Scan the QR code from the comment, or open the link on the same device.
+
+If you'd rather run it locally instead (e.g. no network access to expo.dev, or debugging Metro itself):
+
+```bash
+pnpm --filter stopwatch exec expo start
+```
+
+Then scan the terminal QR code with Expo Go, or open `exp://<your-machine-LAN-IP>:8081` manually. This requires your phone and computer to be on the same network, and still requires a matching Expo Go version for the app's Expo SDK.
+
+To publish an update manually from your machine (e.g. to test the EAS Update pipeline itself, outside of a PR):
+
+```bash
+cd apps/stopwatch
+eas update --branch <branch-name>
+```
+
+This requires being logged in to the `split-sync` Expo account (`eas login`).
