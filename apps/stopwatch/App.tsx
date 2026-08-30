@@ -32,6 +32,7 @@ import {
 } from "react-native";
 import type { AppStateStatus } from "react-native";
 import * as Crypto from "expo-crypto";
+import { VolumeManager, addVolumeListener } from "react-native-volume-manager";
 import * as ExpoLinking from "expo-linking";
 import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
@@ -258,6 +259,102 @@ function LapTrendChart<T>({
       })}
     </View>
   );
+}
+
+// ── Volume-key hardware control ────────────────────────────────────────────────
+
+const STORAGE_KEY_VOL_KEYS = "stopwatch_volume_keys_enabled";
+
+/**
+ * useVolumeKeys — maps Android hardware volume keys to stopwatch actions.
+ *
+ * Volume DOWN = LAP (only while running)
+ * Volume UP   = START / STOP (toggle)
+ *
+ * The system volume overlay is suppressed while the mapping is active.
+ * The actual device volume is restored after each key-press so the mapping
+ * is transparent to the user's audio preferences.
+ *
+ * The enabled/disabled preference is persisted to AsyncStorage.
+ */
+function useVolumeKeys({
+  isRunning,
+  onLap,
+  onStartStop,
+}: {
+  isRunning: boolean;
+  onLap: () => void;
+  onStartStop: () => void;
+}): { volumeKeysEnabled: boolean; toggleVolumeKeys: () => void } {
+  const [enabled, setEnabled] = useState(true);
+
+  // Load persisted preference once on mount
+  useEffect(() => {
+    AsyncStorage.getItem(STORAGE_KEY_VOL_KEYS).then((val) => {
+      if (val !== null) setEnabled(val === "true");
+    });
+  }, []);
+
+  const toggle = useCallback(() => {
+    setEnabled((prev) => {
+      const next = !prev;
+      AsyncStorage.setItem(STORAGE_KEY_VOL_KEYS, String(next)).catch(() => undefined);
+      return next;
+    });
+  }, []);
+
+  // Keep stable refs so the event listener closure never goes stale
+  const isRunningRef = useRef(isRunning);
+  const onLapRef = useRef(onLap);
+  const onStartStopRef = useRef(onStartStop);
+  useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
+  useEffect(() => { onLapRef.current = onLap; }, [onLap]);
+  useEffect(() => { onStartStopRef.current = onStartStop; }, [onStartStop]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let mounted = true;
+    let lastVolume = 0.5;
+    let subscription: ReturnType<typeof addVolumeListener> | null = null;
+
+    // Suppress the native volume overlay
+    VolumeManager.showNativeVolumeUI({ enabled: false }).catch(() => undefined);
+
+    VolumeManager.getVolume().then(({ volume }) => {
+      if (!mounted) return;
+      lastVolume = volume;
+
+      subscription = addVolumeListener(({ volume: newVolume }) => {
+        if (!mounted) return;
+        const diff = newVolume - lastVolume;
+        // Ignore sub-step noise (e.g. initial settle)
+        if (Math.abs(diff) < 0.009) return;
+
+        if (diff < 0) {
+          // Volume DOWN → LAP (only while running)
+          if (isRunningRef.current) {
+            onLapRef.current();
+          }
+        } else {
+          // Volume UP → START / STOP
+          onStartStopRef.current();
+        }
+
+        // Restore volume so the mapping is invisible to the audio stack
+        VolumeManager.setVolume(lastVolume, { showUI: false }).catch(() => undefined);
+      });
+    }).catch(() => undefined);
+
+    return () => {
+      mounted = false;
+      subscription?.remove();
+      // Re-enable system volume overlay when leaving the screen or disabling
+      VolumeManager.showNativeVolumeUI({ enabled: true }).catch(() => undefined);
+    };
+  }, [enabled]);
+
+  return { volumeKeysEnabled: enabled, toggleVolumeKeys: toggle };
 }
 
 // ── Shared UI components ───────────────────────────────────────────────────────
@@ -505,6 +602,48 @@ function CasingBar({
       </View>
       {rightSlot}
     </View>
+  );
+}
+
+// Volume-key toggle chip shown in the casing header
+function VolumeKeyToggle({
+  enabled,
+  onToggle,
+}: {
+  enabled: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="button"
+      accessibilityLabel={enabled ? "Volume keys active — tap to disable" : "Volume keys disabled — tap to enable"}
+      hitSlop={8}
+      style={({ pressed }) => ({
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 3,
+        paddingHorizontal: 7,
+        paddingVertical: 3,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        borderColor: enabled ? C.lcd : "#333",
+        backgroundColor: enabled ? "#0A2030" : "transparent",
+        opacity: pressed ? 0.7 : 1,
+        marginRight: 6,
+      })}
+    >
+      <Text
+        style={{
+          color: enabled ? C.lcd : "#555550",
+          fontSize: 9,
+          fontWeight: "900",
+          letterSpacing: 1.5,
+        }}
+      >
+        {enabled ? "VOL●" : "VOL○"}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -1727,6 +1866,24 @@ function SessionScreen({
     await Share.share({ message: `Join my SplitSync session: ${url}`, url });
   }, [params.sessionCode]);
 
+  // Volume-key hardware control
+  // Volume UP  = START (waiting) or STOP (running)
+  // Volume DOWN = LAP (running only, goes through handleLap → same event pipeline)
+  const handleVolumeStartStop = useCallback(() => {
+    if (status === "running") {
+      handleStop();
+    } else if (status === "waiting") {
+      handleStart();
+    }
+    // stopped is terminal in shared sessions — do nothing
+  }, [status, handleStart, handleStop]);
+
+  const { volumeKeysEnabled, toggleVolumeKeys } = useVolumeKeys({
+    isRunning: status === "running",
+    onLap: handleLap,
+    onStartStop: handleVolumeStartStop,
+  });
+
   // ── Render ──────────────────────────────────────────────────────────────────
   const lcdMain = lcdMainSize(width, height);
   const lapCount = laps.length;
@@ -1777,6 +1934,7 @@ function SessionScreen({
               {isLocked ? "🔒" : "🔓"}
             </Text>
           </Pressable>
+          <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
           <StatusPill status={status} />
         </View>
       </View>
@@ -2315,6 +2473,28 @@ function SoloScreen({
   const isPaused = swState === "paused";
   const isIdle = swState === "idle";
   const isCountdown = swState === "countdown";
+
+  // Volume-key hardware control
+  // Volume UP  = START / RESUME (idle/paused), CANCEL (countdown) or STOP (running)
+  // Volume DOWN = LAP (running only)
+  // Mirrors the on-screen primary button path: a delayed start begins the
+  // countdown, and STOP respects the control lock (handleStop no-ops with a
+  // hint while locked).
+  const handleVolumeStartStop = useCallback(() => {
+    if (isRunning) {
+      handleStop();
+    } else if (isCountdown) {
+      handleCancelCountdown();
+    } else {
+      handleStart();
+    }
+  }, [isRunning, isCountdown, handleStart, handleStop, handleCancelCountdown]);
+
+  const { volumeKeysEnabled, toggleVolumeKeys } = useVolumeKeys({
+    isRunning,
+    onLap: handleLap,
+    onStartStop: handleVolumeStartStop,
+  });
   const lapCount = laps.length;
   const lastLap = laps[0] ?? null;
   const showSoloStats = laps.length >= 2;
@@ -2367,6 +2547,7 @@ function SoloScreen({
               {isLocked ? "🔒" : "🔓"}
             </Text>
           </Pressable>
+          <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
           <View
             style={[
               s.pill,
