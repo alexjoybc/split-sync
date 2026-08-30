@@ -539,3 +539,46 @@ body {
   color: var(--race-muted);
   background: var(--race-panel);
 }
+
+/* ── Lock control button ─────────────────────────────────────────────── */
+.sw-lock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--race-line);
+  border-radius: 50%;
+  background: var(--race-panel);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+  user-select: none;
+  -webkit-user-select: none;
+  flex-shrink: 0;
+}
+
+.sw-lock-btn:hover {
+  border-color: var(--race-ink);
+}
+
+.sw-lock-btn--locked {
+  border-color: var(--race-ink);
+  background: var(--race-ink);
+}
+
+/* Dim Stop / Reset pushers when locked */
+.sw-pusher--dimmed {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Inline lock-hint text that appears briefly on blocked taps */
+.sw-lock-hint {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--race-muted);
+}

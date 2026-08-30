@@ -1222,6 +1222,11 @@ function SessionScreen({
   /** Tracks durable (AsyncStorage) queue depth for the pending indicator. */
   const [durableQueueDepth, setDurableQueueDepth] = useState(0);
 
+  // Lock state — local to this device, never broadcast
+  const [isLocked, setIsLocked] = useState(false);
+  const [showLockHint, setShowLockHint] = useState(false);
+  const lockHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Clock sync: clientT0 = Date.now() when we first learn t0_server
   const clientT0Ref = useRef<number | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1609,6 +1614,29 @@ function SessionScreen({
     [params.sessionId, params.participantId, params.sessionCode, applyEvent, rebuildFromServer]
   );
 
+  // ── Lock helpers ────────────────────────────────────────────────────────────
+  const showLockedHint = useCallback(() => {
+    setShowLockHint(true);
+    if (lockHintTimerRef.current) clearTimeout(lockHintTimerRef.current);
+    lockHintTimerRef.current = setTimeout(() => setShowLockHint(false), 2000);
+  }, []);
+
+  const handleLockToggle = useCallback(() => {
+    if (!isLocked) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setIsLocked(true);
+    }
+  }, [isLocked]);
+
+  const handleUnlock = useCallback(() => {
+    if (isLocked) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setIsLocked(false);
+      setShowLockHint(false);
+      if (lockHintTimerRef.current) clearTimeout(lockHintTimerRef.current);
+    }
+  }, [isLocked]);
+
   // ── Button handlers ─────────────────────────────────────────────────────────
   const handleStart = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1616,9 +1644,10 @@ function SessionScreen({
   }, [sendEvent]);
 
   const handleStop = useCallback(async () => {
+    if (isLocked) { showLockedHint(); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     await sendEvent("stop");
-  }, [sendEvent]);
+  }, [isLocked, showLockedHint, sendEvent]);
 
   const handleLap = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1626,6 +1655,7 @@ function SessionScreen({
   }, [sendEvent]);
 
   const handleReset = useCallback(async () => {
+    if (isLocked) { showLockedHint(); return; }
     if (!params.isOwner) {
       Alert.alert("Owner only", "Only the session creator can reset.");
       return;
@@ -1676,6 +1706,19 @@ function SessionScreen({
           {pendingCount > 0 && (
             <ActivityIndicator size="small" color={C.yellow} />
           )}
+          {/* Lock toggle: tap to lock, long-press (1.5 s) to unlock */}
+          <Pressable
+            onPress={handleLockToggle}
+            onLongPress={handleUnlock}
+            delayLongPress={1500}
+            style={{ padding: 6 }}
+            accessibilityLabel={isLocked ? "Controls locked — hold to unlock" : "Lock controls"}
+            accessibilityRole="button"
+          >
+            <Text style={{ fontSize: 16, color: isLocked ? C.red : "#555" }}>
+              {isLocked ? "🔒" : "🔓"}
+            </Text>
+          </Pressable>
           <StatusPill status={status} />
         </View>
       </View>
@@ -1885,14 +1928,16 @@ function SessionScreen({
         />
         <View style={{ width: 10 }} />
         {isRunning ? (
-          <DeviceBtn
-            label="STOP"
-            body={C.btnRedBody}
-            hi={C.btnRedHi}
-            lo={C.btnRedLo}
-            onPress={handleStop}
-            flex={1.4}
-          />
+          <View style={{ flex: 1.4, opacity: isLocked ? 0.4 : 1 }}>
+            <DeviceBtn
+              label="STOP"
+              body={C.btnRedBody}
+              hi={C.btnRedHi}
+              lo={C.btnRedLo}
+              onPress={handleStop}
+              flex={1}
+            />
+          </View>
         ) : (
           <DeviceBtn
             label={isStopped ? "STOPPED" : "START"}
@@ -1906,16 +1951,30 @@ function SessionScreen({
           />
         )}
         <View style={{ width: 10 }} />
-        <DeviceBtn
-          label="RESET"
-          body={C.btnPaperBody}
-          hi={C.btnPaperHi}
-          lo={C.btnPaperLo}
-          textColor={C.ink}
-          disabled={!params.isOwner || isWaiting}
-          onPress={handleReset}
-        />
+        <View style={{ flex: 1, opacity: isLocked && params.isOwner && !isWaiting ? 0.4 : 1 }}>
+          <DeviceBtn
+            label="RESET"
+            body={C.btnPaperBody}
+            hi={C.btnPaperHi}
+            lo={C.btnPaperLo}
+            textColor={C.ink}
+            flex={1}
+            disabled={!params.isOwner || isWaiting}
+            onPress={handleReset}
+          />
+        </View>
       </View>
+
+      {/* ── Lock hint toast ── */}
+      {showLockHint && (
+        <View
+          style={s.lockHintToast}
+          accessibilityLiveRegion="assertive"
+          accessibilityLabel="Controls locked — hold the lock icon to unlock"
+        >
+          <Text style={s.lockHintText}>Controls locked — hold 🔒 to unlock</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -1952,6 +2011,11 @@ function SoloScreen({
   const [countdownSec, setCountdownSec] = useState(0);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownEndRef = useRef<number>(0);
+
+  // ── Lock state (local to this device — never broadcast) ─────────────────────
+  const [isLocked, setIsLocked] = useState(false);
+  const [showLockHint, setShowLockHint] = useState(false);
+  const lockHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const anchor = useRef<number | null>(null);
   const accum = useRef(0);
@@ -2026,6 +2090,28 @@ function SoloScreen({
   }, [swState]);
   useEffect(() => () => clearRunningNotification(), []);
 
+  const showLockedHint = useCallback(() => {
+    setShowLockHint(true);
+    if (lockHintTimerRef.current) clearTimeout(lockHintTimerRef.current);
+    lockHintTimerRef.current = setTimeout(() => setShowLockHint(false), 2000);
+  }, []);
+
+  const handleLockToggle = useCallback(() => {
+    if (!isLocked) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setIsLocked(true);
+    }
+  }, [isLocked]);
+
+  const handleUnlock = useCallback(() => {
+    if (isLocked) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setIsLocked(false);
+      setShowLockHint(false);
+      if (lockHintTimerRef.current) clearTimeout(lockHintTimerRef.current);
+    }
+  }, [isLocked]);
+
   // Commit to running after countdown ends
   const commitStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -2082,6 +2168,7 @@ function SoloScreen({
   }, [clearCountdown]);
 
   const handleStop = useCallback(() => {
+    if (isLocked) { showLockedHint(); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (anchor.current !== null) {
       accum.current += Date.now() - anchor.current;
@@ -2091,7 +2178,7 @@ function SoloScreen({
     setSession(accum.current);
     setLapMs(accum.current - lastLapCum.current);
     setSw("paused");
-  }, [stopTick]);
+  }, [isLocked, showLockedHint, stopTick]);
 
   const handleLap = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2108,6 +2195,7 @@ function SoloScreen({
   }, []);
 
   const handleReset = useCallback(() => {
+    if (isLocked) { showLockedHint(); return; }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     clearCountdown();
     setCountdownSec(0);
@@ -2119,7 +2207,7 @@ function SoloScreen({
     setLapMs(0);
     setLaps([]);
     setSw("idle");
-  }, [stopTick, clearCountdown]);
+  }, [isLocked, showLockedHint, stopTick, clearCountdown]);
 
   const isRunning = swState === "running";
   const isPaused = swState === "paused";
@@ -2150,27 +2238,42 @@ function SoloScreen({
           </View>
           <Text style={s.casingTitle}>STOPWATCH</Text>
         </View>
-        <View
-          style={[
-            s.pill,
-            isRunning   && { backgroundColor: C.red,    borderColor: C.red },
-            isPaused    && { backgroundColor: C.yellow,  borderColor: C.yellow },
-            isCountdown && { backgroundColor: C.red,    borderColor: C.red },
-          ]}
-        >
-          <Text
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          {/* Lock toggle: tap to lock, long-press (1.5 s) to unlock */}
+          <Pressable
+            onPress={handleLockToggle}
+            onLongPress={handleUnlock}
+            delayLongPress={1500}
+            style={{ padding: 6 }}
+            accessibilityLabel={isLocked ? "Controls locked — hold to unlock" : "Lock controls"}
+            accessibilityRole="button"
+          >
+            <Text style={{ fontSize: 16, color: isLocked ? C.red : "#555" }}>
+              {isLocked ? "🔒" : "🔓"}
+            </Text>
+          </Pressable>
+          <View
             style={[
-              s.pillTxt,
-              isRunning   && { color: C.white },
-              isPaused    && { color: C.ink },
-              isCountdown && { color: C.white },
+              s.pill,
+              isRunning   && { backgroundColor: C.red,    borderColor: C.red },
+              isPaused    && { backgroundColor: C.yellow, borderColor: C.yellow },
+              isCountdown && { backgroundColor: C.red,    borderColor: C.red },
             ]}
           >
-            {isRunning   ? "● RUN"
-             : isPaused  ? "‖ PAUSED"
-             : isCountdown ? `◷ ${countdownSec}`
-             : "READY"}
-          </Text>
+            <Text
+              style={[
+                s.pillTxt,
+                isRunning   && { color: C.white },
+                isPaused    && { color: C.ink },
+                isCountdown && { color: C.white },
+              ]}
+            >
+              {isRunning   ? "● RUN"
+               : isPaused  ? "‖ PAUSED"
+               : isCountdown ? `◷ ${countdownSec}`
+               : "READY"}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -2388,14 +2491,17 @@ function SoloScreen({
             />
             <View style={{ width: 10 }} />
             {isRunning ? (
-              <DeviceBtn
-                label="STOP"
-                body={C.btnRedBody}
-                hi={C.btnRedHi}
-                lo={C.btnRedLo}
-                onPress={handleStop}
-                flex={1.4}
-              />
+              /* Stop dims when locked (#235) */
+              <View style={{ flex: 1.4, opacity: isLocked ? 0.4 : 1 }}>
+                <DeviceBtn
+                  label="STOP"
+                  body={C.btnRedBody}
+                  hi={C.btnRedHi}
+                  lo={C.btnRedLo}
+                  onPress={handleStop}
+                  flex={1}
+                />
+              </View>
             ) : (
               <DeviceBtn
                 label={isPaused ? "RESUME" : "START"}
@@ -2408,18 +2514,33 @@ function SoloScreen({
               />
             )}
             <View style={{ width: 10 }} />
-            <DeviceBtn
-              label="RESET"
-              body={C.btnPaperBody}
-              hi={C.btnPaperHi}
-              lo={C.btnPaperLo}
-              textColor={C.ink}
-              disabled={isIdle}
-              onPress={handleReset}
-            />
+            {/* Reset dims when locked (#235) */}
+            <View style={{ flex: 1, opacity: isLocked && !isIdle ? 0.4 : 1 }}>
+              <DeviceBtn
+                label="RESET"
+                body={C.btnPaperBody}
+                hi={C.btnPaperHi}
+                lo={C.btnPaperLo}
+                textColor={C.ink}
+                flex={1}
+                disabled={isIdle}
+                onPress={handleReset}
+              />
+            </View>
           </>
         )}
       </View>
+
+      {/* ── Lock hint toast ── */}
+      {showLockHint && (
+        <View
+          style={s.lockHintToast}
+          accessibilityLiveRegion="assertive"
+          accessibilityLabel="Controls locked — hold the lock icon to unlock"
+        >
+          <Text style={s.lockHintText}>Controls locked — hold 🔒 to unlock</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -2845,6 +2966,27 @@ const s = StyleSheet.create({
   ghostBtnText: { color: C.red, fontSize: 13, fontWeight: "700", letterSpacing: 0.5 },
   backBtn: { paddingVertical: 4, paddingHorizontal: 2 },
   backBtnText: { color: "#888", fontSize: 13, fontWeight: "700" },
+
+  // Lock hint toast — floating above the button bar
+  lockHintToast: {
+    position: "absolute",
+    bottom: 90,
+    left: 0,
+    right: 0,
+    alignItems: "center",
+    zIndex: 100,
+  },
+  lockHintText: {
+    backgroundColor: "rgba(0,0,0,0.85)",
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 20,
+    overflow: "hidden",
+  },
 
   // Home screen session list
   sectionHeader: {
