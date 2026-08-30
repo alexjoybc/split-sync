@@ -51,11 +51,11 @@ The app is configured with bundle identifier `org.splitsync.tracker`. Install Xc
 
 ## SplitSync Stopwatch (`apps/stopwatch`)
 
-The stopwatch is a **separate standalone Expo app** (application id `org.splitsync.stopwatch`). Solo-stopwatch mode works without any environment variables. The **shared-session (Time Together)** feature connects to Supabase and requires credentials.
+The stopwatch is a **separate standalone Expo app** (application id `org.splitsync.stopwatch`). Solo-stopwatch mode works without any environment variables — the app runs fully with no `.env` file at all. The **shared-session (Time Together)** feature connects to Supabase and requires credentials; without them, the login screen shows a "solo mode only" prompt instead of the sign-in form.
 
 ### Local configuration
 
-Create `apps/stopwatch/.env`:
+Create `apps/stopwatch/.env` (see `apps/stopwatch/.env.example`):
 
 ```text
 EXPO_PUBLIC_SUPABASE_URL=https://bsihlrzncucrglqltjrc.supabase.co
