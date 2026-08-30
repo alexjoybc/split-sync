@@ -1,4 +1,4 @@
--- ADR: docs/adr/0020-casual-session-results-permalink.md
+-- ADR: docs/adr/0022-casual-session-results-permalink.md
 --
 -- Read-only results for finished casual stopwatch sessions (#226).
 --

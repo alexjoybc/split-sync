@@ -226,13 +226,13 @@ Three tables support this surface (migration `20260830000001_casual_stopwatch_se
 | `join_casual_session(code, display_name, client_id)` | Anon | Validates code, checks expiry/cap, creates participant row (idempotent) |
 | `record_session_event(session_id, participant_id, event_type, client_recorded_at, client_event_id)` | Anon | Validates membership, enforces concurrency rules, upserts event (idempotent on client id) |
 | `get_session_state(session_id, participant_id)` | Anon | Returns full session + participants + events for catch-up on reconnect |
-| `get_casual_session_results(code)` | Anon | Read-only results for **terminal** sessions (stopped or expired) — session header, participant display names, and the ordered event log. Serves the `/stopwatch/s/<code>/results` permalink (migration `20260830000003`, ADR 0020) |
+| `get_casual_session_results(code)` | Anon | Read-only results for **terminal** sessions (stopped or expired) — session header, participant display names, and the ordered event log. Serves the `/stopwatch/s/<code>/results` permalink (migration `20260830000003`, ADR 0022) |
 
 The `participant_id` UUID returned on join acts as a bearer token: calls without a valid `(session_id, participant_id)` pair are rejected. The owner RLS policy (`owner_id = auth.uid()::text`) allows authenticated creators to list their own sessions directly.
 
 ### Results permalink and event-log retention
 
-Once a session is stopped (or its 4-hour join expiry passes), its results are readable by anyone holding the code at `/stopwatch/s/<code>/results` — no sign-in, read-only. `get_casual_session_results` ignores `expires_at` for reading (expiry gates joining, not remembering), never returns participant ids (they are the write bearer tokens — actor names are resolved server-side onto each event), and raises the same generic error for unknown codes and still-live sessions so the code space cannot be probed. Retention of `casual_session_events` beyond expiry is a contract: any future cleanup job must keep stopped sessions and their events readable (see ADR 0020). Lap splits, totals, and best laps remain derived client-side from the event log; CSV/copy export happens entirely in the client.
+Once a session is stopped (or its 4-hour join expiry passes), its results are readable by anyone holding the code at `/stopwatch/s/<code>/results` — no sign-in, read-only. `get_casual_session_results` ignores `expires_at` for reading (expiry gates joining, not remembering), never returns participant ids (they are the write bearer tokens — actor names are resolved server-side onto each event), and raises the same generic error for unknown codes and still-live sessions so the code space cannot be probed. Retention of `casual_session_events` beyond expiry is a contract: any future cleanup job must keep stopped sessions and their events readable (see ADR 0022). Lap splits, totals, and best laps remain derived client-side from the event log; CSV/copy export happens entirely in the client.
 
 ### Event log is source of truth
 

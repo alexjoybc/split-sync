@@ -1,4 +1,4 @@
-# ADR 0020: Casual Session Results Permalink — Anonymous Read of Finished Sessions and Event-Log Retention
+# ADR 0022: Casual Session Results Permalink — Anonymous Read of Finished Sessions and Event-Log Retention
 
 ## Status
 

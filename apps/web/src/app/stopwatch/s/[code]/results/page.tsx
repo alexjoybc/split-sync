@@ -6,7 +6,7 @@
  * Read-only, spectator-style view of a finished casual stopwatch session.
  * Anyone holding the 6-char code can open it — no sign-in, no participant
  * token — via the anon-callable `get_casual_session_results` RPC. Results
- * survive the 4-hour join expiry (see ADR 0020). No session controls here.
+ * survive the 4-hour join expiry (see ADR 0022). No session controls here.
  */
 
 import { use, useCallback, useEffect, useMemo, useState } from "react";
