@@ -409,7 +409,7 @@ export default function HelpPage() {
             </li>
             <li>
               <strong>Joining</strong> is frictionless — tap the link, enter a
-              display name, and you're in. No sign-in required.
+              display name, and you&apos;re in. No sign-in required.
             </li>
             <li>
               Any participant can press <strong>START</strong>, <strong>LAP</strong>,
