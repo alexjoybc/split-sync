@@ -22,7 +22,14 @@ export function useWakeLock(active: boolean): void {
     async function acquire() {
       if (cancelled) return;
       try {
-        sentinelRef.current = await navigator.wakeLock.request("screen");
+        const sentinel = await navigator.wakeLock.request("screen");
+        if (cancelled) {
+          // The effect cleaned up while the request was in flight — release
+          // the just-acquired sentinel instead of leaking it.
+          sentinel.release().catch(() => {});
+          return;
+        }
+        sentinelRef.current = sentinel;
       } catch (err) {
         // NotAllowedError when page is not visible; DOMException on other
         // browsers that partially implement the spec — both are safe to ignore.
@@ -61,6 +68,5 @@ export function useWakeLock(active: boolean): void {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       release();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 }
