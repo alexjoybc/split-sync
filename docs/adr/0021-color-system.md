@@ -1,4 +1,4 @@
-# ADR 0020 — Canonical Color System and WCAG AA Palette
+# ADR 0021 — Canonical Color System and WCAG AA Palette
 
 **Status:** Accepted  
 **Date:** 2026-08-30  
