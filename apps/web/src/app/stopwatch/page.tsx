@@ -355,6 +355,93 @@ function clearPersisted() {
 }
 
 // ---------------------------------------------------------------------------
+// Sound cues (#227) — WebAudio oscillator beeps, no audio assets.
+// Optional and OFF by default; settings persist in localStorage.
+// ---------------------------------------------------------------------------
+
+interface CueSettings {
+  /** Beeps on start / stop / lap. */
+  soundEnabled: boolean;
+  /** Single distinct beep when elapsed time crosses the target. */
+  targetEnabled: boolean;
+  /** Target time in ms (mm:ss granularity in the UI). */
+  targetMs: number;
+}
+
+const DEFAULT_CUE_SETTINGS: CueSettings = {
+  soundEnabled: false,
+  targetEnabled: false,
+  targetMs: 60_000,
+};
+
+const CUE_STORAGE_KEY = "splitsync.stopwatch.cues.v1";
+
+function loadCueSettings(): CueSettings {
+  try {
+    const raw = window.localStorage.getItem(CUE_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_CUE_SETTINGS };
+    const parsed = JSON.parse(raw) as Partial<CueSettings>;
+    return {
+      soundEnabled: parsed.soundEnabled === true,
+      targetEnabled: parsed.targetEnabled === true,
+      targetMs:
+        typeof parsed.targetMs === "number" && parsed.targetMs > 0
+          ? parsed.targetMs
+          : DEFAULT_CUE_SETTINGS.targetMs,
+    };
+  } catch {
+    return { ...DEFAULT_CUE_SETTINGS };
+  }
+}
+
+function saveCueSettings(settings: CueSettings) {
+  try {
+    window.localStorage.setItem(CUE_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Non-fatal: settings simply won't persist.
+  }
+}
+
+type CueType = "start" | "stop" | "lap" | "target";
+
+interface ToneSegment {
+  freq: number; // Hz; 0 = silence
+  durationMs: number;
+}
+
+const CUE_SEGMENTS: Record<CueType, ToneSegment[]> = {
+  start: [{ freq: 880, durationMs: 130 }],
+  stop: [
+    { freq: 440, durationMs: 110 },
+    { freq: 0, durationMs: 40 },
+    { freq: 440, durationMs: 110 },
+  ],
+  lap: [{ freq: 660, durationMs: 90 }],
+  // Distinct rising two-tone so the target marker can't be confused with a lap.
+  target: [
+    { freq: 988, durationMs: 140 },
+    { freq: 0, durationMs: 30 },
+    { freq: 1319, durationMs: 220 },
+  ],
+};
+
+/** Parse "M:SS" / "MM:SS" → ms, or null when invalid. */
+function parseTargetInput(value: string): number | null {
+  const m = value.trim().match(/^(\d{1,3}):([0-5]?\d)$/);
+  if (!m) return null;
+  const ms = parseInt(m[1], 10) * 60_000 + parseInt(m[2], 10) * 1_000;
+  return ms > 0 ? ms : null;
+}
+
+/** Format ms → "MM:SS" for the target input. */
+function formatTargetInput(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  return `${String(Math.floor(totalSeconds / 60)).padStart(2, "0")}:${String(
+    totalSeconds % 60
+  ).padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
 // Stopwatch component
 // ---------------------------------------------------------------------------
 
@@ -444,16 +531,102 @@ export default function StopwatchPage() {
   }, []);
 
   // ---------------------------------------------------------------------------
+  // Sound cues (#227)
+  // ---------------------------------------------------------------------------
+
+  const [cues, setCues] = useState<CueSettings>(DEFAULT_CUE_SETTINGS);
+  const [targetInput, setTargetInput] = useState(
+    formatTargetInput(DEFAULT_CUE_SETTINGS.targetMs)
+  );
+  const cuesRef = useRef<CueSettings>(cues);
+  const targetFiredRef = useRef(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Load persisted settings after mount (avoids SSR hydration mismatch)
+  useEffect(() => {
+    const loaded = loadCueSettings();
+    cuesRef.current = loaded;
+    setCues(loaded);
+    setTargetInput(formatTargetInput(loaded.targetMs));
+  }, []);
+
+  const updateCues = useCallback((patch: Partial<CueSettings>) => {
+    setCues((prev) => {
+      const next = { ...prev, ...patch };
+      cuesRef.current = next;
+      saveCueSettings(next);
+      return next;
+    });
+  }, []);
+
+  /** Create/resume the AudioContext. Must be called from a user gesture. */
+  const ensureAudioCtx = useCallback((): AudioContext | null => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext();
+      }
+      if (audioCtxRef.current.state === "suspended") {
+        void audioCtxRef.current.resume();
+      }
+      return audioCtxRef.current;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const playCue = useCallback(
+    (type: CueType) => {
+      const ctx = ensureAudioCtx();
+      if (!ctx) return;
+      let at = ctx.currentTime;
+      for (const seg of CUE_SEGMENTS[type]) {
+        const duration = seg.durationMs / 1000;
+        if (seg.freq > 0) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = seg.freq;
+          // Short attack/release envelope to avoid clicks
+          gain.gain.setValueAtTime(0, at);
+          gain.gain.linearRampToValueAtTime(0.4, at + 0.005);
+          gain.gain.setValueAtTime(0.4, at + duration - 0.01);
+          gain.gain.linearRampToValueAtTime(0, at + duration);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(at);
+          osc.stop(at + duration);
+        }
+        at += duration;
+      }
+    },
+    [ensureAudioCtx]
+  );
+
+  // Fire the target cue once when elapsed time crosses the target
+  const checkTarget = useCallback(
+    (elapsed: number) => {
+      const cfg = cuesRef.current;
+      if (!cfg.targetEnabled || targetFiredRef.current) return;
+      if (elapsed >= cfg.targetMs) {
+        targetFiredRef.current = true;
+        playCue("target");
+      }
+    },
+    [playCue]
+  );
+
+  // ---------------------------------------------------------------------------
   // RAF loop
   // ---------------------------------------------------------------------------
 
   const startLoop = useCallback(() => {
     const tick = () => {
-      setDisplayMs(getElapsed());
+      const elapsed = getElapsed();
+      setDisplayMs(elapsed);
+      checkTarget(elapsed);
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
-  }, [getElapsed]);
+  }, [getElapsed, checkTarget]);
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -575,6 +748,12 @@ export default function StopwatchPage() {
       setState("stopped");
       setDisplayMs(saved.accMs);
     }
+    // Restoring is not a user action: never beep on mount. If the restored
+    // elapsed time already crossed the target, mark it fired so the RAF loop
+    // doesn't play the target cue retroactively.
+    if (accRef.current >= cuesRef.current.targetMs) {
+      targetFiredRef.current = true;
+    }
     // Intentionally run once on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -595,12 +774,13 @@ export default function StopwatchPage() {
   const commitStart = useCallback(() => {
     // Do NOT reset accRef here: "stopped" is a pause, so Start resumes with
     // accumulated time intact. Only handleReset zeroes it.
+    if (cuesRef.current.soundEnabled) playCue("start");
     startRef.current = performance.now();
     wallStartRef.current = Date.now();
     setState("running");
     startLoop();
     persist("running");
-  }, [startLoop, persist]);
+  }, [startLoop, persist, playCue]);
 
   const beginCountdown = useCallback((seconds: number) => {
     const endsAt = Date.now() + seconds * 1000;
@@ -691,7 +871,10 @@ export default function StopwatchPage() {
 
   const handleStartStop = useCallback(() => {
     if (state === "idle" || state === "stopped") {
-      // Start / Resume — always allowed even when locked
+      // Start / Resume — always allowed even when locked.
+      // This is a user gesture, so unlock the AudioContext here
+      // even when only the target beep is enabled.
+      if (cuesRef.current.targetEnabled) ensureAudioCtx();
       if (delaySeconds > 0) {
         // Enter countdown
         beginCountdown(delaySeconds);
@@ -705,6 +888,7 @@ export default function StopwatchPage() {
         triggerLockHint();
         return;
       }
+      if (cuesRef.current.soundEnabled) playCue("stop");
       accRef.current = getElapsed();
       wallStartRef.current = null;
       stopLoop();
@@ -713,7 +897,7 @@ export default function StopwatchPage() {
       persist("stopped");
     }
     // During countdown: do nothing (cancel button handles it separately)
-  }, [state, delaySeconds, beginCountdown, commitStart, isLocked, triggerLockHint, getElapsed, stopLoop, persist]);
+  }, [state, delaySeconds, beginCountdown, commitStart, isLocked, triggerLockHint, getElapsed, stopLoop, persist, playCue, ensureAudioCtx]);
 
   const handleCancelCountdown = useCallback(() => {
     clearCountdown();
@@ -726,6 +910,7 @@ export default function StopwatchPage() {
 
   const handleLap = useCallback(() => {
     if (state !== "running") return;
+    if (cuesRef.current.soundEnabled) playCue("lap");
     const totalMs = getElapsed();
     setLaps((prev) => {
       const prevTotal = prev.length > 0 ? prev[prev.length - 1].totalMs : 0;
@@ -741,7 +926,7 @@ export default function StopwatchPage() {
       persist("running");
       return next;
     });
-  }, [state, getElapsed, persist]);
+  }, [state, getElapsed, persist, playCue]);
 
   const handleReset = useCallback(() => {
     if (isLocked) {
@@ -755,6 +940,7 @@ export default function StopwatchPage() {
     startRef.current = 0;
     wallStartRef.current = null;
     lapsRef.current = [];
+    targetFiredRef.current = false;
     setState("idle");
     setDisplayMs(0);
     setLaps([]);
@@ -798,6 +984,18 @@ export default function StopwatchPage() {
     return () =>
       document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
+
+  // Changing the target re-arms the cue (unless the new target already passed)
+  const handleTargetSettingsChange = useCallback(
+    (patch: Partial<CueSettings>) => {
+      updateCues(patch);
+      const next = { ...cuesRef.current, ...patch };
+      const elapsedNow =
+        state === "running" ? getElapsed() : accRef.current;
+      targetFiredRef.current = elapsedNow >= next.targetMs;
+    },
+    [updateCues, state, getElapsed]
+  );
 
   // Secondary pusher: lap when running, reset when stopped/idle
   const handleSecondary = useCallback(() => {
@@ -1014,6 +1212,26 @@ export default function StopwatchPage() {
             )}
           </div>
 
+          {/* ── Target marker (#227) — stays visible in large-display mode ── */}
+          {cues.targetEnabled &&
+            (displayMs >= cues.targetMs ? (
+              <p
+                className="mt-4 text-center text-sm font-black uppercase tracking-wider text-race-red"
+                role="status"
+                data-testid="target-overrun"
+              >
+                Target {formatTargetInput(cues.targetMs)} · +
+                {formatLapTime(displayMs - cues.targetMs)}
+              </p>
+            ) : (
+              <p
+                className="mt-4 text-center text-xs font-semibold text-race-muted"
+                data-testid="target-pending"
+              >
+                Target {formatTargetInput(cues.targetMs)}
+              </p>
+            ))}
+
           {/* ── Delay selector ─────────────────────────────────────────────── */}
           {(isIdle || state === "stopped") && (
             <div
@@ -1165,6 +1383,67 @@ export default function StopwatchPage() {
           >
             {largeMode ? "Exit large display" : "Large display"}
           </button>
+
+          {/* ── Sound settings (#227) — hidden in large-display mode ───────── */}
+          {!largeMode && (
+            <section
+              className="mt-8 w-full border-t-2 border-race-ink pt-4"
+              aria-label="Sound settings"
+            >
+              <p className="race-kicker mb-3">Sound</p>
+              <div className="flex flex-col gap-3 text-sm font-semibold">
+                <label className="flex items-center justify-between gap-3">
+                  <span>Beep on start / stop / lap</span>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[var(--race-red)]"
+                    checked={cues.soundEnabled}
+                    onChange={(e) => updateCues({ soundEnabled: e.target.checked })}
+                    data-testid="sound-cues-toggle"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3">
+                  <span>
+                    Target-time beep
+                    <span className="ml-1 text-xs font-semibold text-race-muted">
+                      (stopwatch keeps running)
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[var(--race-red)]"
+                    checked={cues.targetEnabled}
+                    onChange={(e) =>
+                      handleTargetSettingsChange({ targetEnabled: e.target.checked })
+                    }
+                    data-testid="target-toggle"
+                  />
+                </label>
+                {cues.targetEnabled && (
+                  <label className="flex items-center justify-between gap-3">
+                    <span>Target (MM:SS)</span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={targetInput}
+                      onChange={(e) => {
+                        setTargetInput(e.target.value);
+                        const ms = parseTargetInput(e.target.value);
+                        if (ms !== null) {
+                          handleTargetSettingsChange({ targetMs: ms });
+                        }
+                      }}
+                      onBlur={() => setTargetInput(formatTargetInput(cues.targetMs))}
+                      className="w-20 border-2 border-race-ink bg-white px-2 py-1 text-center font-black tabular-nums"
+                      aria-label="Target time in minutes and seconds"
+                      placeholder="01:00"
+                      data-testid="target-time-input"
+                    />
+                  </label>
+                )}
+              </div>
+            </section>
+          )}
 
           {/* ── Lap list ───────────────────────────────────────────────────── */}
           {laps.length > 0 && (

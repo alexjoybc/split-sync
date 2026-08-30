@@ -45,6 +45,13 @@ import {
   clearRunningNotification,
   showRunningNotification,
 } from "./src/notification";
+import {
+  DEFAULT_CUE_SETTINGS,
+  loadCueSettings,
+  playCue,
+  saveCueSettings,
+} from "./src/cues";
+import type { CueSettings } from "./src/cues";
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const C = {
@@ -732,6 +739,182 @@ function LabeledInput({
         autoCorrect={false}
       />
     </View>
+  );
+}
+
+// ── Sound cues (issue #227) ────────────────────────────────────────────────────
+
+/**
+ * Loads persisted cue settings and exposes them as state + a ref (the ref is
+ * safe to read inside timer callbacks without re-creating the tick loop).
+ */
+function useCueSettings() {
+  const [cueSettings, setCueSettings] = useState<CueSettings>(DEFAULT_CUE_SETTINGS);
+  const cueRef = useRef<CueSettings>(cueSettings);
+
+  useEffect(() => {
+    loadCueSettings().then((loaded) => {
+      cueRef.current = loaded;
+      setCueSettings(loaded);
+    });
+  }, []);
+
+  const updateCueSettings = useCallback((patch: Partial<CueSettings>) => {
+    setCueSettings((prev) => {
+      const next = { ...prev, ...patch };
+      cueRef.current = next;
+      void saveCueSettings(next);
+      return next;
+    });
+  }, []);
+
+  return { cueSettings, cueRef, updateCueSettings };
+}
+
+// Small ON/OFF switch styled like the device pills
+function CueSwitch({
+  on,
+  label,
+  onToggle,
+}: {
+  on: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onToggle}
+      accessible
+      accessibilityRole="switch"
+      accessibilityState={{ checked: on }}
+      accessibilityLabel={label}
+      style={[s.cueSwitch, on && s.cueSwitchOn]}
+    >
+      <Text style={[s.cueSwitchText, on && s.cueSwitchTextOn]}>
+        {on ? "ON" : "OFF"}
+      </Text>
+    </Pressable>
+  );
+}
+
+// Settings panel: sound cue toggles + target time (mm:ss)
+function CueSettingsPanel({
+  settings,
+  onChange,
+}: {
+  settings: CueSettings;
+  onChange: (patch: Partial<CueSettings>) => void;
+}) {
+  const [mm, setMm] = useState(String(Math.floor(settings.targetMs / 60000)));
+  const [ss, setSs] = useState(p2(Math.floor(settings.targetMs / 1000) % 60));
+
+  const commitTarget = useCallback(
+    (mmStr: string, ssStr: string) => {
+      const m = parseInt(mmStr, 10);
+      const sec = Math.min(parseInt(ssStr, 10) || 0, 59);
+      const ms = (Number.isNaN(m) ? 0 : m) * 60000 + sec * 1000;
+      if (ms > 0) onChange({ targetMs: ms });
+    },
+    [onChange]
+  );
+
+  return (
+    <View style={s.cuePanel}>
+      <View style={s.cueRow}>
+        <Text style={s.cueLabel}>SOUND CUES · START / STOP / LAP</Text>
+        <CueSwitch
+          on={settings.soundEnabled}
+          label="Sound cues on start, stop, and lap"
+          onToggle={() => onChange({ soundEnabled: !settings.soundEnabled })}
+        />
+      </View>
+      <View style={s.cueRow}>
+        <Text style={s.cueLabel}>TARGET-TIME BEEP</Text>
+        <CueSwitch
+          on={settings.targetEnabled}
+          label="Beep once at target time"
+          onToggle={() => onChange({ targetEnabled: !settings.targetEnabled })}
+        />
+      </View>
+      {settings.targetEnabled && (
+        <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
+          <Text style={s.cueLabel}>TARGET (MM:SS)</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <TextInput
+              value={mm}
+              onChangeText={(t) => {
+                const clean = t.replace(/[^0-9]/g, "").slice(0, 3);
+                setMm(clean);
+                commitTarget(clean, ss);
+              }}
+              keyboardType="number-pad"
+              style={s.cueInput}
+              accessibilityLabel="Target minutes"
+              maxLength={3}
+            />
+            <Text style={s.cueColon}>:</Text>
+            <TextInput
+              value={ss}
+              onChangeText={(t) => {
+                const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
+                setSs(clean);
+                commitTarget(mm, clean);
+              }}
+              keyboardType="number-pad"
+              style={s.cueInput}
+              accessibilityLabel="Target seconds"
+              maxLength={2}
+            />
+          </View>
+        </View>
+      )}
+      <Text style={s.cueHint}>
+        The stopwatch keeps running past the target — the overrun is shown in
+        red. Cues are best-effort while the app is in the background.
+      </Text>
+    </View>
+  );
+}
+
+// Red overrun strip shown once elapsed time passes the target
+function TargetOverrunStrip({
+  elapsedMs,
+  targetMs,
+}: {
+  elapsedMs: number;
+  targetMs: number;
+}) {
+  if (elapsedMs < targetMs) return null;
+  return (
+    <View
+      style={s.targetOverrun}
+      accessible
+      accessibilityLabel={`Past target by ${fmtCompact(elapsedMs - targetMs)}`}
+    >
+      <Text style={s.targetOverrunLabel}>TARGET {fmtCompact(targetMs)}</Text>
+      <Text style={s.targetOverrunTime}>+{fmtCompact(elapsedMs - targetMs)}</Text>
+    </View>
+  );
+}
+
+// ♪ toggle button for the casing bar
+function CueBarButton({
+  active,
+  onPress,
+}: {
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel="Sound settings"
+      style={s.cueBtn}
+    >
+      <Text style={[s.cueBtnText, active && { color: C.yellow }]}>♪</Text>
+    </Pressable>
   );
 }
 
@@ -1427,6 +1610,11 @@ function SessionScreen({
   const [showLockHint, setShowLockHint] = useState(false);
   const lockHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Sound cues (#227)
+  const { cueSettings, cueRef, updateCueSettings } = useCueSettings();
+  const [showCuePanel, setShowCuePanel] = useState(false);
+  const targetFiredRef = useRef(false);
+
   // Clock sync: clientT0 = Date.now() when we first learn t0_server
   const clientT0Ref = useRef<number | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1504,15 +1692,31 @@ function SessionScreen({
     [laps]
   );
 
+  // Fire the target cue once when elapsed time crosses the target (#227)
+  const checkTarget = useCallback(
+    (elapsed: number) => {
+      const cfg = cueRef.current;
+      if (!cfg.targetEnabled || targetFiredRef.current) return;
+      if (elapsed >= cfg.targetMs) {
+        targetFiredRef.current = true;
+        playCue("target");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
+    },
+    [cueRef]
+  );
+
   // ── Clock tick ──────────────────────────────────────────────────────────────
   const startTick = useCallback(() => {
     if (tickRef.current) clearInterval(tickRef.current);
     tickRef.current = setInterval(() => {
       if (clientT0Ref.current !== null) {
-        setElapsedMs(Date.now() - clientT0Ref.current);
+        const elapsed = Date.now() - clientT0Ref.current;
+        setElapsedMs(elapsed);
+        checkTarget(elapsed);
       }
     }, 30);
-  }, []);
+  }, [checkTarget]);
 
   const stopTick = useCallback(() => {
     if (tickRef.current) {
@@ -1538,6 +1742,7 @@ function SessionScreen({
       if (ev.event_type === "start" && ev.t0_server) {
         setT0Server(ev.t0_server);
         clientT0Ref.current = Date.now();
+        targetFiredRef.current = false;
         setStatus("running");
         startTick();
       } else if (ev.event_type === "stop") {
@@ -1546,6 +1751,7 @@ function SessionScreen({
       } else if (ev.event_type === "reset") {
         setT0Server(null);
         clientT0Ref.current = null;
+        targetFiredRef.current = false;
         setStatus("waiting");
         setElapsedMs(0);
         stopTick();
@@ -1855,19 +2061,22 @@ function SessionScreen({
   // ── Button handlers ─────────────────────────────────────────────────────────
   const handleStart = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (cueRef.current.soundEnabled) playCue("start");
     await sendEvent("start");
-  }, [sendEvent]);
+  }, [sendEvent, cueRef]);
 
   const handleStop = useCallback(async () => {
     if (isLocked) { showLockedHint(); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    if (cueRef.current.soundEnabled) playCue("stop");
     await sendEvent("stop");
-  }, [isLocked, showLockedHint, sendEvent]);
+  }, [isLocked, showLockedHint, sendEvent, cueRef]);
 
   const handleLap = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (cueRef.current.soundEnabled) playCue("lap");
     await sendEvent("lap");
-  }, [sendEvent]);
+  }, [sendEvent, cueRef]);
 
   const handleReset = useCallback(async () => {
     if (isLocked) { showLockedHint(); return; }
@@ -1901,6 +2110,20 @@ function SessionScreen({
     onLap: handleLap,
     onStartStop: handleVolumeStartStop,
   });
+
+  // Changing the target re-arms the cue (unless the new target already passed)
+  const handleCueChange = useCallback(
+    (patch: Partial<CueSettings>) => {
+      updateCueSettings(patch);
+      if (patch.targetEnabled !== undefined || patch.targetMs !== undefined) {
+        const next = { ...cueRef.current, ...patch };
+        const elapsedNow =
+          clientT0Ref.current !== null ? Date.now() - clientT0Ref.current : 0;
+        targetFiredRef.current = elapsedNow >= next.targetMs;
+      }
+    },
+    [updateCueSettings, cueRef]
+  );
 
   // ── Render ──────────────────────────────────────────────────────────────────
   const lcdMain = lcdMainSize(width, height);
@@ -1953,9 +2176,18 @@ function SessionScreen({
             </Text>
           </Pressable>
           <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
+          <CueBarButton
+            active={cueSettings.soundEnabled || cueSettings.targetEnabled}
+            onPress={() => setShowCuePanel((v) => !v)}
+          />
           <StatusPill status={status} />
         </View>
       </View>
+
+      {/* ── Sound cue settings (#227) ── */}
+      {showCuePanel && (
+        <CueSettingsPanel settings={cueSettings} onChange={handleCueChange} />
+      )}
 
       {/* ── Participant strip ── */}
       <ScrollView
@@ -2005,6 +2237,11 @@ function SessionScreen({
           />
         </View>
       </View>
+
+      {/* ── Target overrun (#227) ── */}
+      {cueSettings.targetEnabled && (
+        <TargetOverrunStrip elapsedMs={elapsedMs} targetMs={cueSettings.targetMs} />
+      )}
 
       {/* ── Last lap strip ── */}
       {lastLap && (
@@ -2373,6 +2610,25 @@ function SoloScreen({
     AsyncStorage.removeItem(SOLO_STORAGE_KEY).catch(() => {});
   }, []);
 
+  // Sound cues (#227)
+  const { cueSettings, cueRef, updateCueSettings } = useCueSettings();
+  const [showCuePanel, setShowCuePanel] = useState(false);
+  const targetFiredRef = useRef(false);
+
+  // Fire the target cue once when elapsed time crosses the target (#227)
+  const checkTarget = useCallback(
+    (elapsed: number) => {
+      const cfg = cueRef.current;
+      if (!cfg.targetEnabled || targetFiredRef.current) return;
+      if (elapsed >= cfg.targetMs) {
+        targetFiredRef.current = true;
+        playCue("target");
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      }
+    },
+    [cueRef]
+  );
+
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
       if (
@@ -2383,11 +2639,14 @@ function SoloScreen({
         const t = accum.current + Date.now() - anchor.current;
         setSession(t);
         setLapMs(t - lastLapCum.current);
+        // Best-effort: if the target passed while backgrounded and the JS
+        // timer was suspended, fire the cue on resume.
+        checkTarget(t);
       }
       appState.current = next;
     });
     return () => sub.remove();
-  }, []);
+  }, [checkTarget]);
 
   const startTick = useCallback(() => {
     if (tickRef.current) clearInterval(tickRef.current);
@@ -2396,9 +2655,10 @@ function SoloScreen({
         const t = accum.current + Date.now() - anchor.current;
         setSession(t);
         setLapMs(t - lastLapCum.current);
+        checkTarget(t);
       }
     }, 30);
-  }, []);
+  }, [checkTarget]);
 
   const stopTick = useCallback(() => {
     if (tickRef.current) {
@@ -2461,6 +2721,17 @@ function SoloScreen({
         lapsRef.current = saved.laps;
         setLaps(saved.laps);
 
+        // Restoring is not a user action: never beep on mount. If the
+        // restored elapsed time already crossed the target, mark it fired
+        // so the tick loop doesn't play the target cue retroactively.
+        const restoredElapsed =
+          saved.state === "running" && saved.anchorWall !== null
+            ? saved.accumMs + Math.max(0, Date.now() - saved.anchorWall)
+            : saved.accumMs;
+        if (restoredElapsed >= cueRef.current.targetMs) {
+          targetFiredRef.current = true;
+        }
+
         if (saved.state === "running" && saved.anchorWall !== null) {
           // The persisted anchor is a Date.now() wall-clock value — reuse it
           // directly so elapsed time keeps counting across the kill,
@@ -2489,11 +2760,12 @@ function SoloScreen({
   // Commit to running after countdown ends
   const commitStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (cueRef.current.soundEnabled) playCue("start");
     anchor.current = Date.now();
     startTick();
     setSw("running");
     persistSolo("running");
-  }, [startTick, persistSolo]);
+  }, [startTick, persistSolo, cueRef]);
 
   const beginCountdown = useCallback((seconds: number) => {
     const endsAt = Date.now() + seconds * 1000;
@@ -2542,6 +2814,7 @@ function SoloScreen({
   const handleStop = useCallback(() => {
     if (isLocked) { showLockedHint(); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    if (cueRef.current.soundEnabled) playCue("stop");
     if (anchor.current !== null) {
       accum.current += Date.now() - anchor.current;
       anchor.current = null;
@@ -2551,10 +2824,11 @@ function SoloScreen({
     setLapMs(accum.current - lastLapCum.current);
     setSw("paused");
     persistSolo("paused");
-  }, [isLocked, showLockedHint, stopTick, persistSolo]);
+  }, [isLocked, showLockedHint, stopTick, persistSolo, cueRef]);
 
   const handleLap = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (cueRef.current.soundEnabled) playCue("lap");
     const now = Date.now();
     const cum =
       accum.current + (anchor.current !== null ? now - anchor.current : 0);
@@ -2582,12 +2856,28 @@ function SoloScreen({
     accum.current = 0;
     lastLapCum.current = 0;
     lapsRef.current = [];
+    targetFiredRef.current = false;
     setSession(0);
     setLapMs(0);
     setLaps([]);
     setSw("idle");
     clearPersistedSolo();
   }, [isLocked, showLockedHint, stopTick, clearCountdown, clearPersistedSolo]);
+
+  // Changing the target re-arms the cue (unless the new target already passed)
+  const handleCueChange = useCallback(
+    (patch: Partial<CueSettings>) => {
+      updateCueSettings(patch);
+      if (patch.targetEnabled !== undefined || patch.targetMs !== undefined) {
+        const next = { ...cueRef.current, ...patch };
+        const elapsedNow =
+          accum.current +
+          (anchor.current !== null ? Date.now() - anchor.current : 0);
+        targetFiredRef.current = elapsedNow >= next.targetMs;
+      }
+    },
+    [updateCueSettings, cueRef]
+  );
 
   const isRunning = swState === "running";
   const isPaused = swState === "paused";
@@ -2668,6 +2958,10 @@ function SoloScreen({
             </Text>
           </Pressable>
           <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
+          <CueBarButton
+            active={cueSettings.soundEnabled || cueSettings.targetEnabled}
+            onPress={() => setShowCuePanel((v) => !v)}
+          />
           <View
             style={[
               s.pill,
@@ -2692,6 +2986,11 @@ function SoloScreen({
           </View>
         </View>
       </View>
+
+      {/* ── Sound cue settings (#227) ── */}
+      {showCuePanel && (
+        <CueSettingsPanel settings={cueSettings} onChange={handleCueChange} />
+      )}
 
       {/* ── LCD instrument panel (shows countdown overlay or normal display) ── */}
       {isCountdown ? (
@@ -2724,6 +3023,11 @@ function SoloScreen({
             <Text style={s.instrLabel}>
               {isIdle ? "LAP TIME" : `LAP ${lapCount + 1}`}
             </Text>
+            {cueSettings.targetEnabled && (
+              <Text style={s.instrLabel}>
+                TGT {fmtParts(cueSettings.targetMs).main}
+              </Text>
+            )}
           </View>
           <View style={s.instrMain}>
             <LcdDisplay ms={lapMs} mainSize={lcdMain} fontLoaded={fontsLoaded} />
@@ -2771,6 +3075,11 @@ function SoloScreen({
             ))}
           </View>
         </View>
+      )}
+
+      {/* ── Target overrun (#227) ── */}
+      {cueSettings.targetEnabled && (
+        <TargetOverrunStrip elapsedMs={sessionMs} targetMs={cueSettings.targetMs} />
       )}
 
       {/* ── Last lap strip ── */}
@@ -3526,6 +3835,96 @@ const s = StyleSheet.create({
     color: C.white,
     overflow: "hidden",
   } as const,
+
+  // Sound cues (#227)
+  cueBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  cueBtnText: { color: "#555550", fontSize: 16, fontWeight: "900" },
+  cuePanel: {
+    backgroundColor: C.panelBg,
+    borderBottomWidth: 2,
+    borderColor: C.rule,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 10,
+  },
+  cueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 9,
+    borderBottomWidth: 1,
+    borderColor: C.line,
+  },
+  cueLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    color: C.ink,
+    flexShrink: 1,
+    paddingRight: 8,
+  },
+  cueSwitch: {
+    borderWidth: 1.5,
+    borderColor: C.muted,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    minWidth: 52,
+    alignItems: "center",
+  },
+  cueSwitchOn: { backgroundColor: C.red, borderColor: C.red },
+  cueSwitchText: {
+    color: C.muted,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
+  cueSwitchTextOn: { color: C.white },
+  cueInput: {
+    backgroundColor: C.white,
+    borderWidth: 1.5,
+    borderColor: C.line,
+    borderRadius: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 14,
+    fontWeight: "700",
+    color: C.ink,
+    minWidth: 44,
+    textAlign: "center",
+  },
+  cueColon: { fontSize: 14, fontWeight: "900", color: C.ink },
+  cueHint: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: C.muted,
+    marginTop: 8,
+    lineHeight: 14,
+  },
+  targetOverrun: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: C.red,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  targetOverrunLabel: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+  targetOverrunTime: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 1,
+  },
 
   // Home screen session list
   sectionHeader: {

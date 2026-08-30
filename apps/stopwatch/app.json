@@ -31,7 +31,10 @@
               "pathPrefix": "/stopwatch/s/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -42,6 +45,6 @@
       }
     },
     "platforms": ["android"],
-    "plugins": ["expo-font"]
+    "plugins": ["expo-font", "expo-audio"]
   }
 }

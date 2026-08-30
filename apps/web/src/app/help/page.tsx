@@ -398,6 +398,30 @@ export default function HelpPage() {
               <strong>L</strong> = lap.
             </li>
             <li>
+              <strong>Sound cues</strong> are optional and off by default.
+              Under the <strong>Sound</strong> section below the stopwatch,
+              enable <strong>Beep on start / stop / lap</strong> for a short
+              audible confirmation of each press. The beeps are synthesized in
+              your browser — nothing is downloaded and no permission is needed.
+              Your choice is remembered on this device.
+            </li>
+            <li>
+              Enable the <strong>target-time beep</strong> and set a target
+              (MM:SS) to hear a single distinct two-tone beep when the elapsed
+              time reaches it. The stopwatch <strong>keeps running</strong> —
+              once past the target, the time over it is shown in red below the
+              dial so you can measure exactly how far you overran. Changing the
+              target re-arms the beep.
+            </li>
+            <li>
+              In the Android Stopwatch app, the same options live behind the{" "}
+              <strong>♪</strong> button in the top bar — for both the solo
+              stopwatch and shared sessions — and haptic feedback stays on
+              regardless. Cues are guaranteed while the app is on screen; with
+              the app backgrounded or the phone locked they are best-effort,
+              as the system may pause the app&apos;s timers.
+            </li>
+            <li>
               Timing stays accurate while the tab is in the background — the
               stopwatch anchors to a monotonic clock ({"`"}
               performance.now(){"`"}), not accumulated intervals.

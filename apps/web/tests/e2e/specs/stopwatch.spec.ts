@@ -259,4 +259,64 @@ test.describe('/stopwatch solo page', () => {
     await expect(page.getByRole('button', { name: /reset stopwatch/i })).toBeDisabled();
     await expect(page.getByRole('table', { name: /lap times/i })).not.toBeVisible({ timeout: 2_000 });
   });
+
+  // ── Sound cues & target time (#227) ─────────────────────────────────────────
+
+  test('sound cues are OFF by default', async ({ page }) => {
+    await page.goto('/stopwatch');
+    await expect(page.getByTestId('sound-cues-toggle')).not.toBeChecked();
+    await expect(page.getByTestId('target-toggle')).not.toBeChecked();
+    // Target input hidden until enabled
+    await expect(page.getByTestId('target-time-input')).not.toBeVisible();
+  });
+
+  test('sound settings persist across reloads (localStorage)', async ({ page }) => {
+    await page.goto('/stopwatch');
+    await page.getByTestId('sound-cues-toggle').check();
+    await page.getByTestId('target-toggle').check();
+    await page.getByTestId('target-time-input').fill('02:30');
+
+    await page.reload();
+
+    await expect(page.getByTestId('sound-cues-toggle')).toBeChecked();
+    await expect(page.getByTestId('target-toggle')).toBeChecked();
+    await expect(page.getByTestId('target-time-input')).toHaveValue('02:30');
+  });
+
+  test('target marker shows pending target, then overrun while stopwatch keeps running', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Enable target and set it to 1 second
+    await page.getByTestId('target-toggle').check();
+    await page.getByTestId('target-time-input').fill('00:01');
+
+    // Pending marker shown before start
+    await expect(page.getByTestId('target-pending')).toContainText('00:01');
+
+    // Start and run past the target
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await expect(page.getByTestId('target-overrun')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('target-overrun')).toContainText('+');
+
+    // Stopwatch KEEPS running past the target
+    await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible();
+
+    // Stop + reset clears overrun state
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+    await page.getByRole('button', { name: /reset stopwatch/i }).click();
+    await expect(page.getByTestId('target-overrun')).not.toBeVisible();
+    await expect(page.getByTestId('target-pending')).toBeVisible();
+  });
+
+  test('invalid target input does not break the pending marker', async ({ page }) => {
+    await page.goto('/stopwatch');
+    await page.getByTestId('target-toggle').check();
+    const input = page.getByTestId('target-time-input');
+    await input.fill('abc');
+    // Invalid input is ignored; marker keeps the last valid target (default 01:00)
+    await expect(page.getByTestId('target-pending')).toContainText('01:00');
+    // Blur restores a valid value in the input
+    await input.blur();
+    await expect(input).toHaveValue('01:00');
+  });
 });
