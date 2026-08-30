@@ -22,6 +22,57 @@ export function isPenalized(row: StandingRow): boolean {
   return row.penalties.length > 0;
 }
 
+/**
+ * Riders on this race's roster who haven't recorded a single crossing yet.
+ * Used by the live board's start-line rows and by the finalization review
+ * checklist (#72) — a race can look "done" while a rider was never scored.
+ */
+export function getRidersWithoutCrossings(rows: StandingRow[]): StandingRow[] {
+  return rows.filter((r) => r.status === "ok" && r.laps === 0);
+}
+
+/**
+ * Flags riders whose most recent lap is unusually slow relative to the
+ * field, as a pre-publish sanity check (#72) — e.g. a missed crossing that
+ * inflated a lap time, or a rider who is actually still out on course.
+ * Heuristic only (no raw per-neighbor gap is exposed by StandingRow): a
+ * rider is flagged when they are ranked (laps > 0, status 'ok') and their
+ * lastLapMs exceeds `factor`x the field's median lastLapMs. Not a
+ * disqualification signal — purely a "look at this before publishing" flag.
+ */
+export function flagSuspiciousGaps(rows: StandingRow[], factor = 2.5): StandingRow[] {
+  const withLapTimes = rows.filter((r) => r.status === "ok" && r.laps > 0 && r.lastLapMs != null);
+  if (withLapTimes.length < 3) return []; // too small a field for a median to mean anything
+  const sorted = [...withLapTimes].map((r) => r.lastLapMs!).sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  if (median <= 0) return [];
+  return withLapTimes.filter((r) => r.lastLapMs! > median * factor);
+}
+
+/**
+ * Per-category (or single "Overall" group when a race has no categories)
+ * top-3 podium, shared by the live board and the finalization review screen
+ * (#72). Only ranked, on-lap riders are eligible.
+ */
+export function computePodiums(
+  crossings: Crossing[],
+  entries: Entry[],
+  raceStartMs: number | null,
+  categories: string[],
+  penalties: EntryPenalty[]
+): { category: string; rows: StandingRow[] }[] {
+  const groups = categories.length > 0 ? categories : ["Overall"];
+  return groups.map((category) => {
+    const { crossings: c, entries: e } =
+      categories.length > 0 ? filterByCategory(crossings, entries, category) : { crossings, entries };
+    const rows = computeStandings(c, e, raceStartMs, penalties)
+      .filter((r) => r.status === "ok" && r.laps > 0)
+      .slice(0, 3);
+    return { category, rows };
+  });
+}
+
 function fmtDuration(ms: number): string {
   const totalTenths = Math.round(ms / 100);
   const tenths = totalTenths % 10;

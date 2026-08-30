@@ -43,6 +43,15 @@ function RaceListItem({ race }: { race: Race }) {
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-3">
+        {race.status === "finished" && (
+          <span
+            className={`inline-flex px-2 py-1 text-[10px] font-black uppercase tracking-wide ${
+              race.results_under_revision ? "bg-race-yellow text-race-ink" : race.results_published_at ? "bg-race-ink text-white" : "bg-zinc-200 text-zinc-700"
+            }`}
+          >
+            {race.results_under_revision ? "Under revision" : race.results_published_at ? "Published" : "Unofficial"}
+          </span>
+        )}
         <span
           className={`inline-flex items-center gap-1.5 px-2 py-1 text-[10px] font-black uppercase tracking-wide ${statusStyle[race.status]}`}
           style={isActive ? { boxShadow: "var(--race-live-shadow)" } : undefined}

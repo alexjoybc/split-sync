@@ -53,6 +53,18 @@ race:  upcoming -> active -> finished
   Postgres function, which requires a non-empty reason, checks event
   ownership, clears `finished_at`, and returns the race to `active`. Direct
   client updates cannot perform this transition.
+- A finished race's results are not "final" until an organizer explicitly
+  publishes them via `finalize_and_publish_race(race_id)`, which sets
+  `races.results_published_at`. A pre-publish review screen at
+  `/score/[raceId]/finalize` surfaces riders with no crossings, unusually
+  slow last laps (mass-start) or a `needs-review`/still-on-course state
+  (time trial), unresolved DNS/DNF/DSQ statuses, and any applied penalties —
+  advisory only, since SplitSync results remain unofficial regardless of
+  publish state. Reopening a *published* race clears `results_published_at`
+  and sets `races.results_under_revision = true` until it is published
+  again; both columns are guarded by a `races_publish_guard` trigger so only
+  `finalize_and_publish_race()`/`reopen_race()` can write them. Added in
+  migration `20260830000002_race_result_finalization.sql`. See ADR 0018.
 - Every race status change (including ordinary start/finish) is recorded in
   `race_status_changes` with the previous/new status, actor, timestamp, and
   optional reason, via an `after update` trigger.

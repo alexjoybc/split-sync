@@ -859,6 +859,15 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
             <Link href={`/live/${raceId}`} className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4">
               View results
             </Link>
+            {race.results_published_at ? (
+              <Link href={`/score/${raceId}/finalize`} className="text-sm font-black uppercase text-race-ink underline decoration-2 underline-offset-4">
+                Published
+              </Link>
+            ) : (
+              <Link href={`/score/${raceId}/finalize`} className="race-action--muted race-action--yellow">
+                Review &amp; publish
+              </Link>
+            )}
             <button onClick={() => setReopening(true)} className="race-action--muted">
               Reopen race
             </button>
@@ -870,8 +879,9 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
         <div className="race-panel mt-4 p-4">
           <p className="race-kicker--muted">Reopen race</p>
           <p className="mt-2 text-sm text-race-muted">
-            Reopening returns this race to active and clears its finish time. A reason is required and is kept in the
-            race&apos;s audit log.
+            Reopening returns this race to active and clears its finish time. If results were published, they are
+            unpublished and flagged as under revision until you finalize again. A reason is required and is kept in
+            the race&apos;s audit log.
           </p>
           <textarea
             value={reopenReason}

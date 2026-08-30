@@ -64,6 +64,15 @@ export default function HelpPage() {
               automatically once it is corrected and finished again.
             </li>
             <li>
+              Once an organizer reviews a finished race and publishes it, the
+              board reads <strong>Final classification</strong> instead of
+              &quot;live&quot; — still unofficial, but no longer expected to
+              change. If the organizer later reopens a published race to fix
+              something, the board instead reads{" "}
+              <strong>Results under revision</strong> until it is published
+              again.
+            </li>
+            <li>
               A rider marked <strong>DNS</strong> (did not start),{" "}
               <strong>DNF</strong> (did not finish), or <strong>DSQ</strong>{" "}
               (disqualified) by the organizer stays listed with that badge
@@ -256,6 +265,18 @@ export default function HelpPage() {
               a reason — this is required and kept in the race&apos;s audit
               history. Reopening clears the finish time and returns the race to
               active so you can correct it, then finish it again.
+            </li>
+            <li>
+              Once a race finishes, tap <strong>Review &amp; publish</strong> to
+              open a checklist before locking in results: riders with no
+              crossings, unusually slow last laps (or, for a time trial, riders
+              still on course or flagged for review), unresolved DNS/DNF/DSQ
+              statuses, and any penalties applied. The checklist is advisory —
+              SplitSync results stay unofficial either way — but tapping{" "}
+              <strong>Finalize &amp; publish</strong> timestamps the race as
+              final for spectators. Reopening a published race clears that
+              timestamp and marks results{" "}
+              <strong>under revision</strong> until you publish again.
             </li>
             <li>
               An accidental crossing can be removed without reopening: use{" "}
