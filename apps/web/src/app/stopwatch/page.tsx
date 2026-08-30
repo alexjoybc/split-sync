@@ -753,6 +753,14 @@ export default function StopwatchPage() {
 
   const bestLapMs = laps.length > 0 ? Math.min(...laps.map((l) => l.lapMs)) : null;
 
+  // Stats strip — only shown when >= 2 laps (invariant: never persisted, always derived)
+  const showStats = laps.length >= 2;
+  const worstLapMs = showStats ? Math.max(...laps.map((l) => l.lapMs)) : null;
+  const avgLapMs = showStats
+    ? laps.reduce((sum, l) => sum + l.lapMs, 0) / laps.length
+    : null;
+  const maxLapMs = worstLapMs; // alias for chart scaling (worst = longest)
+
   const isCountdown = state === "countdown";
   const isRunning   = state === "running";
   const isIdle      = state === "idle";
@@ -1047,6 +1055,50 @@ export default function StopwatchPage() {
               aria-label="Lap times"
             >
               <p className="race-kicker mb-3">Laps</p>
+
+              {/* Stats strip — visible only when >= 2 laps */}
+              {showStats && (
+                <div className="sw-stats-strip" aria-label="Lap statistics">
+                  <div className="sw-stat-cell sw-stat-cell--best" aria-label={`Best lap: ${formatLapTime(bestLapMs!)}`}>
+                    <span className="sw-stat-label">Best</span>
+                    <span className="sw-stat-value">{formatLapTime(bestLapMs!)}</span>
+                  </div>
+                  <div className="sw-stat-cell sw-stat-cell--worst" aria-label={`Worst lap: ${formatLapTime(worstLapMs!)}`}>
+                    <span className="sw-stat-label">Worst</span>
+                    <span className="sw-stat-value">{formatLapTime(worstLapMs!)}</span>
+                  </div>
+                  <div className="sw-stat-cell" aria-label={`Average lap: ${formatLapTime(Math.round(avgLapMs!))}`}>
+                    <span className="sw-stat-label">Avg</span>
+                    <span className="sw-stat-value">{formatLapTime(Math.round(avgLapMs!))}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Lap trend chart — bar per lap, best=yellow, worst=race-red */}
+              {showStats && (
+                <div className="sw-trend-chart" aria-label="Lap trend chart">
+                  {laps.map((lap) => {
+                    const isBest = lap.lapMs === bestLapMs;
+                    const isWorst = lap.lapMs === worstLapMs;
+                    const pct = maxLapMs ? Math.round((lap.lapMs / maxLapMs) * 100) : 100;
+                    const fillClass = isBest
+                      ? "sw-trend-fill sw-trend-fill--best"
+                      : isWorst
+                      ? "sw-trend-fill sw-trend-fill--worst"
+                      : "sw-trend-fill";
+                    return (
+                      <div key={lap.n} className="sw-trend-row">
+                        <span className="sw-trend-lap-num">{lap.n}</span>
+                        <div className="sw-trend-track">
+                          <div className={fillClass} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="sw-trend-time">{formatLapTime(lap.lapMs)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <table className="sw-lap-table" aria-label="Lap times table">
                 <thead>
                   <tr>
