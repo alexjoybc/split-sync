@@ -2655,12 +2655,57 @@ const SOLO_DELAY_OPTIONS: DelayOption[] = [0, 3, 5, 10];
 const SOLO_DELAY_LABELS: Record<DelayOption, string> = { 0: "OFF", 3: "3s", 5: "5s", 10: "10s" };
 const SOLO_DELAY_STORAGE_KEY = "sw_delay_seconds";
 
+// ── Solo mode: stopwatch (count up) vs single countdown timer (#232) ─────────
+// One timer only — multi-timer boards are a deliberate no-go (ADR 0018).
+type SoloMode = "stopwatch" | "timer";
+const SOLO_MODE_STORAGE_KEY = "solo_mode_v1";
+
+function ModeToggleStrip({
+  mode,
+  onSelect,
+}: {
+  mode: SoloMode;
+  onSelect: (m: SoloMode) => void;
+}) {
+  return (
+    <View style={s.delaySelector}>
+      <Text style={s.delayLabel}>MODE</Text>
+      <View style={s.delayOptions}>
+        {(["stopwatch", "timer"] as SoloMode[]).map((m) => (
+          <Pressable
+            key={m}
+            onPress={() => onSelect(m)}
+            style={[s.delayOption, mode === m && s.delayOptionActive]}
+            accessible
+            accessibilityRole="radio"
+            accessibilityLabel={
+              m === "stopwatch" ? "Stopwatch mode" : "Countdown timer mode"
+            }
+            accessibilityState={{ selected: mode === m }}
+          >
+            <Text
+              style={[
+                s.delayOptionText,
+                mode === m && s.delayOptionTextActive,
+              ]}
+            >
+              {m === "stopwatch" ? "STOPWATCH" : "TIMER"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function SoloScreen({
   fontsLoaded,
   onBack,
+  onSelectMode,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
+  onSelectMode: (m: SoloMode) => void;
 }) {
   useKeepAwake();
   const { width, height } = useWindowDimensions();
@@ -3187,6 +3232,11 @@ function SoloScreen({
         </View>
       )}
 
+      {/* ── Mode toggle (#232) — shown only in idle ── */}
+      {isIdle && (
+        <ModeToggleStrip mode="stopwatch" onSelect={onSelectMode} />
+      )}
+
       {/* ── Delay selector (shown only in idle/paused) ── */}
       {(isIdle || isPaused) && (
         <View style={s.delaySelector}>
@@ -3475,6 +3525,578 @@ function SoloScreen({
   );
 }
 
+// ── Countdown timer persistence (#232 — survives app kill via wall-clock) ─────
+const TIMER_STORAGE_KEY = "solo_timer_v1";
+const TIMER_DURATION_STORAGE_KEY = "timer_duration_v1";
+const TIMER_DEFAULT_DURATION_MS = 5 * 60_000;
+
+type PersistedTimer = {
+  /** Only running/paused are persisted; idle clears storage. */
+  state: "running" | "paused";
+  /** The originally set duration — completion resets back to this. */
+  durationMs: number;
+  /** Wall-clock (Date.now()) when the countdown reaches zero; null when paused. */
+  endAtWall: number | null;
+  /** Remaining ms when paused; null when running. */
+  remainingMs: number | null;
+};
+
+function parsePersistedTimer(raw: string | null): PersistedTimer | null {
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw) as PersistedTimer;
+    if (
+      (data.state !== "running" && data.state !== "paused") ||
+      typeof data.durationMs !== "number" ||
+      data.durationMs <= 0
+    ) {
+      return null;
+    }
+    if (data.state === "running" && typeof data.endAtWall !== "number") return null;
+    if (data.state === "paused" && typeof data.remainingMs !== "number") return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/** Finite completion alert: at most this many repeats, then silence. */
+const TIMER_ALARM_MAX_REPEATS = 6;
+const TIMER_ALARM_REPEAT_MS = 1_400;
+
+// ── Screen: Countdown Timer (#232) ─────────────────────────────────────────────
+function TimerScreen({
+  fontsLoaded,
+  onBack,
+  onSelectMode,
+}: {
+  fontsLoaded: boolean;
+  onBack: () => void;
+  onSelectMode: (m: SoloMode) => void;
+}) {
+  useKeepAwake();
+  const { width, height } = useWindowDimensions();
+
+  type TimerState = "idle" | "running" | "paused" | "alerting";
+
+  const [timerState, setTimerState] = useState<TimerState>("idle");
+  const [durationMs, setDurationMs] = useState(TIMER_DEFAULT_DURATION_MS);
+  const [remainingMs, setRemainingMs] = useState(TIMER_DEFAULT_DURATION_MS);
+  const [finishedWhileAway, setFinishedWhileAway] = useState(false);
+
+  // Duration inputs (H : MM : SS)
+  const [hh, setHh] = useState("0");
+  const [mm, setMm] = useState("05");
+  const [ss, setSs] = useState("00");
+
+  // Timing refs — wall-clock anchors, never accumulated intervals
+  const endAtWallRef = useRef<number | null>(null);
+  const remainingRef = useRef<number>(TIMER_DEFAULT_DURATION_MS);
+  const durationRef = useRef<number>(TIMER_DEFAULT_DURATION_MS);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const alarmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const alarmCountRef = useRef(0);
+  const appState = useRef<AppStateStatus>(AppState.currentState);
+
+  // Sound cues (#227) — completion alarm respects the shared soundEnabled flag
+  const { cueSettings, cueRef, updateCueSettings } = useCueSettings();
+
+  const setDurationInputsFromMs = useCallback((ms: number) => {
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    setHh(String(Math.floor(totalSeconds / 3600)));
+    setMm(p2(Math.floor((totalSeconds % 3600) / 60)));
+    setSs(p2(totalSeconds % 60));
+  }, []);
+
+  const applyDuration = useCallback((ms: number) => {
+    durationRef.current = ms;
+    remainingRef.current = ms;
+    setDurationMs(ms);
+    setRemainingMs(ms);
+  }, []);
+
+  const persistTimer = useCallback((state: "running" | "paused") => {
+    const data: PersistedTimer = {
+      state,
+      durationMs: durationRef.current,
+      endAtWall: state === "running" ? endAtWallRef.current : null,
+      remainingMs: state === "paused" ? remainingRef.current : null,
+    };
+    AsyncStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(data)).catch(
+      () => undefined
+    );
+  }, []);
+
+  const clearPersistedTimer = useCallback(() => {
+    AsyncStorage.removeItem(TIMER_STORAGE_KEY).catch(() => undefined);
+  }, []);
+
+  // ── Alarm — finite repeats, single tap dismisses ────────────────────────────
+  const stopAlarm = useCallback(() => {
+    if (alarmTimerRef.current !== null) {
+      clearInterval(alarmTimerRef.current);
+      alarmTimerRef.current = null;
+    }
+    alarmCountRef.current = 0;
+  }, []);
+
+  const fireAlarmPulse = useCallback(() => {
+    // Haptic always — vibrate-only is the completion signal with sound off.
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    if (cueRef.current.soundEnabled) playCue("alarm");
+  }, [cueRef]);
+
+  const startAlarm = useCallback(() => {
+    stopAlarm();
+    fireAlarmPulse();
+    alarmCountRef.current = 1;
+    alarmTimerRef.current = setInterval(() => {
+      if (alarmCountRef.current >= TIMER_ALARM_MAX_REPEATS) {
+        stopAlarm();
+        return;
+      }
+      alarmCountRef.current += 1;
+      fireAlarmPulse();
+    }, TIMER_ALARM_REPEAT_MS);
+  }, [stopAlarm, fireAlarmPulse]);
+
+  // ── Tick loop ───────────────────────────────────────────────────────────────
+  const stopTick = useCallback(() => {
+    if (tickRef.current !== null) {
+      clearInterval(tickRef.current);
+      tickRef.current = null;
+    }
+  }, []);
+
+  const complete = useCallback(() => {
+    stopTick();
+    endAtWallRef.current = null;
+    // Auto-reset to the ORIGINAL duration — ready to restart with one tap.
+    remainingRef.current = durationRef.current;
+    setRemainingMs(durationRef.current);
+    setTimerState("alerting");
+    clearPersistedTimer();
+    startAlarm();
+  }, [stopTick, clearPersistedTimer, startAlarm]);
+
+  const startTick = useCallback(() => {
+    stopTick();
+    tickRef.current = setInterval(() => {
+      if (endAtWallRef.current === null) return;
+      const remaining = endAtWallRef.current - Date.now();
+      if (remaining <= 0) {
+        setRemainingMs(0);
+        complete();
+      } else {
+        setRemainingMs(remaining);
+      }
+    }, 50);
+  }, [stopTick, complete]);
+
+  // Foregrounding: snap remaining from the wall-clock anchor; if the timer
+  // crossed zero while backgrounded, complete now (the alarm fires on return).
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (next) => {
+      if (
+        appState.current.match(/inactive|background/) &&
+        next === "active" &&
+        endAtWallRef.current !== null
+      ) {
+        const remaining = endAtWallRef.current - Date.now();
+        if (remaining <= 0) {
+          setRemainingMs(0);
+          complete();
+        } else {
+          setRemainingMs(remaining);
+        }
+      }
+      appState.current = next;
+    });
+    return () => sub.remove();
+  }, [complete]);
+
+  // ── Restore persisted state on mount (#224 pattern) ─────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      AsyncStorage.getItem(TIMER_DURATION_STORAGE_KEY),
+      AsyncStorage.getItem(TIMER_STORAGE_KEY),
+    ])
+      .then(([rawDuration, rawTimer]) => {
+        if (cancelled) return;
+
+        const parsedDuration = rawDuration !== null ? Number(rawDuration) : NaN;
+        if (Number.isFinite(parsedDuration) && parsedDuration > 0) {
+          applyDuration(parsedDuration);
+          setDurationInputsFromMs(parsedDuration);
+        }
+
+        const saved = parsePersistedTimer(rawTimer);
+        if (!saved) return;
+
+        applyDuration(saved.durationMs);
+        setDurationInputsFromMs(saved.durationMs);
+
+        if (saved.state === "running" && saved.endAtWall !== null) {
+          const remaining = saved.endAtWall - Date.now();
+          if (remaining > 0) {
+            endAtWallRef.current = saved.endAtWall;
+            setRemainingMs(remaining);
+            setTimerState("running");
+            startTick();
+          } else {
+            // Finished while the app was dead. Restoring is not a user
+            // action: never alarm on mount — reset quietly and say so.
+            setFinishedWhileAway(true);
+            clearPersistedTimer();
+          }
+        } else if (saved.state === "paused" && saved.remainingMs !== null) {
+          remainingRef.current = saved.remainingMs;
+          setRemainingMs(saved.remainingMs);
+          setTimerState("paused");
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => () => { stopTick(); stopAlarm(); }, [stopTick, stopAlarm]);
+
+  // ── Controls ────────────────────────────────────────────────────────────────
+  const commitDurationInputs = useCallback(
+    (hStr: string, mStr: string, sStr: string) => {
+      const h = parseInt(hStr, 10) || 0;
+      const m = Math.min(parseInt(mStr, 10) || 0, 59);
+      const sec = Math.min(parseInt(sStr, 10) || 0, 59);
+      const ms = h * 3_600_000 + m * 60_000 + sec * 1_000;
+      if (ms > 0) {
+        applyDuration(ms);
+        AsyncStorage.setItem(TIMER_DURATION_STORAGE_KEY, String(ms)).catch(
+          () => undefined
+        );
+      }
+    },
+    [applyDuration]
+  );
+
+  const handleStart = useCallback(() => {
+    if (durationRef.current <= 0) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setFinishedWhileAway(false);
+    stopAlarm();
+    const startFrom =
+      timerState === "paused" ? remainingRef.current : durationRef.current;
+    if (startFrom <= 0) return;
+    endAtWallRef.current = Date.now() + startFrom;
+    setRemainingMs(startFrom);
+    setTimerState("running");
+    startTick();
+    persistTimer("running");
+  }, [timerState, startTick, stopAlarm, persistTimer]);
+
+  const handlePause = useCallback(() => {
+    if (endAtWallRef.current === null) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    remainingRef.current = Math.max(0, endAtWallRef.current - Date.now());
+    endAtWallRef.current = null;
+    stopTick();
+    setRemainingMs(remainingRef.current);
+    setTimerState("paused");
+    persistTimer("paused");
+  }, [stopTick, persistTimer]);
+
+  const handleReset = useCallback(() => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    stopTick();
+    stopAlarm();
+    endAtWallRef.current = null;
+    remainingRef.current = durationRef.current;
+    setRemainingMs(durationRef.current);
+    setTimerState("idle");
+    setFinishedWhileAway(false);
+    clearPersistedTimer();
+  }, [stopTick, stopAlarm, clearPersistedTimer]);
+
+  /** Single tap silences the completion alert without restarting. */
+  const handleDismissAlert = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    stopAlarm();
+    setTimerState("idle");
+  }, [stopAlarm]);
+
+  const isRunning = timerState === "running";
+  const isPaused = timerState === "paused";
+  const isIdle = timerState === "idle";
+  const isAlerting = timerState === "alerting";
+  const lcdMain = lcdMainSize(width, height);
+
+  return (
+    <SafeAreaView style={s.screen}>
+      <StatusBar barStyle="light-content" backgroundColor={C.casing} />
+
+      {/* ── Device top casing ── */}
+      <View style={s.casing}>
+        <View style={s.casingLeft}>
+          <Pressable onPress={onBack} style={{ marginRight: 8 }}>
+            <Text style={{ color: "#888", fontSize: 20 }}>‹</Text>
+          </Pressable>
+          <View style={s.logoChip}>
+            <Text style={s.logoSplit}>SPLIT</Text>
+            <Text style={s.logoSync}>SYNC</Text>
+          </View>
+          <Text style={s.casingTitle}>TIMER</Text>
+        </View>
+        <View
+          style={[
+            s.pill,
+            isRunning && { backgroundColor: C.red, borderColor: C.red },
+            isPaused && { backgroundColor: C.yellow, borderColor: C.yellow },
+            isAlerting && { backgroundColor: C.red, borderColor: C.red },
+          ]}
+        >
+          <Text
+            style={[
+              s.pillTxt,
+              isRunning && { color: C.white },
+              isPaused && { color: C.ink },
+              isAlerting && { color: C.white },
+            ]}
+          >
+            {isRunning
+              ? "▼ RUN"
+              : isPaused
+              ? "‖ PAUSED"
+              : isAlerting
+              ? "◉ DONE"
+              : "READY"}
+          </Text>
+        </View>
+      </View>
+
+      {/* ── LCD instrument panel — remaining time ── */}
+      <View style={s.instrument}>
+        <View style={s.instrHeader}>
+          <Text style={s.instrLabel}>
+            {isAlerting ? "TIME'S UP" : "TIME REMAINING"}
+          </Text>
+          <Text style={s.instrLabel}>
+            SET {fmtParts(durationMs).main}
+          </Text>
+        </View>
+        <View
+          style={s.instrMain}
+          accessible
+          accessibilityLabel={
+            isAlerting
+              ? "Time's up"
+              : `Time remaining: ${fmtCompact(remainingMs)}`
+          }
+        >
+          <LcdDisplay
+            ms={remainingMs}
+            mainSize={lcdMain}
+            color={isAlerting ? C.red : C.lcd}
+            fontLoaded={fontsLoaded}
+          />
+        </View>
+        <View style={s.instrFooter}>
+          <Text style={s.instrLabel}>
+            {isAlerting
+              ? "RESET TO SET VALUE — START TO GO AGAIN"
+              : "COUNTDOWN TIMER"}
+          </Text>
+        </View>
+      </View>
+
+      {/* ── Mode toggle (#232) — shown only in idle ── */}
+      {isIdle && <ModeToggleStrip mode="timer" onSelect={onSelectMode} />}
+
+      {/* ── Duration inputs (idle only) ── */}
+      {isIdle && (
+        <View style={s.cuePanel}>
+          <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
+            <Text style={s.cueLabel}>DURATION (H : MM : SS)</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <TextInput
+                value={hh}
+                onChangeText={(t) => {
+                  const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
+                  setHh(clean);
+                  commitDurationInputs(clean, mm, ss);
+                }}
+                keyboardType="number-pad"
+                style={s.cueInput}
+                accessibilityLabel="Timer hours"
+                maxLength={2}
+              />
+              <Text style={s.cueColon}>:</Text>
+              <TextInput
+                value={mm}
+                onChangeText={(t) => {
+                  const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
+                  setMm(clean);
+                  commitDurationInputs(hh, clean, ss);
+                }}
+                keyboardType="number-pad"
+                style={s.cueInput}
+                accessibilityLabel="Timer minutes"
+                maxLength={2}
+              />
+              <Text style={s.cueColon}>:</Text>
+              <TextInput
+                value={ss}
+                onChangeText={(t) => {
+                  const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
+                  setSs(clean);
+                  commitDurationInputs(hh, mm, clean);
+                }}
+                keyboardType="number-pad"
+                style={s.cueInput}
+                accessibilityLabel="Timer seconds"
+                maxLength={2}
+              />
+            </View>
+          </View>
+          <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
+            <Text style={s.cueLabel}>SOUND ON COMPLETION</Text>
+            <CueSwitch
+              on={cueSettings.soundEnabled}
+              label="Sound on timer completion"
+              onToggle={() =>
+                updateCueSettings({ soundEnabled: !cueSettings.soundEnabled })
+              }
+            />
+          </View>
+          <Text style={s.cueHint}>
+            On completion the timer resets to the set value, ready to restart
+            with one tap. The alert repeats a few times, then goes quiet — one
+            tap dismisses it. Sound off = vibrate only.
+          </Text>
+        </View>
+      )}
+
+      {finishedWhileAway && (
+        <View style={s.cuePanel}>
+          <Text style={s.cueHint}>
+            Timer finished while the app was closed — reset to the set value.
+          </Text>
+        </View>
+      )}
+
+      {/* Spacer keeps the button bar anchored */}
+      <View style={{ flex: 1 }} />
+
+      {/* ── Device bottom button bar ── */}
+      <View style={s.btnCasing}>
+        {isAlerting ? (
+          <>
+            <DeviceBtn
+              label="DISMISS"
+              body={C.btnPaperBody}
+              hi={C.btnPaperHi}
+              lo={C.btnPaperLo}
+              textColor={C.ink}
+              onPress={handleDismissAlert}
+              flex={1}
+            />
+            <View style={{ width: 10 }} />
+            <DeviceBtn
+              label="START"
+              sub="GO AGAIN"
+              body={C.btnBlueBody}
+              hi={C.btnBlueHi}
+              lo={C.btnBlueLo}
+              textColor={C.ink}
+              onPress={handleStart}
+              flex={1.4}
+            />
+          </>
+        ) : (
+          <>
+            <DeviceBtn
+              label="RESET"
+              body={C.btnPaperBody}
+              hi={C.btnPaperHi}
+              lo={C.btnPaperLo}
+              textColor={C.ink}
+              disabled={isIdle}
+              onPress={handleReset}
+              flex={1}
+            />
+            <View style={{ width: 10 }} />
+            {isRunning ? (
+              <DeviceBtn
+                label="PAUSE"
+                body={C.btnRedBody}
+                hi={C.btnRedHi}
+                lo={C.btnRedLo}
+                onPress={handlePause}
+                flex={1.4}
+              />
+            ) : (
+              <DeviceBtn
+                label={isPaused ? "RESUME" : "START"}
+                body={C.btnBlueBody}
+                hi={C.btnBlueHi}
+                lo={C.btnBlueLo}
+                textColor={C.ink}
+                onPress={handleStart}
+                flex={1.4}
+              />
+            )}
+          </>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ── Solo container: routes between stopwatch and timer modes (#232) ───────────
+function SoloContainer({
+  fontsLoaded,
+  onBack,
+}: {
+  fontsLoaded: boolean;
+  onBack: () => void;
+}) {
+  const [mode, setMode] = useState<SoloMode>("stopwatch");
+  const [modeLoaded, setModeLoaded] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(SOLO_MODE_STORAGE_KEY)
+      .then((v) => {
+        if (v === "timer" || v === "stopwatch") setMode(v);
+        setModeLoaded(true);
+      })
+      .catch(() => setModeLoaded(true));
+  }, []);
+
+  const handleSelectMode = useCallback((m: SoloMode) => {
+    setMode(m);
+    AsyncStorage.setItem(SOLO_MODE_STORAGE_KEY, m).catch(() => undefined);
+  }, []);
+
+  if (!modeLoaded) return <LoadingScreen />;
+
+  return mode === "timer" ? (
+    <TimerScreen
+      fontsLoaded={fontsLoaded}
+      onBack={onBack}
+      onSelectMode={handleSelectMode}
+    />
+  ) : (
+    <SoloScreen
+      fontsLoaded={fontsLoaded}
+      onBack={onBack}
+      onSelectMode={handleSelectMode}
+    />
+  );
+}
+
 // ── Root navigator ─────────────────────────────────────────────────────────────
 function RootNavigator() {
   const [fontsLoaded] = useFonts({
@@ -3566,7 +4188,7 @@ function RootNavigator() {
 
   if (screen === "solo") {
     return (
-      <SoloScreen
+      <SoloContainer
         fontsLoaded={!!fontsLoaded}
         onBack={() => setScreen(userEmail ? "home" : "login")}
       />
