@@ -31,6 +31,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import type { AppStateStatus } from "react-native";
+import * as Crypto from "expo-crypto";
 import * as ExpoLinking from "expo-linking";
 import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
@@ -137,11 +138,9 @@ interface JoinNavParams {
 
 // ── Utility helpers ────────────────────────────────────────────────────────────
 function generateUUID(): string {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === "x" ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  // Crypto-strength UUID: these become idempotency keys
+  // (casual_session_events.client_id), so weak randomness risks collisions.
+  return Crypto.randomUUID();
 }
 
 function p2(n: number) {
@@ -1136,6 +1135,13 @@ function SessionScreen({
   const lastSequenceRef = useRef(
     events.length > 0 ? Math.max(...events.map((e) => e.sequence)) : 0
   );
+  // The realtime channel effect deliberately does not depend on `events`
+  // (re-subscribing on every event would churn the channel), so broadcast
+  // handlers must read the current event list through this ref.
+  const eventsRef = useRef(events);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
 
   // ── Derived lap table ───────────────────────────────────────────────────────
   const laps = useMemo<DerivedLap[]>(() => {
@@ -1300,8 +1306,10 @@ function SessionScreen({
         { event: "sync_request" },
         (msg: { type: string; event: string; payload: Record<string, unknown> }) => {
           const lastSeq = (msg.payload as { last_sequence: number }).last_sequence ?? 0;
-          // Respond with events this client has that are newer
-          const missing = events.filter((e) => e.sequence > lastSeq);
+          // Respond with events this client has that are newer.
+          // Read through eventsRef: the closure's `events` would be stale
+          // because this effect doesn't re-run on event changes.
+          const missing = eventsRef.current.filter((e) => e.sequence > lastSeq);
           if (missing.length > 0) {
             channel.send({
               type: "broadcast",
