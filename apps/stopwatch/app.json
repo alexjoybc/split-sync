@@ -31,6 +31,7 @@
     "extra": {
       "EXPO_PUBLIC_SUPABASE_URL": "https://bsihlrzncucrglqltjrc.supabase.co"
     },
-    "platforms": ["android"]
+    "platforms": ["android"],
+    "plugins": ["expo-font"]
   }
 }
