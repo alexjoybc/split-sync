@@ -333,6 +333,10 @@ export default function StopwatchPage() {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownEndRef = useRef<number>(0); // target Date.now() when countdown ends
 
+  // Lock state (#235) — local to this device, never broadcast
+  const [isLocked, setIsLocked] = useState(false);
+  const [showLockHint, setShowLockHint] = useState(false);
+
   // Timing refs — not React state so they don't trigger re-renders in the RAF
   const startRef = useRef<number>(0);      // performance.now() at last resume
   const accRef = useRef<number>(0);        // ms accumulated before last pause
@@ -342,6 +346,10 @@ export default function StopwatchPage() {
   // Feature-detected, race-condition-safe, re-acquires on tab foreground;
   // degrades silently where unsupported (Firefox, older Safari).
   useWakeLock(state === "running");
+
+  // Lock-related refs
+  const lockHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unlockPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ---------------------------------------------------------------------------
   // Persist delay preference
@@ -534,11 +542,38 @@ export default function StopwatchPage() {
   );
 
   // ---------------------------------------------------------------------------
+  // Lock helpers
+  // ---------------------------------------------------------------------------
+
+  const triggerLockHint = useCallback(() => {
+    setShowLockHint(true);
+    if (lockHintTimerRef.current) clearTimeout(lockHintTimerRef.current);
+    lockHintTimerRef.current = setTimeout(() => setShowLockHint(false), 2000);
+  }, []);
+
+  const handleLockBtnPointerDown = useCallback(() => {
+    if (!isLocked) return;
+    // Start a 1.5 s countdown — releasing early cancels it
+    unlockPressRef.current = setTimeout(() => {
+      setIsLocked(false);
+      setShowLockHint(false);
+    }, 1500);
+  }, [isLocked]);
+
+  const handleLockBtnPointerCancel = useCallback(() => {
+    if (unlockPressRef.current) {
+      clearTimeout(unlockPressRef.current);
+      unlockPressRef.current = null;
+    }
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Controls
   // ---------------------------------------------------------------------------
 
   const handleStartStop = useCallback(() => {
     if (state === "idle" || state === "stopped") {
+      // Start / Resume — always allowed even when locked
       if (delaySeconds > 0) {
         // Enter countdown
         beginCountdown(delaySeconds);
@@ -549,14 +584,18 @@ export default function StopwatchPage() {
         startLoop();
       }
     } else if (state === "running") {
-      // Stop / Pause
+      // Stop / Pause — blocked when locked
+      if (isLocked) {
+        triggerLockHint();
+        return;
+      }
       accRef.current = getElapsed();
       stopLoop();
       setState("stopped");
       setDisplayMs(accRef.current);
     }
     // During countdown: do nothing (cancel button handles it separately)
-  }, [state, delaySeconds, beginCountdown, getElapsed, startLoop, stopLoop]);
+  }, [state, delaySeconds, beginCountdown, isLocked, triggerLockHint, getElapsed, startLoop, stopLoop]);
 
   const handleCancelCountdown = useCallback(() => {
     clearCountdown();
@@ -584,6 +623,10 @@ export default function StopwatchPage() {
   }, [state, getElapsed]);
 
   const handleReset = useCallback(() => {
+    if (isLocked) {
+      triggerLockHint();
+      return;
+    }
     clearCountdown();
     setCountdownSec(0);
     stopLoop();
@@ -592,7 +635,7 @@ export default function StopwatchPage() {
     setState("idle");
     setDisplayMs(0);
     setLaps([]);
-  }, [stopLoop, clearCountdown]);
+  }, [isLocked, triggerLockHint, stopLoop, clearCountdown]);
 
   // ---------------------------------------------------------------------------
   // Large-display mode (#230)
@@ -635,7 +678,7 @@ export default function StopwatchPage() {
   // Secondary pusher: lap when running, reset when stopped/idle
   const handleSecondary = useCallback(() => {
     if (state === "running") {
-      handleLap();
+      handleLap(); // Lap is always allowed, even when locked
     } else if (state === "countdown") {
       handleCancelCountdown();
     } else {
@@ -668,6 +711,17 @@ export default function StopwatchPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [state, handleStartStop, handleSecondary, handleCancelCountdown]);
+
+  // Cleanup RAF and lock timers on unmount (useWakeLock releases the wake
+  // lock itself)
+  useEffect(
+    () => () => {
+      stopLoop();
+      if (lockHintTimerRef.current) clearTimeout(lockHintTimerRef.current);
+      if (unlockPressRef.current) clearTimeout(unlockPressRef.current);
+    },
+    [stopLoop]
+  );
 
   // ---------------------------------------------------------------------------
   // "Time together" button handler (#182)
@@ -712,6 +766,11 @@ export default function StopwatchPage() {
     : user
     ? "Time together"
     : "Sign in to share";
+
+  // Whether Stop/Reset should appear visually locked (#235)
+  const stopLocked = isLocked && state === "running";
+  // Countdown cancel is not Stop/Reset — never dimmed by the lock
+  const resetLocked = isLocked && !isRunning && !isCountdown;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -860,7 +919,7 @@ export default function StopwatchPage() {
                 isIdle
                   ? "sw-pusher--secondary-idle"
                   : "sw-pusher--secondary"
-              }`}
+              }${resetLocked ? " sw-pusher--dimmed" : ""}`}
               onClick={handleSecondary}
               aria-label={
                 isCountdown
@@ -880,7 +939,7 @@ export default function StopwatchPage() {
               type="button"
               className={`sw-pusher ${
                 isCountdown ? "sw-pusher--countdown" : "sw-pusher--primary"
-              }`}
+              }${stopLocked ? " sw-pusher--dimmed" : ""}`}
               onClick={isCountdown ? handleCancelCountdown : handleStartStop}
               aria-label={
                 isCountdown
@@ -905,18 +964,54 @@ export default function StopwatchPage() {
             </button>
           </div>
 
-          {/* Keyboard hint */}
-          {!largeMode && (
-            <p className="mt-4 text-center text-xs font-semibold text-race-muted">
-              {isCountdown ? (
-                <>tap or <span className="sw-kbd">Space</span> to cancel</>
-              ) : (
-                <>
-                  <span className="sw-kbd">Space</span> start/stop
-                  {" · "}
-                  <span className="sw-kbd">L</span> lap
-                </>
-              )}
+          {/* ── Lock toggle + keyboard hint (#235) ─────────────────────────── */}
+          <div className="mt-4 flex items-center justify-center gap-3">
+            {/* Keyboard hint — hidden in large-display mode */}
+            {!largeMode && (
+              <p className="text-center text-xs font-semibold text-race-muted">
+                {isCountdown ? (
+                  <>tap or <span className="sw-kbd">Space</span> to cancel</>
+                ) : (
+                  <>
+                    <span className="sw-kbd">Space</span> start/stop
+                    {" · "}
+                    <span className="sw-kbd">L</span> lap
+                  </>
+                )}
+              </p>
+            )}
+
+            {/* Lock button */}
+            <button
+              type="button"
+              className={`sw-lock-btn${isLocked ? " sw-lock-btn--locked" : ""}`}
+              aria-label={
+                isLocked
+                  ? "Controls locked — hold to unlock"
+                  : "Lock controls"
+              }
+              aria-pressed={isLocked}
+              title={isLocked ? "Hold 1.5 s to unlock" : "Lock Stop & Reset"}
+              onClick={() => {
+                if (!isLocked) setIsLocked(true);
+              }}
+              onPointerDown={handleLockBtnPointerDown}
+              onPointerUp={handleLockBtnPointerCancel}
+              onPointerLeave={handleLockBtnPointerCancel}
+              onPointerCancel={handleLockBtnPointerCancel}
+            >
+              {isLocked ? "🔒" : "🔓"}
+            </button>
+          </div>
+
+          {/* Lock hint — shown briefly when a locked button is tapped */}
+          {showLockHint && (
+            <p
+              className="mt-1 text-center sw-lock-hint"
+              role="alert"
+              aria-live="assertive"
+            >
+              Controls locked — hold 🔒 to unlock
             </p>
           )}
 
