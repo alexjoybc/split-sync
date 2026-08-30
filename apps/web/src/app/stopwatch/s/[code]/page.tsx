@@ -442,7 +442,7 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
   const refreshState = useCallback(async () => {
     try {
       const { data } = await supabase.rpc("get_session_state", {
-        p_code: code,
+        p_session_id: stored.session_id,
         p_participant_id: stored.participant_id,
       });
       if (data) {
@@ -456,7 +456,7 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
     } catch {
       // Best effort — ignore failures
     }
-  }, [code, stored.participant_id, applyEvent]);
+  }, [stored.session_id, stored.participant_id, applyEvent]);
 
   useEffect(() => {
     refreshState();
@@ -778,7 +778,7 @@ export default function SharedSessionPage({ params }: PageProps) {
       // Verify stored participant is still valid
       supabase
         .rpc("get_session_state", {
-          p_code: upperCode,
+          p_session_id: existing.session_id,
           p_participant_id: existing.participant_id,
         })
         .then(({ data, error }) => {
@@ -793,23 +793,9 @@ export default function SharedSessionPage({ params }: PageProps) {
           setPhase("session");
         });
     } else {
-      // Fetch session name so join form can display it
-      void (async () => {
-        try {
-          const { data } = await supabase.rpc("get_session_state", {
-            p_code: upperCode,
-            p_participant_id: null,
-          });
-          if (data) {
-            const s = data as { session_name?: string | null };
-            setSessionNameForJoin(s.session_name ?? null);
-          }
-        } catch {
-          // Ignore — session name will be null
-        } finally {
-          setPhase("join");
-        }
-      })();
+      // No stored participant — show join form directly.
+      // Session name is surfaced after joining via join_casual_session response.
+      setPhase("join");
     }
   }, [upperCode]);
 
