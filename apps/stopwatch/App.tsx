@@ -39,7 +39,7 @@ import { useKeepAwake } from "expo-keep-awake";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { supabase } from "./src/supabase";
+import { supabase, isSupabaseConfigured } from "./src/supabase";
 import {
   clearRunningNotification,
   showRunningNotification,
@@ -580,6 +580,27 @@ function LoginScreen({
       onLogin();
     }
   }, [email, password, onLogin]);
+
+  // Shared timing sessions need Supabase credentials. Without them, there is
+  // nothing useful a sign-in form can do — go straight to a solo-only prompt.
+  if (!isSupabaseConfigured) {
+    return (
+      <SafeAreaView style={s.screen}>
+        <StatusBar barStyle="light-content" backgroundColor={C.casing} />
+        <CasingBar title="STOPWATCH" />
+        <View style={{ flex: 1, justifyContent: "center", padding: 20 }}>
+          <Text style={s.screenTitle}>Solo mode only</Text>
+          <Text style={[s.mutedText, { marginBottom: 28 }]}>
+            Shared timing sessions aren&apos;t configured for this build. You
+            can still use the solo stopwatch.
+          </Text>
+          <Pressable onPress={onSolo} style={s.primaryBtn}>
+            <Text style={s.primaryBtnText}>CONTINUE SOLO</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={s.screen}>
@@ -2252,6 +2273,13 @@ function RootNavigator() {
 
   // ── Auth check on mount ─────────────────────────────────────────────────────
   useEffect(() => {
+    // Shared sessions require Supabase credentials. Without them, skip the
+    // auth check entirely — solo mode must work with no backend configured.
+    if (!isSupabaseConfigured) {
+      setScreen("login");
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUserEmail(session.user.email ?? null);
