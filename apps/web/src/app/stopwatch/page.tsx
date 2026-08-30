@@ -1074,9 +1074,9 @@ export default function StopwatchPage() {
                 </div>
               )}
 
-              {/* Lap trend chart — bar per lap, best=yellow, worst=red/orange */}
+              {/* Lap trend chart — bar per lap, best=yellow, worst=race-red */}
               {showStats && (
-                <div className="sw-trend-chart" aria-label="Lap trend chart" aria-hidden="true">
+                <div className="sw-trend-chart" aria-label="Lap trend chart">
                   {laps.map((lap) => {
                     const isBest = lap.lapMs === bestLapMs;
                     const isWorst = lap.lapMs === worstLapMs;

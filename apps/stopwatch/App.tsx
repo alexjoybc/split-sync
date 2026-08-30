@@ -240,7 +240,7 @@ function LapTrendChart<T>({
         const isBest = ms === bestMs;
         const isWorst = ms === worstMs;
         const pct = worstMs > 0 ? (ms / worstMs) * 100 : 100;
-        const barColor = isBest ? C.yellow : isWorst ? "#C84B1F" : C.muted;
+        const barColor = isBest ? C.yellow : isWorst ? C.worse : C.muted;
         return (
           <View key={num} style={sc.trendRow}>
             <Text style={sc.trendNum}>{num}</Text>
@@ -3219,7 +3219,7 @@ const s = StyleSheet.create({
     overflow: "hidden",
   } as const,
   statValueWorst: {
-    backgroundColor: "#C84B1F",
+    backgroundColor: C.worse,
     paddingHorizontal: 4,
     borderRadius: 1,
     color: C.white,

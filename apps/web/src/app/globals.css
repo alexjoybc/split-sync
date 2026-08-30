@@ -630,7 +630,7 @@ body {
 
 .sw-stat-cell--worst .sw-stat-value {
   color: #fff;
-  background: #c84b1f;
+  background: var(--race-red);
   padding: 0 4px;
   border-radius: 1px;
 }
@@ -676,7 +676,7 @@ body {
 }
 
 .sw-trend-fill--best  { background: var(--race-yellow); }
-.sw-trend-fill--worst { background: #c84b1f; }
+.sw-trend-fill--worst { background: var(--race-red); }
 
 .sw-trend-time {
   font-family: var(--font-geist-mono, ui-monospace, monospace);

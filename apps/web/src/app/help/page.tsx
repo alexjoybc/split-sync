@@ -388,6 +388,11 @@ export default function HelpPage() {
               Laps are shown newest-first.
             </li>
             <li>
+              Once you have two or more laps, a stats strip shows your{" "}
+              <strong>best</strong>, <strong>worst</strong>, and{" "}
+              <strong>average</strong> lap, plus a bar chart of lap-time trend.
+            </li>
+            <li>
               Keyboard shortcuts:{" "}
               <strong>Space</strong> = start / stop,{" "}
               <strong>L</strong> = lap.
