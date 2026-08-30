@@ -4,6 +4,10 @@ import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+import {
+  formatTime as formatTimeBase,
+  formatLapTime as formatLapTimeBase,
+} from "@/lib/stopwatchFormat";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -87,28 +91,14 @@ function saveStoredParticipant(code: string, data: StoredParticipant): void {
   }
 }
 
+// Shared formatters (#246) — clamp negative ms, which can occur briefly while
+// the synced server clock settles.
 function formatTime(ms: number): { main: string; sub: string } {
-  if (ms < 0) ms = 0;
-  const totalHundredths = Math.floor(ms / 10);
-  const hundredths = totalHundredths % 100;
-  const totalSeconds = Math.floor(ms / 1000);
-  const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60);
-  return {
-    main: `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
-    sub: `.${String(hundredths).padStart(2, "0")}`,
-  };
+  return formatTimeBase(Math.max(0, ms));
 }
 
 function formatLapTime(ms: number): string {
-  if (ms < 0) ms = 0;
-  const hundredths = Math.floor((ms % 1000) / 10);
-  const totalSeconds = Math.floor(ms / 1000);
-  const seconds = totalSeconds % 60;
-  const minutes = Math.floor(totalSeconds / 60);
-  return minutes > 0
-    ? `${minutes}:${String(seconds).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`
-    : `${seconds}.${String(hundredths).padStart(2, "0")}`;
+  return formatLapTimeBase(Math.max(0, ms));
 }
 
 /** Derive laps from event log */
