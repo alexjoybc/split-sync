@@ -313,17 +313,10 @@ test.describe('Error states', () => {
     await visitorPage.getByLabel(/your display name/i).fill('Visitor');
     await visitorPage.getByRole('button', { name: /join session/i }).click();
 
-    // Expect either: error message (SESSION_NOT_JOINABLE) OR stopped session view
-    const errorMsg = visitorPage.locator('.text-race-red');
+    // Expect either: inline error (SESSION_NOT_JOINABLE) OR stopped session badge
+    const errorMsg   = visitorPage.locator('.text-race-red');
     const stoppedBadge = visitorPage.locator('.race-kicker').filter({ hasText: /stopped/i });
-
-    // One of these should become visible
-    await Promise.race([
-      expect(errorMsg).toBeVisible({ timeout: 5_000 }),
-      expect(stoppedBadge).toBeVisible({ timeout: 5_000 }),
-    ]).catch(() => {
-      // Accept either outcome depending on RPC policy for stopped sessions
-    });
+    await expect(errorMsg.or(stoppedBadge)).toBeVisible({ timeout: 5_000 });
 
     await visitorCtx.close();
   });
