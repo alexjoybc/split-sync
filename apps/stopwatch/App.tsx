@@ -52,43 +52,39 @@ import {
   saveCueSettings,
 } from "./src/cues";
 import type { CueSettings } from "./src/cues";
+import { palette } from "../../packages/palette/src/index";
 
 // ── Palette ────────────────────────────────────────────────────────────────────
+// Canonical tokens from @splitsync/palette; instrument-specific values kept inline.
 const C = {
-  casing:       "#1A1A1A",
-  casingBorder: "#0A0A0A",
-  instrument:   "#0D0D0D",
-  lcd:          "#5BC8F5",
-  lcdDim:       "#00213A",
-  lcdSmall:     "#FFFFFF",
-  paper:        "#F5F0E8",
-  white:        "#FFFFFF",
-  ink:          "#1A1A1A",
-  rule:         "#1A1A1A",
-  line:         "#D4D0C8",
-  panelBg:      "#EDEAE0",
-  muted:        "#888880",
-  red:          "#CC0000",
-  yellow:       "#FFD700",
-  yellowBg:     "rgba(255,215,0,0.20)",
-  yellowDark:   "#7A5C00",
-  green:        "#007A30",
-  worse:        "#CC3300",
-  btnRedBody:   "#BB1100",
-  btnRedHi:     "#EE3322",
-  btnRedLo:     "#770800",
-  btnInkBody:   "#2A2A2A",
-  btnInkHi:     "#555555",
-  btnInkLo:     "#000000",
-  btnPaperBody: "#E8E3D8",
-  btnPaperHi:   "#F8F3E8",
-  btnPaperLo:   "#B8B3A8",
-  btnDimBody:   "#1E1E1E",
-  btnDimHi:     "#2A2A2A",
-  btnDimLo:     "#0A0A0A",
-  btnBlueBody:  "#5BC8F5",
-  btnBlueHi:    "#8DDBFB",
-  btnBlueLo:    "#2E86C1",
+  // Canonical tokens from shared palette
+  paper:    palette.paper,
+  ink:      palette.ink,
+  muted:    palette.muted,
+  rule:     palette.ink,
+  line:     palette.line,
+  panelBg:  palette.panelAlt,
+  red:      palette.red,
+  yellow:   palette.yellow,
+  yellowBg: palette.yellowBg,
+  yellowDark: '#7A5C00',          // instrument-specific dark tone — keep inline
+  // Signature instrument colors (canonical blue family)
+  lcd:      palette.blueAccent,   // #5BC8F5
+  lcdDim:   palette.blueDim,      // #00213A
+  lcdSmall: '#FFFFFF',
+  casing:       palette.instrumentCasing,
+  casingBorder: '#0A0A0A',
+  instrument:   palette.instrumentFace,
+  white:    '#FFFFFF',
+  // Status
+  green:  palette.success,
+  worse:  palette.red,
+  // Button gradient shades — instrument-specific 3D gradients
+  btnRedBody:   '#BB1100', btnRedHi:   '#EE3322', btnRedLo:   '#770800',
+  btnInkBody:   '#2A2A2A', btnInkHi:   '#555555', btnInkLo:   '#000000',
+  btnPaperBody: '#E8E3D8', btnPaperHi: '#F8F3E8', btnPaperLo: '#B8B3A8',
+  btnDimBody:   '#1E1E1E', btnDimHi:   '#2A2A2A', btnDimLo:   '#0A0A0A',
+  btnBlueBody:  '#5BC8F5', btnBlueHi:  '#8DDBFB', btnBlueLo:  '#2E86C1',
 };
 
 // ── Domain types ───────────────────────────────────────────────────────────────
