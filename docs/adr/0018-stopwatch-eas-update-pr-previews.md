@@ -17,7 +17,7 @@ EAS Update supports publishing an over-the-air JS bundle per branch and loading 
 ## Decision
 
 - Link `apps/stopwatch` to an EAS project owned by the `split-sync` Expo account/org (not a personal account), matching how the Supabase project and domain are org-owned rather than personal.
-- Add `apps/stopwatch/eas.json` with standard `development` / `preview` / `production` build profiles and update channels, and configure `app.json` with `runtimeVersion.policy: "appVersion"` and an `updates.url` pointing at the linked EAS project.
+- Add `apps/stopwatch/eas.json` with standard `development` / `preview` / `production` build profiles and update channels, and configure `app.json` with `runtimeVersion.policy: "sdkVersion"` and an `updates.url` pointing at the linked EAS project. `sdkVersion` (rather than `appVersion` or `fingerprint`) is required specifically because previews are opened in Expo Go: Expo Go can only load an update whose `runtimeVersion` matches its own Expo SDK version string (e.g. `57.0.0`), not an arbitrary app version.
 - Add `.github/workflows/stopwatch-eas-preview.yml`, scoped with `paths: apps/stopwatch/**` so it only runs for PRs that touch the stopwatch app, using `expo-github-action/preview` to run `eas update --auto --branch <pr-head-ref>` and comment a QR code/link on the PR.
 - Require an `EXPO_TOKEN` repository secret (a personal access token from the `split-sync` Expo account) for the workflow to authenticate; the workflow fails fast with an explanatory message if it's missing.
 - Scope this ADR and workflow to `apps/stopwatch` only. `apps/mobile` (the organizer tracker, which requires auth and has a stricter release process) is an explicit non-goal here and would need its own ADR if adopted later.

@@ -8,7 +8,7 @@
     "scheme": "org.splitsync.stopwatch",
     "userInterfaceStyle": "light",
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "sdkVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/3617f3ce-e97b-497f-90fe-af489ea86aac"
