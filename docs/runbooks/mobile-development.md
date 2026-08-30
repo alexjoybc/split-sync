@@ -46,3 +46,29 @@ The native app handles the returned access/refresh tokens and stores the authent
 ## iOS Later
 
 The app is configured with bundle identifier `org.splitsync.tracker`. Install Xcode and use `pnpm --filter mobile exec expo run:ios --device` for connected-device testing. Apple signing/TestFlight is a later distribution concern.
+
+---
+
+## SplitSync Stopwatch (`apps/stopwatch`)
+
+The stopwatch is a **separate standalone Expo app** (application id `org.splitsync.stopwatch`). It has no sign-in and requires no environment variables for its solo-stopwatch functionality.
+
+### TypeScript check
+
+```bash
+pnpm --filter stopwatch exec tsc --noEmit
+```
+
+### Run on Android
+
+Prerequisites are the same as for the tracker (ADB, JDK 17, `JAVA_HOME` / `ANDROID_HOME` set). The stopwatch and tracker can be installed side-by-side because they have different package IDs.
+
+```bash
+pnpm --filter stopwatch exec expo run:android
+```
+
+The generated `apps/stopwatch/android` directory is git-ignored. Regenerate it with `expo prebuild --clean` inside `apps/stopwatch` after adding a native module.
+
+### Deep-link scheme
+
+The stopwatch registers the scheme `org.splitsync.stopwatch://`. Future shared-session flows (#184) will use this scheme for invite links.
