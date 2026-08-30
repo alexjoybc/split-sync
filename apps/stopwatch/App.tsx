@@ -378,10 +378,17 @@ function useVolumeKeys({
     // The user's volume before we pinned it; restored on cleanup.
     let originalVolume: number | null = null;
 
-    // Pin point: mid-level so both keys always move the volume, and epsilon
-    // band so the listener firing for our own re-pin setVolume is ignored.
+    // Pin point: mid-level so both keys always move the volume.
+    // After each action we re-pin; the OS quantises the value to the nearest
+    // hardware step (e.g. 7/15 ≈ 0.467 on a 15-step device), so the re-pin
+    // echo can arrive at a value that is well outside any EPSILON band yet still
+    // be our own echo — not a real press. A time-based cooldown is the only
+    // reliable defence: we suppress all events for REPIN_COOLDOWN_MS after
+    // issuing setVolume(PIN), which is long enough to absorb the OS round-trip
+    // but short enough that genuine rapid presses are never lost.
     const PIN = 0.5;
-    const EPSILON = 0.01;
+    const REPIN_COOLDOWN_MS = 300;
+    let repinAt = 0; // timestamp of the last re-pin call; 0 = none pending
 
     // Suppress the native volume overlay
     VolumeManager.showNativeVolumeUI({ enabled: false }).catch(() => undefined);
@@ -398,8 +405,11 @@ function useVolumeKeys({
 
         subscription = addVolumeListener(({ volume: newVolume }) => {
           if (!mounted) return;
-          // Ignore our own re-pin setVolume echoes (and sub-step noise)
-          if (Math.abs(newVolume - PIN) < EPSILON) return;
+          // Ignore events that arrive during the re-pin cooldown window.
+          // This handles the case where the OS quantises setVolume(0.5) to a
+          // nearby step (e.g. 0.467) and fires the listener with a value that
+          // is far enough from PIN to bypass any fixed EPSILON filter.
+          if (repinAt !== 0 && Date.now() - repinAt < REPIN_COOLDOWN_MS) return;
 
           if (newVolume < PIN) {
             // Volume DOWN → LAP (only while running)
@@ -411,7 +421,9 @@ function useVolumeKeys({
             onStartStopRef.current();
           }
 
-          // Re-pin so the next press always produces a delta
+          // Re-pin so the next press always produces a delta; record when so
+          // the cooldown guard above can suppress the resulting echo event.
+          repinAt = Date.now();
           VolumeManager.setVolume(PIN, { showUI: false }).catch(() => undefined);
         });
       })
