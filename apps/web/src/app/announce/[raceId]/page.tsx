@@ -40,7 +40,7 @@ function penaltyTooltip(row: StandingRow): string {
 function PenaltyBadge({ row }: { row: StandingRow }) {
   if (!isPenalized(row)) return null;
   return (
-    <span title={penaltyTooltip(row)} className="ml-2 inline-flex cursor-help px-1.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-white bg-[#ec1c24]">
+    <span title={penaltyTooltip(row)} className="ml-2 inline-flex cursor-help px-1.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-white bg-race-red">
       Penalty
     </span>
   );
@@ -371,7 +371,7 @@ function PointsOverlay({ race, crossings, entries }: { race: Race; crossings: Cr
       {activeSprint && (
         <div className={classNames(
           "race-angle-cut border-2 border-race-yellow px-4 py-3",
-          activeSprint.isFinal ? "bg-[#ec1c24]" : "bg-race-yellow text-race-ink"
+          activeSprint.isFinal ? "bg-race-red text-white" : "bg-race-yellow text-race-ink"
         )} style={{ boxShadow: "var(--race-live-shadow)" }}>
           <p className="text-xs font-black uppercase tracking-[0.24em]">
             {activeSprint.isFinal
