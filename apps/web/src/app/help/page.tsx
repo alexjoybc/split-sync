@@ -341,8 +341,9 @@ export default function HelpPage() {
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
             <li>
               The <Link href="/stopwatch" className="underline decoration-2 underline-offset-2 hover:text-race-red">solo stopwatch</Link>{" "}
-              is available at <code>/stopwatch</code> — no sign-in required. It
-              works fully offline; no data is sent to any server.
+              is available at <code>/stopwatch</code> — free, with no ads, no
+              subscription, and no account required. It works fully offline; no
+              data is sent to any server.
             </li>
             <li>
               Tap <strong>Start</strong> to begin timing, <strong>Stop</strong>{" "}
@@ -378,7 +379,9 @@ export default function HelpPage() {
           <p className="mt-4 text-sm font-semibold text-zinc-700">
             The SplitSync Stopwatch app (Android) supports shared timing sessions
             — multiple devices timing the same activity in real time, all seeing
-            the same clock and lap splits.
+            the same clock and lap splits. Like the solo stopwatch, it is free
+            with no ads and no subscription; only the person <em>creating</em> a
+            session signs in, and everyone else joins with just a display name.
           </p>
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
             <li>

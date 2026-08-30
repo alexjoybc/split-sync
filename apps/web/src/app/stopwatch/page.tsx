@@ -194,6 +194,20 @@ export default function StopwatchPage() {
       {/* Main content */}
       <div className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center px-4 pt-8 pb-12 sm:px-6">
 
+        {/* ── Positioning strip ──────────────────────────────────────────── */}
+        <p
+          className="mb-8 text-center text-[11px] font-black uppercase tracking-widest text-race-muted"
+          aria-label="Free. No ads. No subscription. No account needed."
+        >
+          Free
+          <span className="mx-2 text-race-red" aria-hidden="true">·</span>
+          No ads
+          <span className="mx-2 text-race-red" aria-hidden="true">·</span>
+          No subscription
+          <span className="mx-2 text-race-red" aria-hidden="true">·</span>
+          No account
+        </p>
+
         {/* ── Dial ───────────────────────────────────────────────────────── */}
         <div
           className="sw-dial"
@@ -356,6 +370,19 @@ export default function StopwatchPage() {
             Share a session and time together in real time.
           </p>
         </div>
+
+        {/* ── The promise, spelled out ───────────────────────────────────── */}
+        <section
+          className="mt-10 w-full border-t-2 border-race-ink pt-4 text-center"
+          aria-label="Why SplitSync Stopwatch is free"
+        >
+          <p className="race-kicker mb-2">The deal</p>
+          <p className="text-sm font-semibold text-zinc-700">
+            This stopwatch is free. No ads interrupting your timing, no
+            subscription, and no account needed to time solo. Joining a shared
+            session asks only for a display name — never a sign-up.
+          </p>
+        </section>
       </div>
     </main>
   );
