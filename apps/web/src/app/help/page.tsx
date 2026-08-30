@@ -372,6 +372,16 @@ export default function HelpPage() {
               zero.
             </li>
             <li>
+              <strong>Delayed start (optional):</strong> before starting, pick a
+              countdown of <strong>3, 5, or 10 seconds</strong> (default is{" "}
+              <strong>OFF</strong> for instant start). Tapping{" "}
+              <strong>Start</strong> then shows a get-ready countdown before
+              timing begins — handy for timing yourself. Tap{" "}
+              <strong>Cancel</strong> during the countdown to abort without
+              starting. Resuming after a Stop keeps your accumulated time
+              either way.
+            </li>
+            <li>
               While running, tap <strong>Lap</strong> to record a split. Each
               lap shows its own duration and the cumulative time. The{" "}
               <strong>best (shortest) lap</strong> is highlighted in yellow.

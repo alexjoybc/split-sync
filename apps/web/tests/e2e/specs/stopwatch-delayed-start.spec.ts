@@ -7,8 +7,18 @@
  *   3. Wait for countdown to end → stopwatch transitions to RUNNING.
  *   4. Cancel during countdown → returns to idle without starting.
  *   5. With OFF delay, clicking Start immediately transitions to running (no countdown).
+ *   6. Stop → Start resumes with accumulated time intact (with and without a delay).
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+/** Read the current elapsed time (ms) from the dial's aria-label ("Elapsed time: MM:SS.hh"). */
+async function readElapsedMs(page: Page): Promise<number> {
+  const label = await page.getByRole('timer').getAttribute('aria-label');
+  const match = label?.match(/Elapsed time: (\d+):(\d+)\.(\d+)/);
+  if (!match) throw new Error(`Unexpected timer aria-label: ${label}`);
+  const [, mm, ss, hh] = match;
+  return Number(mm) * 60_000 + Number(ss) * 1000 + Number(hh) * 10;
+}
 
 test.describe('/stopwatch delayed start', () => {
 
@@ -111,6 +121,55 @@ test.describe('/stopwatch delayed start', () => {
 
     // Delay selector should not be visible during run
     await expect(page.getByTestId('sw-delay-selector')).not.toBeVisible({ timeout: 500 });
+  });
+
+  test('stop then start (no delay) resumes with accumulated time intact', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Start (OFF delay by default), let it run ~1.2 s, then stop
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await page.waitForTimeout(1200);
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+
+    const stoppedMs = await readElapsedMs(page);
+    expect(stoppedMs).toBeGreaterThanOrEqual(1000);
+
+    // While stopped, elapsed stays frozen
+    await page.waitForTimeout(700);
+    expect(await readElapsedMs(page)).toBe(stoppedMs);
+
+    // Start again → must RESUME (elapsed continues from stoppedMs, not reset to 0)
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await page.waitForTimeout(500);
+    const resumedMs = await readElapsedMs(page);
+    expect(resumedMs).toBeGreaterThanOrEqual(stoppedMs);
+    expect(resumedMs).toBeLessThan(stoppedMs + 2000);
+  });
+
+  test('stop then delayed start resumes without countdown drift', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Run ~1 s with no delay, then stop
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+    const stoppedMs = await readElapsedMs(page);
+    expect(stoppedMs).toBeGreaterThanOrEqual(800);
+
+    // Select a 3 s delay and start again → countdown runs first
+    await page.getByTestId('sw-delay-3').click();
+    await page.getByTestId('sw-primary-btn').click();
+    await expect(page.getByTestId('sw-countdown-number')).toBeVisible({ timeout: 1000 });
+
+    // Wait for countdown to finish and the stopwatch to be running again
+    await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible({ timeout: 4500 });
+
+    // Elapsed resumes from stoppedMs: the 3 s countdown must NOT be added,
+    // and the accumulated time must NOT be reset to 0.
+    await page.waitForTimeout(300);
+    const resumedMs = await readElapsedMs(page);
+    expect(resumedMs).toBeGreaterThanOrEqual(stoppedMs);
+    expect(resumedMs).toBeLessThan(stoppedMs + 2000);
   });
 
 });

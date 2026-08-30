@@ -476,8 +476,9 @@ export default function StopwatchPage() {
   // Called when countdown ticks reach zero — start the actual stopwatch
   // (useWakeLock acquires the wake lock when state becomes "running")
   const commitStart = useCallback(() => {
+    // Do NOT reset accRef here: "stopped" is a pause, so Start resumes with
+    // accumulated time intact. Only handleReset zeroes it.
     startRef.current = performance.now();
-    accRef.current = 0;
     setState("running");
     startLoop();
   }, [startLoop]);
@@ -542,9 +543,8 @@ export default function StopwatchPage() {
         // Enter countdown
         beginCountdown(delaySeconds);
       } else {
-        // Instant start
+        // Instant start / resume (accRef preserved so stopped time resumes)
         startRef.current = performance.now();
-        accRef.current = 0;
         setState("running");
         startLoop();
       }
