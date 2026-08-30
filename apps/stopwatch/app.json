@@ -11,7 +11,24 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F5F0E8"
-      }
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "splitsync.org",
+              "pathPrefix": "/stopwatch/s/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "extra": {
+      "EXPO_PUBLIC_SUPABASE_URL": "https://bsihlrzncucrglqltjrc.supabase.co"
     },
     "platforms": ["android"]
   }

@@ -365,10 +365,64 @@ export default function HelpPage() {
               stopwatch anchors to a monotonic clock ({"`"}
               performance.now(){"`"}), not accumulated intervals.
             </li>
+          </ul>
+        </section>
+
+        <section>
+          <div className="race-section-heading">
+            <p className="race-kicker--muted">Shared timing</p>
+            <h2 className="mt-1 text-xl font-black uppercase">
+              Time Together — shared sessions
+            </h2>
+          </div>
+          <p className="mt-4 text-sm font-semibold text-zinc-700">
+            The SplitSync Stopwatch app (Android) supports shared timing sessions
+            — multiple devices timing the same activity in real time, all seeing
+            the same clock and lap splits.
+          </p>
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
             <li>
-              A <strong>Time together</strong> button will appear once shared
-              sessions are available — you will be able to share a link and
-              time alongside others in real time.
+              <strong>Creating a session</strong> requires a SplitSync organizer
+              account. Sign in with your email and password in the app, then tap{" "}
+              <strong>NEW SESSION</strong>. Name the session, enter a display name
+              for yourself, then tap <strong>START SESSION</strong>.
+            </li>
+            <li>
+              After creating a session a share sheet appears with a link in the
+              form{" "}
+              <code>https://splitsync.org/stopwatch/s/AB3K9X</code>. Send it to
+              anyone who should join — they do <em>not</em> need an account.
+            </li>
+            <li>
+              <strong>Joining a session</strong> is frictionless. Open the shared
+              link (or install the app and enter the 6-character code manually),
+              enter a display name, and tap <strong>JOIN</strong>. No sign-in
+              required.
+            </li>
+            <li>
+              Any participant can press <strong>START</strong>, <strong>LAP</strong>,
+              or <strong>STOP</strong>. The session uses a server-anchored clock so
+              all devices see the same elapsed time regardless of device clock
+              differences.
+            </li>
+            <li>
+              The <strong>lap table</strong> shows each split with the name of who
+              pressed LAP. The <strong>participant strip</strong> at the top shows
+              who is currently in the session.
+            </li>
+            <li>
+              Only the <strong>session creator</strong> (shown with ★) can{" "}
+              <strong>Reset</strong> the clock to restart the session.
+            </li>
+            <li>
+              Sessions expire after 4 hours of inactivity (extended by 30 minutes
+              with each lap event, up to 16 hours total). A stopped session cannot
+              be resumed; create a new one.
+            </li>
+            <li>
+              If you disconnect and reconnect, the app automatically catches up
+              with any events it missed — laps are never lost due to a brief
+              connection drop.
             </li>
           </ul>
         </section>
