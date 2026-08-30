@@ -408,6 +408,12 @@ export default function HelpPage() {
               browsers that support the wake lock API — no need to fight the
               screen-off timeout during a long effort.
             </li>
+            <li>
+              Tap <strong>🔓</strong> to lock <strong>Stop</strong> and{" "}
+              <strong>Reset</strong> against accidental taps —{" "}
+              <strong>Lap</strong> keeps working while locked. Press and hold{" "}
+              <strong>🔒</strong> for about 1.5 seconds to unlock.
+            </li>
           </ul>
         </section>
 
@@ -481,6 +487,14 @@ export default function HelpPage() {
               display readable from a distance — the LCD digits grow to fill
               the width while the buttons and lap list stay usable. Works on
               both the shared session and solo stopwatch screens.
+            </li>
+            <li>
+              Tap <strong>🔓</strong> to lock <strong>Stop</strong> and{" "}
+              <strong>Reset</strong> against accidental taps —{" "}
+              <strong>Lap</strong> keeps working while locked. Press and hold{" "}
+              <strong>🔒</strong> for about 1.5 seconds to unlock. In shared
+              sessions the lock is local to your device only; it never affects
+              other participants.
             </li>
           </ul>
         </section>
