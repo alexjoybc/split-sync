@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import { formatTime, formatLapTime } from "@/lib/stopwatchFormat";
 import { useWakeLock } from "./useWakeLock";
+import { downloadCsv, lapsToCsv, lapsToText } from "@/lib/stopwatchExport";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -449,6 +450,7 @@ export default function StopwatchPage() {
   const [state, setState] = useState<StopwatchState>("idle");
   const [displayMs, setDisplayMs] = useState(0);
   const [laps, setLaps] = useState<Lap[]>([]);
+  const [copied, setCopied] = useState(false);
 
   // Large-display mode (#230) — enlarged timer, best-effort browser fullscreen
   const [largeMode, setLargeMode] = useState(false);
@@ -997,6 +999,30 @@ export default function StopwatchPage() {
     [updateCues, state, getElapsed]
   );
 
+  // ---------------------------------------------------------------------------
+  // Export (copy / CSV) — #226
+  // ---------------------------------------------------------------------------
+
+  const exportLaps = useCallback(
+    () => laps.map((l) => ({ lap: l.n, splitMs: l.lapMs, cumulativeMs: l.totalMs })),
+    [laps]
+  );
+
+  const handleCopyLaps = useCallback(async () => {
+    if (laps.length === 0) return;
+    const totalMs = laps[laps.length - 1].totalMs;
+    await navigator.clipboard.writeText(
+      lapsToText("Solo stopwatch", totalMs, exportLaps())
+    );
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [laps, exportLaps]);
+
+  const handleDownloadCsv = useCallback(() => {
+    if (laps.length === 0) return;
+    downloadCsv("stopwatch-laps.csv", lapsToCsv(exportLaps()));
+  }, [laps, exportLaps]);
+
   // Secondary pusher: lap when running, reset when stopped/idle
   const handleSecondary = useCallback(() => {
     if (state === "running") {
@@ -1536,6 +1562,24 @@ export default function StopwatchPage() {
                   })}
                 </tbody>
               </table>
+
+              {/* Export actions — #226 */}
+              <div className="mt-4 flex justify-center gap-3 no-print">
+                <button
+                  type="button"
+                  className="race-action race-action--outline text-sm"
+                  onClick={handleCopyLaps}
+                >
+                  {copied ? "Copied ✓" : "Copy laps"}
+                </button>
+                <button
+                  type="button"
+                  className="race-action race-action--outline text-sm"
+                  onClick={handleDownloadCsv}
+                >
+                  Download CSV
+                </button>
+              </div>
             </section>
           )}
 
