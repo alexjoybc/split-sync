@@ -1,11 +1,14 @@
 /**
  * E2E spec: /stopwatch/s/[code] shared session route
  *
+ * The join form is shown upfront for any code (valid or not).
+ * Invalid codes are detected on submit when the RPC rejects them.
+ *
  * Tests:
- *   - Unknown/bad code shows a user-friendly join form (no blank page, no crash)
- *   - Joining with an unknown code shows an error message (not a silent failure)
- *   - The "Create a SplitSync event" CTA exists somewhere on the page
+ *   - Any code shows the join form — no blank page, no crash
+ *   - Submitting with an unknown code shows a friendly inline error
  *   - No organizer controls (race controls, bibs, roster) are present
+ *   - A link back to the solo stopwatch is always present
  */
 import { test, expect } from '@playwright/test';
 
@@ -13,19 +16,42 @@ const UNKNOWN_CODE = 'ZZZZZZ';
 
 test.describe('/stopwatch/s/[code] shared session route', () => {
 
-  test('unknown code: page loads and shows a friendly error — no crash, no blank page', async ({ page }) => {
+  test('any code: page loads the join form — no crash, no blank page', async ({ page }) => {
     await page.goto(`/stopwatch/s/${UNKNOWN_CODE}`);
-
-    // Page must render a visible <main> — not a blank white screen
     await expect(page.locator('main')).toBeVisible({ timeout: 10_000 });
+    // Join form (display-name input) must appear for any code
+    await expect(page.getByPlaceholder(/e\.g\. Alex|your name|display name/i)
+      .or(page.getByLabel(/display name|your name/i)))
+      .toBeVisible({ timeout: 10_000 });
+  });
 
-    // Unknown codes surface an error state — join form NOT shown, error message IS shown
-    await expect(page.getByPlaceholder(/name/i)).not.toBeVisible();
-    // Some kind of error / "not found" text must be present
-    const body = await page.locator('body').innerText();
-    expect(
-      body.toLowerCase().match(/not found|expired|invalid|session|error/i)
-    ).toBeTruthy();
+  test('unknown code: submitting the join form shows a session-not-found error', async ({ page }) => {
+    await page.goto(`/stopwatch/s/${UNKNOWN_CODE}`);
+    // Fill and submit the join form
+    const nameInput = page.getByPlaceholder(/e\.g\. Alex|your name|display name/i)
+      .or(page.getByLabel(/display name|your name/i)).first();
+    await expect(nameInput).toBeVisible({ timeout: 10_000 });
+    await nameInput.fill('TestRunner');
+    await page.getByRole('button', { name: /join/i }).click();
+    // An error message must appear — exact wording TBD by RPC
+    const errorEl = page.locator('[role="alert"], .text-red, .error, [data-testid="error"]')
+      .or(page.getByText(/not found|expired|invalid|unable to join/i)).first();
+    await expect(errorEl).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('join page: no organizer race controls present', async ({ page }) => {
+    await page.goto(`/stopwatch/s/${UNKNOWN_CODE}`);
+    await expect(page.locator('main')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-testid="race-controls"]')).not.toBeAttached();
+    await expect(page.getByRole('button', { name: /start race/i })).not.toBeVisible({ timeout: 2_000 });
+    await expect(page.getByRole('button', { name: /finish race/i })).not.toBeVisible({ timeout: 2_000 });
+  });
+
+  test('join page: has a link back to the solo stopwatch', async ({ page }) => {
+    await page.goto(`/stopwatch/s/${UNKNOWN_CODE}`);
+    await expect(page.locator('main')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('link', { name: /solo|stopwatch|back/i }).first())
+      .toBeVisible({ timeout: 5_000 });
   });
 
   test('unknown code: error state has a link back to the solo stopwatch', async ({ page }) => {
