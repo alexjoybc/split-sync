@@ -213,6 +213,60 @@ function lcdMainSize(width: number, height: number): number {
   return Math.min(widthFit, 72);
 }
 
+// ── Lap export helpers (#226) ─────────────────────────────────────────────────
+interface ExportLap {
+  lapNum: number;
+  splitMs: number;
+  cumulativeMs: number;
+  actorName?: string;
+}
+
+function csvField(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/** Laps (ascending lap order) → CSV text. Mirrors apps/web stopwatchExport. */
+function lapsToCsvText(laps: ExportLap[]): string {
+  const withActor = laps.some((l) => l.actorName !== undefined);
+  const header = withActor
+    ? "lap,split,total,split_ms,total_ms,recorded_by"
+    : "lap,split,total,split_ms,total_ms";
+  const rows = laps.map((l) => {
+    const base = [
+      String(l.lapNum),
+      fmtCompact(l.splitMs),
+      fmtCompact(l.cumulativeMs),
+      String(Math.round(l.splitMs)),
+      String(Math.round(l.cumulativeMs)),
+    ];
+    if (withActor) base.push(csvField(l.actorName ?? ""));
+    return base.join(",");
+  });
+  return [header, ...rows].join("\n") + "\n";
+}
+
+/** Laps (ascending lap order) → human-readable share text. */
+function lapsToShareText(
+  title: string,
+  totalMs: number | null,
+  laps: ExportLap[]
+): string {
+  const bestMs =
+    laps.length > 0 ? Math.min(...laps.map((l) => l.splitMs)) : null;
+  const summary = [
+    totalMs !== null ? `Total ${fmtCompact(totalMs)}` : null,
+    `${laps.length} lap${laps.length === 1 ? "" : "s"}`,
+    bestMs !== null ? `Best ${fmtCompact(bestMs)}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const lines = laps.map((l) => {
+    const actor = l.actorName ? `  by ${l.actorName}` : "";
+    return `Lap ${l.lapNum}  ${fmtCompact(l.splitMs)}  (${fmtCompact(l.cumulativeMs)})${actor}`;
+  });
+  return [`${title} — SplitSync Stopwatch`, summary, "", ...lines].join("\n");
+}
+
 function extractCodeFromUrl(url: string): string | null {
   // Handles:
   //   https://splitsync.org/stopwatch/s/<code>
@@ -1723,6 +1777,24 @@ function SessionScreen({
     [cueRef]
   );
 
+  // Final total (start → stop) derived from the event log — for result export
+  const finalTotalMs = useMemo<number | null>(() => {
+    const sorted = [...events].sort((a, b) => a.sequence - b.sequence);
+    let baseAt: Date | null = null;
+    let total: number | null = null;
+    for (const ev of sorted) {
+      if (ev.event_type === "reset") {
+        baseAt = null;
+        total = null;
+      } else if (ev.event_type === "start") {
+        baseAt = new Date(ev.client_recorded_at);
+      } else if (ev.event_type === "stop" && baseAt) {
+        total = new Date(ev.client_recorded_at).getTime() - baseAt.getTime();
+      }
+    }
+    return total;
+  }, [events]);
+
   // ── Clock tick ──────────────────────────────────────────────────────────────
   const startTick = useCallback(() => {
     if (tickRef.current) clearInterval(tickRef.current);
@@ -2105,10 +2177,27 @@ function SessionScreen({
     await sendEvent("reset");
   }, [params.isOwner, sendEvent]);
 
-  const handleShare = useCallback(async () => {
-    const url = `https://splitsync.org/stopwatch/s/${params.sessionCode}`;
-    await Share.share({ message: `Join my SplitSync session: ${url}`, url });
-  }, [params.sessionCode]);
+  // Laps in ascending order for export (#226)
+  const exportLaps = useCallback(
+    (): ExportLap[] => [...laps].reverse(),
+    [laps]
+  );
+
+  // Share the permanent results page + lap summary text (survives expiry)
+  const handleShareResult = useCallback(async () => {
+    const resultsUrl = `https://splitsync.org/stopwatch/s/${params.sessionCode}/results`;
+    const text =
+      lapsToShareText(params.sessionName, finalTotalMs, exportLaps()) +
+      `\n\nFull results: ${resultsUrl}`;
+    await Share.share({ message: text, url: resultsUrl }).catch(() => undefined);
+  }, [params.sessionCode, params.sessionName, finalTotalMs, exportLaps]);
+
+  // Share the lap table as CSV via the share sheet
+  const handleShareCsv = useCallback(async () => {
+    await Share.share({ message: lapsToCsvText(exportLaps()) }).catch(
+      () => undefined
+    );
+  }, [exportLaps]);
 
   // Volume-key hardware control
   // Volume UP  = START (waiting) or STOP (running)
@@ -2358,7 +2447,7 @@ function SessionScreen({
           {/* Stopped CTA */}
           <View style={{ padding: 16, gap: 10 }}>
             <Pressable
-              onPress={handleShare}
+              onPress={handleShareResult}
               style={({ pressed }) => [
                 s.secondaryBtn,
                 { opacity: pressed ? 0.7 : 1 },
@@ -2366,6 +2455,17 @@ function SessionScreen({
             >
               <Text style={s.secondaryBtnText}>Share Result</Text>
             </Pressable>
+            {laps.length > 0 && (
+              <Pressable
+                onPress={handleShareCsv}
+                style={({ pressed }) => [
+                  s.outlineBtn,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Text style={s.outlineBtnText}>Share CSV</Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={() =>
                 ExpoLinking.openURL("https://splitsync.org/new")
@@ -2896,6 +2996,31 @@ function SoloScreen({
     [updateCueSettings, cueRef]
   );
 
+  // Share laps as text / CSV via the share sheet (#226)
+  const soloExportLaps = useCallback(
+    (): ExportLap[] =>
+      [...laps]
+        .reverse()
+        .map((l) => ({
+          lapNum: l.number,
+          splitMs: l.splitMs,
+          cumulativeMs: l.cumulativeMs,
+        })),
+    [laps]
+  );
+
+  const handleShareLaps = useCallback(async () => {
+    await Share.share({
+      message: lapsToShareText("Solo stopwatch", accum.current, soloExportLaps()),
+    }).catch(() => undefined);
+  }, [soloExportLaps]);
+
+  const handleShareCsv = useCallback(async () => {
+    await Share.share({ message: lapsToCsvText(soloExportLaps()) }).catch(
+      () => undefined
+    );
+  }, [soloExportLaps]);
+
   const isRunning = swState === "running";
   const isPaused = swState === "paused";
   const isIdle = swState === "idle";
@@ -3129,6 +3254,36 @@ function SoloScreen({
             <Text style={s.statLabel}>AVG</Text>
             <Text style={s.statValue}>{fmtCompact(Math.round(avgMs!))}</Text>
           </View>
+        </View>
+      )}
+
+      {/* ── Share row (paused with laps) — #226 ── */}
+      {isPaused && lapCount > 0 && (
+        <View style={s.shareRow}>
+          <Pressable
+            onPress={handleShareLaps}
+            style={({ pressed }) => [
+              s.shareRowBtn,
+              { opacity: pressed ? 0.7 : 1 },
+            ]}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Share lap times"
+          >
+            <Text style={s.shareRowBtnText}>SHARE LAPS</Text>
+          </Pressable>
+          <Pressable
+            onPress={handleShareCsv}
+            style={({ pressed }) => [
+              s.shareRowBtn,
+              { opacity: pressed ? 0.7 : 1 },
+            ]}
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel="Share lap times as CSV"
+          >
+            <Text style={s.shareRowBtnText}>SHARE CSV</Text>
+          </Pressable>
         </View>
       )}
 
@@ -3787,6 +3942,47 @@ const s = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1.5,
   },
+  outlineBtn: {
+    backgroundColor: C.white,
+    borderWidth: 2,
+    borderColor: C.ink,
+    borderRadius: 3,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  outlineBtnText: {
+    color: C.ink,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
+
+  // Solo share row (#226)
+  shareRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: C.panelBg,
+    borderBottomWidth: 1,
+    borderColor: C.line,
+  },
+  shareRowBtn: {
+    flex: 1,
+    backgroundColor: C.white,
+    borderWidth: 1.5,
+    borderColor: C.ink,
+    borderRadius: 3,
+    paddingVertical: 9,
+    alignItems: "center",
+  },
+  shareRowBtnText: {
+    color: C.ink,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
+
   ghostBtn: { paddingVertical: 12, alignItems: "center" },
   ghostBtnText: { color: C.red, fontSize: 13, fontWeight: "700", letterSpacing: 0.5 },
   backBtn: { paddingVertical: 4, paddingHorizontal: 2 },

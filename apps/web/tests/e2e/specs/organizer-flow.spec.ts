@@ -67,11 +67,21 @@ test.describe('Organizer flow', () => {
     await page.getByPlaceholder('Last name').fill('Smith');
     await page.getByPlaceholder('Last name').press('Enter');
 
+    // addParticipant is async: on success it clears the form (setRider) and
+    // refetches. Typing the next rider before that clear lands gets wiped,
+    // so wait for Alice's roster row before filling Bob.
+    await expect(
+      page.getByRole('cell', { name: 'Alice Smith', exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
+
     // After submit the bib input regains focus; fill the second rider.
     await page.getByPlaceholder('Bib', { exact: true }).fill('2');
     await page.getByPlaceholder('First name').fill('Bob');
     await page.getByPlaceholder('Last name').fill('Jones');
     await page.getByPlaceholder('Last name').press('Enter');
+    await expect(
+      page.getByRole('cell', { name: 'Bob Jones', exact: true }),
+    ).toBeVisible({ timeout: 10_000 });
 
     // ── 5. Create a race ───────────────────────────────────────────────────
     // Section "4. Races" contains an "Add race" form with Race name / Laps inputs.

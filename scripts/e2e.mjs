@@ -19,7 +19,7 @@ import { execSync, spawnSync } from 'node:child_process';
 const HOSTED_REF = 'bsihlrzncucrglqltjrc';
 const LOCAL_URL = 'http://127.0.0.1:54321';
 const LOCAL_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRFA0NiK7b6b7xNHPnjyxvFnDpvnuN51o4MXVToypGc';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
 console.log('🔧 SplitSync E2E runner');
 console.log('Prerequisites: Docker running, Supabase CLI installed, pnpm installed\n');

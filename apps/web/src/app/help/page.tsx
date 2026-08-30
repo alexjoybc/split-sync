@@ -422,6 +422,12 @@ export default function HelpPage() {
               as the system may pause the app&apos;s timers.
             </li>
             <li>
+              Once you have laps, use <strong>Copy laps</strong> to put the lap
+              table on your clipboard as text, or <strong>Download CSV</strong>{" "}
+              to save it as a spreadsheet-ready file (lap number, split,
+              cumulative time — in both clock and millisecond form).
+            </li>
+            <li>
               Timing stays accurate while the tab is in the background — the
               stopwatch anchors to a monotonic clock ({"`"}
               performance.now(){"`"}), not accumulated intervals.
@@ -510,6 +516,24 @@ export default function HelpPage() {
             <li>
               Signed-in users see their <strong>session history</strong> below the
               stopwatch and can rejoin or share past sessions at any time.
+            </li>
+            <li>
+              <strong>After a session stops</strong>, its results live at a
+              permanent link:{" "}
+              <code>https://splitsync.org/stopwatch/s/AB3K9X/results</code>.
+              Anyone with the code can open it — no account, read-only — and it
+              keeps working after the session expires. The page shows the total
+              time and the full lap table (split, cumulative, best lap, and who
+              recorded each lap), with <strong>Copy laps</strong> and{" "}
+              <strong>Download CSV</strong> buttons.
+            </li>
+            <li>
+              In the app, a stopped session&apos;s <strong>Share Result</strong>{" "}
+              button shares the lap summary and that results link, and{" "}
+              <strong>Share CSV</strong> sends the lap table as CSV through your
+              device&apos;s share sheet. The solo stopwatch has the same{" "}
+              <strong>Share Laps</strong> / <strong>Share CSV</strong> options
+              while stopped.
             </li>
             <li>
               While a stopwatch is running (solo or shared), the Android app
