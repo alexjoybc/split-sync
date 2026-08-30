@@ -425,6 +425,108 @@ body {
   opacity: 0.65;
 }
 
+/* ── Delayed start ───────────────────────────────────────────────────────── */
+
+/* Countdown state: tint the bezel border to red */
+.sw-dial--countdown {
+  border-color: var(--race-red);
+  box-shadow:
+    0 0 0 3px rgba(236, 28, 36, 0.25),
+    0 8px 32px rgba(0,0,0,0.55),
+    inset 0 2px 8px rgba(255,255,255,0.06),
+    inset 0 -4px 16px rgba(0,0,0,0.6);
+}
+
+/* Countdown digit inside the dial */
+.sw-countdown-digits {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+@keyframes sw-countdown-pulse {
+  0%   { transform: scale(1.3); opacity: 0.6; }
+  40%  { transform: scale(1);   opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.85; }
+}
+
+.sw-countdown-number {
+  display: block;
+  font-size: clamp(72px, 20vw, 108px);
+  font-weight: 900;
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--race-red);
+  line-height: 1;
+  animation: sw-countdown-pulse 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+.sw-countdown-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--sw-digit-sub-color);
+}
+
+/* Primary pusher in countdown mode */
+.sw-pusher--countdown {
+  background: var(--race-red);
+  color: #fff;
+  opacity: 0.92;
+}
+
+/* Countdown number inside the pusher button */
+.sw-pusher-countdown-num {
+  display: block;
+  font-size: 26px;
+  font-weight: 900;
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  animation: sw-countdown-pulse 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* Delay selector — strip of small segmented buttons shown in idle/stopped */
+.sw-delay-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
+}
+
+.sw-delay-label {
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--race-muted);
+  margin-right: 6px;
+}
+
+.sw-delay-option {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  border: 1.5px solid var(--race-line);
+  border-radius: 2px;
+  background: var(--race-panel);
+  color: var(--race-muted);
+  cursor: pointer;
+  transition: background 80ms, color 80ms, border-color 80ms;
+}
+
+.sw-delay-option:hover {
+  border-color: var(--race-ink);
+  color: var(--race-ink);
+}
+
+.sw-delay-option--active {
+  background: var(--race-ink);
+  border-color: var(--race-ink);
+  color: #fff;
+}
+
 /* Keyboard shortcut badge */
 .sw-kbd {
   display: inline-block;
