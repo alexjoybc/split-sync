@@ -217,6 +217,49 @@ function extractCodeFromUrl(url: string): string | null {
   return m ? m[1].toUpperCase() : null;
 }
 
+// ── Lap trend chart (native) ───────────────────────────────────────────────────
+function LapTrendChart<T>({
+  laps,
+  bestMs,
+  worstMs,
+  getLapMs,
+  getLapNum,
+}: {
+  laps: T[];
+  bestMs: number;
+  worstMs: number;
+  getLapMs: (lap: T) => number;
+  getLapNum: (lap: T) => number;
+}) {
+  if (laps.length < 2) return null;
+  return (
+    <View style={sc.trendChart}>
+      {laps.map((lap) => {
+        const ms = getLapMs(lap);
+        const num = getLapNum(lap);
+        const isBest = ms === bestMs;
+        const isWorst = ms === worstMs;
+        const pct = worstMs > 0 ? (ms / worstMs) * 100 : 100;
+        const barColor = isBest ? C.yellow : isWorst ? "#C84B1F" : C.muted;
+        return (
+          <View key={num} style={sc.trendRow}>
+            <Text style={sc.trendNum}>{num}</Text>
+            <View style={sc.trendTrack}>
+              <View
+                style={[
+                  sc.trendFill,
+                  { width: `${pct}%` as unknown as number, backgroundColor: barColor },
+                ]}
+              />
+            </View>
+            <Text style={sc.trendTime}>{fmtCompact(ms)}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 // ── Shared UI components ───────────────────────────────────────────────────────
 
 // LCD display with DSEG7 ghost segments
@@ -1280,12 +1323,27 @@ function SessionScreen({
     return derived.reverse(); // newest first
   }, [events, participants]);
 
-  // Best lap (among laps)
+  // Best / worst / avg laps (derived, never persisted — invariant #2)
+  const showSessionStats = laps.length >= 2;
   const bestMs = useMemo(
     () =>
       laps.length < 2
         ? null
         : Math.min(...laps.map((l) => l.splitMs)),
+    [laps]
+  );
+  const worstMs = useMemo(
+    () =>
+      laps.length < 2
+        ? null
+        : Math.max(...laps.map((l) => l.splitMs)),
+    [laps]
+  );
+  const avgMs = useMemo(
+    () =>
+      laps.length < 2
+        ? null
+        : laps.reduce((sum, l) => sum + l.splitMs, 0) / laps.length,
     [laps]
   );
 
@@ -1787,6 +1845,28 @@ function SessionScreen({
         </View>
       )}
 
+      {/* ── Stats strip (≥ 2 laps) ── */}
+      {showSessionStats && (
+        <View style={s.statsStrip} accessibilityLabel="Lap statistics">
+          <View style={[s.statCell, s.statCellBest]}>
+            <Text style={s.statLabel}>BEST</Text>
+            <Text style={[s.statValue, s.statValueBest]}>
+              {fmtCompact(bestMs!)}
+            </Text>
+          </View>
+          <View style={[s.statCell, s.statCellMid]}>
+            <Text style={s.statLabel}>WORST</Text>
+            <Text style={[s.statValue, s.statValueWorst]}>
+              {fmtCompact(worstMs!)}
+            </Text>
+          </View>
+          <View style={s.statCell}>
+            <Text style={s.statLabel}>AVG</Text>
+            <Text style={s.statValue}>{fmtCompact(Math.round(avgMs!))}</Text>
+          </View>
+        </View>
+      )}
+
       {/* ── Lap table or stopped summary ── */}
       {isStopped ? (
         <View style={{ flex: 1 }}>
@@ -1802,6 +1882,17 @@ function SessionScreen({
                 data={laps}
                 keyExtractor={(l) => String(l.lapNum)}
                 style={{ flex: 1 }}
+                ListHeaderComponent={
+                  showSessionStats ? (
+                    <LapTrendChart
+                      laps={[...laps].reverse()}
+                      bestMs={bestMs!}
+                      worstMs={worstMs!}
+                      getLapMs={(l) => l.splitMs}
+                      getLapNum={(l) => l.lapNum}
+                    />
+                  ) : null
+                }
                 renderItem={({ item }) => {
                   const isBest = bestMs !== null && item.splitMs === bestMs;
                   return (
@@ -1872,6 +1963,17 @@ function SessionScreen({
             data={laps}
             keyExtractor={(l) => String(l.lapNum)}
             style={{ flex: 1 }}
+            ListHeaderComponent={
+              showSessionStats ? (
+                <LapTrendChart
+                  laps={[...laps].reverse()}
+                  bestMs={bestMs!}
+                  worstMs={worstMs!}
+                  getLapMs={(l) => l.splitMs}
+                  getLapNum={(l) => l.lapNum}
+                />
+              ) : null
+            }
             renderItem={({ item }) => {
               const isBest = bestMs !== null && item.splitMs === bestMs;
               const delta =
@@ -2215,9 +2317,22 @@ function SoloScreen({
   const isCountdown = swState === "countdown";
   const lapCount = laps.length;
   const lastLap = laps[0] ?? null;
+  const showSoloStats = laps.length >= 2;
   const bestMs = useMemo(
     () =>
       laps.length < 2 ? null : Math.min(...laps.map((l) => l.splitMs)),
+    [laps]
+  );
+  const worstMs = useMemo(
+    () =>
+      laps.length < 2 ? null : Math.max(...laps.map((l) => l.splitMs)),
+    [laps]
+  );
+  const avgMs = useMemo(
+    () =>
+      laps.length < 2
+        ? null
+        : laps.reduce((sum, l) => sum + l.splitMs, 0) / laps.length,
     [laps]
   );
   const lcdMain = lcdMainSize(width, height);
@@ -2368,6 +2483,28 @@ function SoloScreen({
         </View>
       )}
 
+      {/* ── Stats strip (≥ 2 laps) ── */}
+      {showSoloStats && (
+        <View style={s.statsStrip} accessibilityLabel="Lap statistics">
+          <View style={[s.statCell, s.statCellBest]}>
+            <Text style={s.statLabel}>BEST</Text>
+            <Text style={[s.statValue, s.statValueBest]}>
+              {fmtCompact(bestMs!)}
+            </Text>
+          </View>
+          <View style={[s.statCell, s.statCellMid]}>
+            <Text style={s.statLabel}>WORST</Text>
+            <Text style={[s.statValue, s.statValueWorst]}>
+              {fmtCompact(worstMs!)}
+            </Text>
+          </View>
+          <View style={s.statCell}>
+            <Text style={s.statLabel}>AVG</Text>
+            <Text style={s.statValue}>{fmtCompact(Math.round(avgMs!))}</Text>
+          </View>
+        </View>
+      )}
+
       {/* ── Lap table ── */}
       {lapCount > 0 && !isCountdown ? (
         <View style={s.table}>
@@ -2381,6 +2518,17 @@ function SoloScreen({
             data={laps}
             keyExtractor={(l) => String(l.number)}
             style={{ flex: 1 }}
+            ListHeaderComponent={
+              showSoloStats ? (
+                <LapTrendChart
+                  laps={[...laps].reverse()}
+                  bestMs={bestMs!}
+                  worstMs={worstMs!}
+                  getLapMs={(l) => l.splitMs}
+                  getLapNum={(l) => l.number}
+                />
+              ) : null
+            }
             renderItem={({ item }) => {
               const isBest = bestMs !== null && item.splitMs === bestMs;
               const delta =
@@ -2700,6 +2848,49 @@ export default function App() {
   );
 }
 
+// ── LapTrendChart styles ───────────────────────────────────────────────────────
+const sc = StyleSheet.create({
+  trendChart: {
+    backgroundColor: C.panelBg,
+    borderBottomWidth: 1,
+    borderColor: C.line,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  trendRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  trendNum: {
+    width: 20,
+    fontSize: 9,
+    fontWeight: "700",
+    color: C.muted,
+    textAlign: "right",
+  },
+  trendTrack: {
+    flex: 1,
+    height: 8,
+    backgroundColor: C.line,
+    borderRadius: 1,
+    overflow: "hidden",
+  },
+  trendFill: {
+    height: "100%" as unknown as number,
+    borderRadius: 1,
+  },
+  trendTime: {
+    width: 52,
+    fontSize: 10,
+    fontWeight: "700",
+    color: C.muted,
+    textAlign: "right",
+    fontVariant: ["tabular-nums"],
+  },
+});
+
 // ── Styles ────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.paper },
@@ -2987,6 +3178,53 @@ const s = StyleSheet.create({
     borderRadius: 20,
     overflow: "hidden",
   },
+
+  // Stats strip (BEST / WORST / AVG)
+  statsStrip: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderBottomWidth: 2,
+    borderColor: C.rule,
+    backgroundColor: C.panelBg,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRightWidth: 1,
+    borderColor: C.line,
+    gap: 3,
+  },
+  statCellBest: {},
+  statCellMid: {},
+  statLabel: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    color: C.muted,
+    textTransform: "uppercase",
+  } as const,
+  statValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    fontVariant: ["tabular-nums"],
+    color: C.ink,
+  },
+  statValueBest: {
+    backgroundColor: C.yellow,
+    paddingHorizontal: 4,
+    borderRadius: 1,
+    color: C.ink,
+    overflow: "hidden",
+  } as const,
+  statValueWorst: {
+    backgroundColor: "#C84B1F",
+    paddingHorizontal: 4,
+    borderRadius: 1,
+    color: C.white,
+    overflow: "hidden",
+  } as const,
 
   // Home screen session list
   sectionHeader: {
