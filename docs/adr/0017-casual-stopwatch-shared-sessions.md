@@ -77,11 +77,12 @@ Plain RLS cannot express "knows the code" without a lookup, and a lookup on `cas
 
 | RPC | Description |
 |---|---|
-| `create_casual_session(display_name text)` | Creates session + owner participant. Returns `{ session_id, participant_id, code }`. Rate-limited to 10 calls per anon IP per 5 minutes via Supabase's built-in RLS rate-limit policy on the function. |
+| `create_casual_session(p_name text, p_display_name text)` | Creates session + owner participant. Returns `{ session_id, participant_id, code }`. Requires auth JWT (`auth.uid()` non-null). Rationale: session history RLS, rate-limiting per user, accountability. |
 | `join_casual_session(code text, display_name text)` | Validates code, checks expiry, checks participant cap, creates participant row. Returns `{ session_id, participant_id }`. Fails with a generic error if code is unknown, expired, or stopped (no information leak). |
 | `record_session_event(session_id uuid, participant_id uuid, event_type text, client_recorded_at timestamptz, client_id uuid)` | Validates participant membership, applies concurrency rules (§3), upserts the event (idempotent on `id`), updates `casual_sessions.status` and `t0_server` as needed. Returns the accepted event row. |
+| `get_session_state(p_session_id uuid, p_participant_id uuid)` | Returns full session state: session row + all participants + all events ordered by sequence. `p_participant_id` validates membership (rejects unknown participant). Used for reconnect catch-up when no peer is available. Security-definer. |
 
-The `participant_id` returned by `create_casual_session` or `join_casual_session` is a UUID secret. It acts as a bearer token: any call to `record_session_event` without a valid `(session_id, participant_id)` pair is rejected. Clients persist `participant_id` in AsyncStorage (mobile) or `localStorage` (web) for the duration of the session. There is no auth.users row, no JWT, and no sign-in flow in this surface.
+The `participant_id` returned by `create_casual_session` or `join_casual_session` is a UUID secret. It acts as a bearer token: any call to `record_session_event` without a valid `(session_id, participant_id)` pair is rejected. Clients persist `participant_id` in AsyncStorage (mobile) or `localStorage` (web) for the duration of the session. The session creator must be a signed-in Supabase auth user. Session joiners remain fully anonymous — no account required.
 
 **Code entropy**: 6 characters from a 34-symbol alphabet (A-Z minus O and I, 2-9) gives 34^6 ≈ 1.6 billion combinations. At the rate limit of 10 join attempts per IP per 5 minutes, brute-force enumeration is not feasible. Codes are regenerated on session creation; there is no "vanity code" feature.
 
@@ -192,7 +193,7 @@ The casual stopwatch is a **fourth surface**, independent of the three existing 
 | Spectator | `apps/web/src/app/live`, `/results`, `/announce` | Public | No sign-in, read-only, mobile-first |
 | Organizer admin | `apps/web/src/app` (`new`, `event`, `login`, `auth`) | Event owner | Authenticated writes, RLS-protected |
 | Mobile tracker | `apps/mobile` | Event owner / volunteer | Authenticated, crossing-only input |
-| **Casual stopwatch** | `apps/stopwatch` (native) + `apps/web/src/app/stopwatch` (web) | Public | **No sign-in, anonymous code-based sessions, event log is truth** |
+| **Casual stopwatch** | `apps/stopwatch` (native) + `apps/web/src/app/stopwatch` (web) | Public | **Session creator must sign in (Supabase auth, same project); joiners anonymous (code/link + display name only); event log is truth** |
 
 **Native app** (`apps/stopwatch`):
 - Framework: Expo SDK 57, React Native. Matches the tracker pattern (ADR 0003).
