@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import { formatTime, formatLapTime } from "@/lib/stopwatchFormat";
+import { useWakeLock } from "./useWakeLock";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -326,24 +327,10 @@ export default function StopwatchPage() {
   const accRef = useRef<number>(0);        // ms accumulated before last pause
   const rafRef = useRef<number | null>(null);
 
-  // Screen wake lock (#230) — keep display on while running; feature-detected,
-  // degrades silently where unsupported (Firefox, older Safari)
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-
-  const acquireWakeLock = useCallback(async () => {
-    try {
-      if ("wakeLock" in navigator) {
-        wakeLockRef.current = await navigator.wakeLock.request("screen");
-      }
-    } catch {
-      // Unsupported, denied, or page not visible — degrade silently.
-    }
-  }, []);
-
-  const releaseWakeLock = useCallback(() => {
-    wakeLockRef.current?.release().catch(() => undefined);
-    wakeLockRef.current = null;
-  }, []);
+  // Screen wake lock (#230/#238) — keep display on while running.
+  // Feature-detected, race-condition-safe, re-acquires on tab foreground;
+  // degrades silently where unsupported (Firefox, older Safari).
+  useWakeLock(state === "running");
 
   // Derived elapsed ms from refs
   const getElapsed = useCallback(() => {
@@ -448,15 +435,15 @@ export default function StopwatchPage() {
         accRef.current = getElapsed();
         stopLoop();
       } else {
-        // Tab foregrounded: reset start anchor, restart RAF, re-acquire wake lock
+        // Tab foregrounded: reset start anchor, restart RAF
+        // (useWakeLock re-acquires the wake lock on its own)
         startRef.current = performance.now();
         startLoop();
-        void acquireWakeLock();
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [state, getElapsed, startLoop, stopLoop, acquireWakeLock]);
+  }, [state, getElapsed, startLoop, stopLoop]);
 
   // ---------------------------------------------------------------------------
   // Controls
@@ -468,16 +455,14 @@ export default function StopwatchPage() {
       startRef.current = performance.now();
       setState("running");
       startLoop();
-      void acquireWakeLock();
     } else {
       // Stop / Pause
       accRef.current = getElapsed();
       stopLoop();
       setState("stopped");
       setDisplayMs(accRef.current);
-      releaseWakeLock();
     }
-  }, [state, getElapsed, startLoop, stopLoop, acquireWakeLock, releaseWakeLock]);
+  }, [state, getElapsed, startLoop, stopLoop]);
 
   const handleLap = useCallback(() => {
     if (state !== "running") return;
@@ -497,13 +482,12 @@ export default function StopwatchPage() {
 
   const handleReset = useCallback(() => {
     stopLoop();
-    releaseWakeLock();
     accRef.current = 0;
     startRef.current = 0;
     setState("idle");
     setDisplayMs(0);
     setLaps([]);
-  }, [stopLoop, releaseWakeLock]);
+  }, [stopLoop]);
 
   // ---------------------------------------------------------------------------
   // Large-display mode (#230)
@@ -574,14 +558,8 @@ export default function StopwatchPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [handleStartStop, handleSecondary]);
 
-  // Cleanup RAF + wake lock on unmount
-  useEffect(
-    () => () => {
-      stopLoop();
-      releaseWakeLock();
-    },
-    [stopLoop, releaseWakeLock]
-  );
+  // Cleanup RAF on unmount (useWakeLock releases the wake lock itself)
+  useEffect(() => () => stopLoop(), [stopLoop]);
 
   // ---------------------------------------------------------------------------
   // "Time together" button handler (#182)
@@ -632,7 +610,10 @@ export default function StopwatchPage() {
         />
       )}
 
-      <main className="race-page flex min-h-dvh flex-col">
+      <main
+        className="race-page flex min-h-dvh flex-col"
+        data-wake-lock-active={state === "running" ? "true" : undefined}
+      >
         {/* Red topline — spectator surface */}
         <div className="race-topline" />
 
