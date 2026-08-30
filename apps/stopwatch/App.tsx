@@ -272,8 +272,10 @@ const STORAGE_KEY_VOL_KEYS = "stopwatch_volume_keys_enabled";
  * Volume UP   = START / STOP (toggle)
  *
  * The system volume overlay is suppressed while the mapping is active.
- * The actual device volume is restored after each key-press so the mapping
- * is transparent to the user's audio preferences.
+ * While active, the media volume is pinned to a mid-level (0.5) so that both
+ * keys always produce a volume-change event — even if the user's volume was
+ * at 0 (volume-down would otherwise be dead) or at max (volume-up dead).
+ * The user's original volume is restored when the mapping is deactivated.
  *
  * The enabled/disabled preference is persisted to AsyncStorage.
  */
@@ -315,40 +317,56 @@ function useVolumeKeys({
     if (!enabled) return;
 
     let mounted = true;
-    let lastVolume = 0.5;
     let subscription: ReturnType<typeof addVolumeListener> | null = null;
+    // The user's volume before we pinned it; restored on cleanup.
+    let originalVolume: number | null = null;
+
+    // Pin point: mid-level so both keys always move the volume, and epsilon
+    // band so the listener firing for our own re-pin setVolume is ignored.
+    const PIN = 0.5;
+    const EPSILON = 0.01;
 
     // Suppress the native volume overlay
     VolumeManager.showNativeVolumeUI({ enabled: false }).catch(() => undefined);
 
-    VolumeManager.getVolume().then(({ volume }) => {
-      if (!mounted) return;
-      lastVolume = volume;
-
-      subscription = addVolumeListener(({ volume: newVolume }) => {
+    VolumeManager.getVolume()
+      .then(({ volume }) => {
         if (!mounted) return;
-        const diff = newVolume - lastVolume;
-        // Ignore sub-step noise (e.g. initial settle)
-        if (Math.abs(diff) < 0.009) return;
+        originalVolume = volume;
+        // Pin the media volume so volume keys work even at 0 or max
+        return VolumeManager.setVolume(PIN, { showUI: false });
+      })
+      .then(() => {
+        if (!mounted) return;
 
-        if (diff < 0) {
-          // Volume DOWN → LAP (only while running)
-          if (isRunningRef.current) {
-            onLapRef.current();
+        subscription = addVolumeListener(({ volume: newVolume }) => {
+          if (!mounted) return;
+          // Ignore our own re-pin setVolume echoes (and sub-step noise)
+          if (Math.abs(newVolume - PIN) < EPSILON) return;
+
+          if (newVolume < PIN) {
+            // Volume DOWN → LAP (only while running)
+            if (isRunningRef.current) {
+              onLapRef.current();
+            }
+          } else {
+            // Volume UP → START / STOP
+            onStartStopRef.current();
           }
-        } else {
-          // Volume UP → START / STOP
-          onStartStopRef.current();
-        }
 
-        // Restore volume so the mapping is invisible to the audio stack
-        VolumeManager.setVolume(lastVolume, { showUI: false }).catch(() => undefined);
-      });
-    }).catch(() => undefined);
+          // Re-pin so the next press always produces a delta
+          VolumeManager.setVolume(PIN, { showUI: false }).catch(() => undefined);
+        });
+      })
+      .catch(() => undefined);
 
     return () => {
       mounted = false;
       subscription?.remove();
+      // Restore the user's original volume now that the mapping is inactive
+      if (originalVolume !== null) {
+        VolumeManager.setVolume(originalVolume, { showUI: false }).catch(() => undefined);
+      }
       // Re-enable system volume overlay when leaving the screen or disabling
       VolumeManager.showNativeVolumeUI({ enabled: true }).catch(() => undefined);
     };
