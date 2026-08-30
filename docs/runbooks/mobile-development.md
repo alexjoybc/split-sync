@@ -51,7 +51,18 @@ The app is configured with bundle identifier `org.splitsync.tracker`. Install Xc
 
 ## SplitSync Stopwatch (`apps/stopwatch`)
 
-The stopwatch is a **separate standalone Expo app** (application id `org.splitsync.stopwatch`). It has no sign-in and requires no environment variables for its solo-stopwatch functionality.
+The stopwatch is a **separate standalone Expo app** (application id `org.splitsync.stopwatch`). Solo-stopwatch mode works without any environment variables. The **shared-session (Time Together)** feature connects to Supabase and requires credentials.
+
+### Local configuration
+
+Create `apps/stopwatch/.env`:
+
+```text
+EXPO_PUBLIC_SUPABASE_URL=https://bsihlrzncucrglqltjrc.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<Supabase publishable key>
+```
+
+These are the same public client values used by the web and mobile tracker. Do not add a Supabase service-role key.
 
 ### TypeScript check
 
@@ -71,4 +82,4 @@ The generated `apps/stopwatch/android` directory is git-ignored. Regenerate it w
 
 ### Deep-link scheme
 
-The stopwatch registers the scheme `org.splitsync.stopwatch://`. Future shared-session flows (#184) will use this scheme for invite links.
+The stopwatch registers the scheme `org.splitsync.stopwatch://` and an Android App Links intent filter for `https://splitsync.org/stopwatch/s/`. Both open the Join screen. See `docs/runbooks/stopwatch-release.md` for how to configure `assetlinks.json` for verified App Links.

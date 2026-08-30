@@ -234,6 +234,15 @@ Both `casual_session_events` and `casual_session_participants` are added to the 
 
 Migration `20260829000001_realtime_publication.sql` first enabled the publication; `20260830000001_casual_stopwatch_sessions.sql` adds the three casual-stopwatch tables.
 
+### Deep links
+
+| Surface | URL pattern |
+| --- | --- |
+| Web (HTTPS App Link) | `https://splitsync.org/stopwatch/s/<code>` |
+| Android native scheme | `org.splitsync.stopwatch://s/<code>` |
+
+Both link directly into the Join screen. The native app registers an Android intent filter for the HTTPS pattern (App Links / `autoVerify: true`); `assetlinks.json` at `apps/web/public/.well-known/assetlinks.json` must include the app's signing-certificate SHA-256 to enable verified deep links. The `<code>` is the 6-character alphanumeric join code stored in `casual_sessions.code`.
+
 ## UI System
 
 The visual design system is a shared contract across web and mobile, documented in [`docs/adr/0015-broadcast-ui-refresh.md`](adr/0015-broadcast-ui-refresh.md).

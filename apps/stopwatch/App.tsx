@@ -602,6 +602,15 @@ function LoginScreen({
         <Pressable onPress={onSolo} style={s.ghostBtn}>
           <Text style={s.ghostBtnText}>Use without account →</Text>
         </Pressable>
+
+        <Pressable
+          onPress={() => ExpoLinking.openURL("https://splitsync.org/help")}
+          style={[s.ghostBtn, { marginTop: 8 }]}
+        >
+          <Text style={[s.ghostBtnText, { color: C.muted, fontSize: 12 }]}>
+            ℹ  Help &amp; about
+          </Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -794,6 +803,19 @@ function HomeScreen({
           ]}
         >
           <Text style={[s.ghostBtnText, { color: C.muted }]}>Sign Out</Text>
+        </Pressable>
+
+        {/* Help */}
+        <Pressable
+          onPress={() => ExpoLinking.openURL("https://splitsync.org/help")}
+          style={({ pressed }) => [
+            s.ghostBtn,
+            { marginTop: 4, opacity: pressed ? 0.6 : 1 },
+          ]}
+        >
+          <Text style={[s.ghostBtnText, { color: C.muted, fontSize: 12 }]}>
+            ℹ  Help &amp; about
+          </Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
