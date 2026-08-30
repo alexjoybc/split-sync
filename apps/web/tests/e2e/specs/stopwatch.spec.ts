@@ -122,6 +122,26 @@ test.describe('/stopwatch solo page', () => {
     await expect(deal).toContainText(/display name/i);
   });
 
+  test('wake-lock intent attribute tracks running state', async ({ page }) => {
+    await page.goto('/stopwatch');
+    const main = page.locator('main');
+
+    // Idle: attribute is omitted entirely (not "false")
+    await expect(main).not.toHaveAttribute('data-wake-lock-active');
+
+    // Running: attribute is "true"
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await expect(main).toHaveAttribute('data-wake-lock-active', 'true');
+
+    // Stopped: attribute is omitted again
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+    await expect(main).not.toHaveAttribute('data-wake-lock-active');
+
+    // Reset: still omitted
+    await page.getByRole('button', { name: /reset stopwatch/i }).click();
+    await expect(main).not.toHaveAttribute('data-wake-lock-active');
+  });
+
   test('"Time together" shows "Sign in to share" for anonymous users and is clickable', async ({ page }) => {
     await page.goto('/stopwatch');
     // Anonymous users see a "Sign in to share" button (not disabled — it redirects to /login)
