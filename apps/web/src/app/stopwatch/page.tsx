@@ -302,6 +302,59 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Persistence (solo state survives page refresh)
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = "splitsync_stopwatch_solo_v1";
+
+interface PersistedSolo {
+  /** Only running/stopped are persisted; idle clears storage. */
+  state: "running" | "stopped";
+  /** Milliseconds accumulated before the last resume (or total, if stopped). */
+  accMs: number;
+  /** Wall-clock (Date.now()) at last resume; null when stopped. */
+  startedAtWall: number | null;
+  laps: Lap[];
+}
+
+function readPersisted(): PersistedSolo | null {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as PersistedSolo;
+    if (
+      (data.state !== "running" && data.state !== "stopped") ||
+      typeof data.accMs !== "number" ||
+      !Array.isArray(data.laps)
+    ) {
+      return null;
+    }
+    if (data.state === "running" && typeof data.startedAtWall !== "number") {
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function writePersisted(data: PersistedSolo) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {
+    // Storage unavailable (private mode / quota) — timer still works in-memory.
+  }
+}
+
+function clearPersisted() {
+  try {
+    window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore.
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Stopwatch component
 // ---------------------------------------------------------------------------
 
@@ -340,6 +393,8 @@ export default function StopwatchPage() {
   // Timing refs — not React state so they don't trigger re-renders in the RAF
   const startRef = useRef<number>(0);      // performance.now() at last resume
   const accRef = useRef<number>(0);        // ms accumulated before last pause
+  const wallStartRef = useRef<number | null>(null); // Date.now() at last resume
+  const lapsRef = useRef<Lap[]>([]);       // mirror of laps for persistence
   const rafRef = useRef<number | null>(null);
 
   // Screen wake lock (#230/#238) — keep display on while running.
@@ -474,6 +529,57 @@ export default function StopwatchPage() {
   }, [user]);
 
   // ---------------------------------------------------------------------------
+  // Persistence — restore on load, save on every state transition / lap
+  // ---------------------------------------------------------------------------
+
+  // "countdown" is never persisted — it is a transient pre-start state.
+  const persist = useCallback((next: "idle" | "running" | "stopped") => {
+    if (next === "idle") {
+      clearPersisted();
+      return;
+    }
+    writePersisted({
+      state: next,
+      accMs: accRef.current,
+      startedAtWall: next === "running" ? wallStartRef.current : null,
+      laps: lapsRef.current,
+    });
+  }, []);
+
+  // Restore persisted solo state on mount (client-only, after hydration).
+  useEffect(() => {
+    const saved = readPersisted();
+    if (!saved) return;
+
+    accRef.current = saved.accMs;
+    lapsRef.current = saved.laps;
+    setLaps(saved.laps);
+
+    if (saved.state === "running" && saved.startedAtWall !== null) {
+      // Recompute elapsed from the wall-clock anchor (drift-free across
+      // refresh), then re-anchor on performance.now() for the live loop.
+      accRef.current = saved.accMs + Math.max(0, Date.now() - saved.startedAtWall);
+      wallStartRef.current = Date.now();
+      startRef.current = performance.now();
+      setState("running");
+      setDisplayMs(accRef.current);
+      startLoop();
+      // Re-anchor the persisted record so a second refresh stays accurate.
+      writePersisted({
+        state: "running",
+        accMs: accRef.current,
+        startedAtWall: wallStartRef.current,
+        laps: saved.laps,
+      });
+    } else {
+      setState("stopped");
+      setDisplayMs(saved.accMs);
+    }
+    // Intentionally run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Countdown helpers
   // ---------------------------------------------------------------------------
 
@@ -490,9 +596,11 @@ export default function StopwatchPage() {
     // Do NOT reset accRef here: "stopped" is a pause, so Start resumes with
     // accumulated time intact. Only handleReset zeroes it.
     startRef.current = performance.now();
+    wallStartRef.current = Date.now();
     setState("running");
     startLoop();
-  }, [startLoop]);
+    persist("running");
+  }, [startLoop, persist]);
 
   const beginCountdown = useCallback((seconds: number) => {
     const endsAt = Date.now() + seconds * 1000;
@@ -523,17 +631,21 @@ export default function StopwatchPage() {
         // Tab backgrounded: accumulate what we have, stop RAF
         // (the browser auto-releases the wake lock on visibility loss)
         accRef.current = getElapsed();
+        wallStartRef.current = Date.now();
         stopLoop();
       } else {
-        // Tab foregrounded: reset start anchor, restart RAF
+        // Tab foregrounded: reset start anchors, restart RAF
         // (useWakeLock re-acquires the wake lock on its own)
         startRef.current = performance.now();
+        wallStartRef.current = Date.now();
         startLoop();
       }
+      // Keep the persisted wall-clock anchor in sync with the new anchors.
+      persist("running");
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [state, getElapsed, startLoop, stopLoop]);
+  }, [state, getElapsed, startLoop, stopLoop, persist]);
 
   // Cleanup RAF and countdown on unmount (useWakeLock releases the wake lock itself)
   useEffect(
@@ -585,9 +697,7 @@ export default function StopwatchPage() {
         beginCountdown(delaySeconds);
       } else {
         // Instant start / resume (accRef preserved so stopped time resumes)
-        startRef.current = performance.now();
-        setState("running");
-        startLoop();
+        commitStart();
       }
     } else if (state === "running") {
       // Stop / Pause — blocked when locked
@@ -596,12 +706,14 @@ export default function StopwatchPage() {
         return;
       }
       accRef.current = getElapsed();
+      wallStartRef.current = null;
       stopLoop();
       setState("stopped");
       setDisplayMs(accRef.current);
+      persist("stopped");
     }
     // During countdown: do nothing (cancel button handles it separately)
-  }, [state, delaySeconds, beginCountdown, isLocked, triggerLockHint, getElapsed, startLoop, stopLoop]);
+  }, [state, delaySeconds, beginCountdown, commitStart, isLocked, triggerLockHint, getElapsed, stopLoop, persist]);
 
   const handleCancelCountdown = useCallback(() => {
     clearCountdown();
@@ -617,7 +729,7 @@ export default function StopwatchPage() {
     const totalMs = getElapsed();
     setLaps((prev) => {
       const prevTotal = prev.length > 0 ? prev[prev.length - 1].totalMs : 0;
-      return [
+      const next = [
         ...prev,
         {
           n: prev.length + 1,
@@ -625,8 +737,11 @@ export default function StopwatchPage() {
           totalMs,
         },
       ];
+      lapsRef.current = next;
+      persist("running");
+      return next;
     });
-  }, [state, getElapsed]);
+  }, [state, getElapsed, persist]);
 
   const handleReset = useCallback(() => {
     if (isLocked) {
@@ -638,9 +753,12 @@ export default function StopwatchPage() {
     stopLoop();
     accRef.current = 0;
     startRef.current = 0;
+    wallStartRef.current = null;
+    lapsRef.current = [];
     setState("idle");
     setDisplayMs(0);
     setLaps([]);
+    clearPersisted();
   }, [isLocked, triggerLockHint, stopLoop, clearCountdown]);
 
   // ---------------------------------------------------------------------------

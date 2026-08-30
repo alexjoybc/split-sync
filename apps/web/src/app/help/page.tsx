@@ -414,6 +414,15 @@ export default function HelpPage() {
               <strong>Lap</strong> keeps working while locked. Press and hold{" "}
               <strong>🔒</strong> for about 1.5 seconds to unlock.
             </li>
+            <li>
+              <strong>Your timer survives a page refresh.</strong> The running
+              or stopped state, elapsed time, and all recorded laps are saved
+              on this device and restored when the page reloads — a running
+              timer keeps counting from a wall-clock anchor while the page is
+              closed. Tap <strong>Reset</strong> to clear the saved state. The
+              same applies in the SplitSync Stopwatch app: the solo timer is
+              restored even if the app is killed or the phone reboots.
+            </li>
           </ul>
         </section>
 
