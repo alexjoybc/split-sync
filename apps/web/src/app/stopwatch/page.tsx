@@ -8,12 +8,18 @@ import type { User } from "@supabase/supabase-js";
 import { formatTime, formatLapTime } from "@/lib/stopwatchFormat";
 import { useWakeLock } from "./useWakeLock";
 import { downloadCsv, lapsToCsv, lapsToText } from "@/lib/stopwatchExport";
+import CountdownTimer from "./CountdownTimer";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 type StopwatchState = "idle" | "countdown" | "running" | "stopped";
+
+// Solo mode: stopwatch (count up) or a single countdown timer (#232).
+// One timer only — multi-timer boards are a deliberate no-go (ADR 0018).
+type SoloMode = "stopwatch" | "timer";
+const MODE_STORAGE_KEY = "splitsync_stopwatch_mode_v1";
 
 type DelayOption = 0 | 3 | 5 | 10;
 const DELAY_OPTIONS: DelayOption[] = [0, 3, 5, 10];
@@ -448,6 +454,8 @@ function formatTargetInput(ms: number): string {
 
 export default function StopwatchPage() {
   const [state, setState] = useState<StopwatchState>("idle");
+  // Countdown timer mode (#232) — solo surface only; shared sessions unaffected
+  const [mode, setMode] = useState<SoloMode>("stopwatch");
   const [displayMs, setDisplayMs] = useState(0);
   const [laps, setLaps] = useState<Lap[]>([]);
   const [copied, setCopied] = useState(false);
@@ -559,6 +567,37 @@ export default function StopwatchPage() {
       saveCueSettings(next);
       return next;
     });
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Mode toggle (#232) — stopwatch vs single countdown timer
+  // ---------------------------------------------------------------------------
+
+  // Restore the last-used mode
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(MODE_STORAGE_KEY);
+      if (stored === "timer" || stored === "stopwatch") setMode(stored);
+    } catch {
+      // localStorage unavailable — ignore
+    }
+  }, []);
+
+  const handleSelectMode = useCallback((next: SoloMode) => {
+    setMode(next);
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, next);
+    } catch {
+      // ignore
+    }
+    if (next === "stopwatch") {
+      // The timer view can toggle the shared soundEnabled flag (#227) —
+      // reload so the stopwatch Sound section reflects it.
+      const loaded = loadCueSettings();
+      cuesRef.current = loaded;
+      setCues(loaded);
+      setTargetInput(formatTargetInput(loaded.targetMs));
+    }
   }, []);
 
   /** Create/resume the AudioContext. Must be called from a user gesture. */
@@ -1040,6 +1079,8 @@ export default function StopwatchPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Stopwatch shortcuts only apply in stopwatch mode (#232)
+      if (mode !== "stopwatch") return;
       // Ignore when focus is in an input/button (avoid accidental triggers)
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -1058,7 +1099,7 @@ export default function StopwatchPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [state, handleStartStop, handleSecondary, handleCancelCountdown]);
+  }, [mode, state, handleStartStop, handleSecondary, handleCancelCountdown]);
 
   // Cleanup RAF and lock timers on unmount (useWakeLock releases the wake
   // lock itself)
@@ -1181,6 +1222,42 @@ export default function StopwatchPage() {
             No account
           </p>
 
+          {/* ── Mode toggle (#232) — stopwatch vs single countdown timer ──── */}
+          {!largeMode && (
+            <div
+              className="sw-delay-selector mb-8"
+              role="group"
+              aria-label="Timing mode"
+              data-testid="sw-mode-toggle"
+            >
+              <span className="sw-delay-label">MODE</span>
+              <button
+                type="button"
+                className={`sw-delay-option${mode === "stopwatch" ? " sw-delay-option--active" : ""}`}
+                onClick={() => handleSelectMode("stopwatch")}
+                aria-pressed={mode === "stopwatch"}
+                aria-label="Stopwatch mode"
+                data-testid="sw-mode-stopwatch"
+              >
+                STOPWATCH
+              </button>
+              <button
+                type="button"
+                className={`sw-delay-option${mode === "timer" ? " sw-delay-option--active" : ""}`}
+                onClick={() => handleSelectMode("timer")}
+                aria-pressed={mode === "timer"}
+                aria-label="Countdown timer mode"
+                data-testid="sw-mode-timer"
+              >
+                TIMER
+              </button>
+            </div>
+          )}
+
+          {mode === "timer" ? (
+            <CountdownTimer />
+          ) : (
+          <>
           {/* ── Dial ───────────────────────────────────────────────────────── */}
           <div
             className={`sw-dial${largeMode ? " sw-dial--large" : ""}${isCountdown ? " sw-dial--countdown" : ""}`}
@@ -1581,6 +1658,8 @@ export default function StopwatchPage() {
                 </button>
               </div>
             </section>
+          )}
+          </>
           )}
 
           {/* ── "Time together" (#182) — hidden in large-display mode ──────── */}

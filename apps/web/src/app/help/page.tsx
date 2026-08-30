@@ -382,6 +382,25 @@ export default function HelpPage() {
               either way.
             </li>
             <li>
+              <strong>Countdown timer mode:</strong> use the{" "}
+              <strong>MODE</strong> toggle above the dial to switch between{" "}
+              <strong>STOPWATCH</strong> (count up) and <strong>TIMER</strong>{" "}
+              (count down). Set a duration as <strong>MM:SS</strong> or{" "}
+              <strong>H:MM:SS</strong>, then tap <strong>Start</strong>. When
+              the timer reaches zero it <strong>resets to the value you set</strong>,
+              ready to restart with a single tap — ideal for rest intervals,
+              kitchen timing, or study blocks. The completion alert (sound if
+              enabled under <strong>Sound</strong>, plus vibration where
+              supported) repeats a few times and then goes quiet on its own;
+              one tap on <strong>Dismiss</strong> (or <strong>Start</strong>)
+              silences it immediately. A running timer survives tab switches,
+              page refreshes, and closing the browser — it counts against a
+              wall-clock anchor and is restored when you come back. The same
+              timer mode exists in the Android Stopwatch app. There is
+              deliberately only <strong>one</strong> timer — SplitSync does not
+              do multi-timer boards.
+            </li>
+            <li>
               While running, tap <strong>Lap</strong> to record a split. Each
               lap shows its own duration and the cumulative time. The{" "}
               <strong>best (shortest) lap</strong> is highlighted in yellow.

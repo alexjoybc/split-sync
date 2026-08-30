@@ -143,7 +143,7 @@ function toneWavDataUri(segments: ToneSegment[]): string {
 
 // ── Cue playback ───────────────────────────────────────────────────────────────
 
-export type CueType = "start" | "stop" | "lap" | "target";
+export type CueType = "start" | "stop" | "lap" | "target" | "alarm";
 
 const CUE_SEGMENTS: Record<CueType, ToneSegment[]> = {
   start: [{ freq: 880, durationMs: 130 }],
@@ -158,6 +158,16 @@ const CUE_SEGMENTS: Record<CueType, ToneSegment[]> = {
     { freq: 988, durationMs: 140 },
     { freq: 0, durationMs: 30 },
     { freq: 1319, durationMs: 220 },
+  ],
+  // Countdown-timer completion (#232): three rising tones, longer and louder
+  // in character than the short press cues. Played a finite number of times
+  // by the caller — never an un-dismissable loop.
+  alarm: [
+    { freq: 880, durationMs: 160 },
+    { freq: 0, durationMs: 40 },
+    { freq: 1175, durationMs: 160 },
+    { freq: 0, durationMs: 40 },
+    { freq: 1568, durationMs: 260 },
   ],
 };
 
