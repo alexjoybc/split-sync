@@ -40,6 +40,7 @@
         "projectId": "3617f3ce-e97b-497f-90fe-af489ea86aac"
       }
     },
-    "platforms": ["android"]
+    "platforms": ["android"],
+    "plugins": ["expo-font", "expo-status-bar"]
   }
 }
