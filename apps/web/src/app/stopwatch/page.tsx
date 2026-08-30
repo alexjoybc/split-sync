@@ -12,7 +12,12 @@ import { useWakeLock } from "./useWakeLock";
 // Types
 // ---------------------------------------------------------------------------
 
-type StopwatchState = "idle" | "running" | "stopped";
+type StopwatchState = "idle" | "countdown" | "running" | "stopped";
+
+type DelayOption = 0 | 3 | 5 | 10;
+const DELAY_OPTIONS: DelayOption[] = [0, 3, 5, 10];
+const DELAY_LABELS: Record<DelayOption, string> = { 0: "OFF", 3: "3s", 5: "5s", 10: "10s" };
+const DELAY_STORAGE_KEY = "sw_delay_seconds";
 
 interface Lap {
   n: number;
@@ -322,6 +327,12 @@ export default function StopwatchPage() {
 
   const router = useRouter();
 
+  // Delayed start
+  const [delaySeconds, setDelaySeconds] = useState<DelayOption>(0);
+  const [countdownSec, setCountdownSec] = useState(0);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownEndRef = useRef<number>(0); // target Date.now() when countdown ends
+
   // Timing refs — not React state so they don't trigger re-renders in the RAF
   const startRef = useRef<number>(0);      // performance.now() at last resume
   const accRef = useRef<number>(0);        // ms accumulated before last pause
@@ -332,7 +343,36 @@ export default function StopwatchPage() {
   // degrades silently where unsupported (Firefox, older Safari).
   useWakeLock(state === "running");
 
+  // ---------------------------------------------------------------------------
+  // Persist delay preference
+  // ---------------------------------------------------------------------------
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(DELAY_STORAGE_KEY);
+      if (stored !== null) {
+        const v = Number(stored) as DelayOption;
+        if (DELAY_OPTIONS.includes(v)) setDelaySeconds(v);
+      }
+    } catch {
+      // localStorage unavailable (SSR, private mode) — ignore
+    }
+  }, []);
+
+  const handleSelectDelay = useCallback((opt: DelayOption) => {
+    setDelaySeconds(opt);
+    try {
+      localStorage.setItem(DELAY_STORAGE_KEY, String(opt));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Derived elapsed ms from refs
+  // ---------------------------------------------------------------------------
+
   const getElapsed = useCallback(() => {
     return accRef.current + (performance.now() - startRef.current);
   }, []);
@@ -423,6 +463,45 @@ export default function StopwatchPage() {
   }, [user]);
 
   // ---------------------------------------------------------------------------
+  // Countdown helpers
+  // ---------------------------------------------------------------------------
+
+  const clearCountdown = useCallback(() => {
+    if (countdownRef.current !== null) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+  }, []);
+
+  // Called when countdown ticks reach zero — start the actual stopwatch
+  // (useWakeLock acquires the wake lock when state becomes "running")
+  const commitStart = useCallback(() => {
+    // Do NOT reset accRef here: "stopped" is a pause, so Start resumes with
+    // accumulated time intact. Only handleReset zeroes it.
+    startRef.current = performance.now();
+    setState("running");
+    startLoop();
+  }, [startLoop]);
+
+  const beginCountdown = useCallback((seconds: number) => {
+    const endsAt = Date.now() + seconds * 1000;
+    countdownEndRef.current = endsAt;
+    setCountdownSec(seconds);
+    setState("countdown");
+
+    countdownRef.current = setInterval(() => {
+      const remaining = Math.ceil((countdownEndRef.current - Date.now()) / 1000);
+      if (remaining <= 0) {
+        clearCountdown();
+        setCountdownSec(0);
+        commitStart();
+      } else {
+        setCountdownSec(remaining);
+      }
+    }, 100); // 100ms granularity so we catch the transition exactly
+  }, [clearCountdown, commitStart]);
+
+  // ---------------------------------------------------------------------------
   // Visibility change — pause/resume RAF without losing accumulated time
   // ---------------------------------------------------------------------------
 
@@ -445,24 +524,48 @@ export default function StopwatchPage() {
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, [state, getElapsed, startLoop, stopLoop]);
 
+  // Cleanup RAF and countdown on unmount (useWakeLock releases the wake lock itself)
+  useEffect(
+    () => () => {
+      stopLoop();
+      clearCountdown();
+    },
+    [stopLoop, clearCountdown]
+  );
+
   // ---------------------------------------------------------------------------
   // Controls
   // ---------------------------------------------------------------------------
 
   const handleStartStop = useCallback(() => {
     if (state === "idle" || state === "stopped") {
-      // Start / Resume
-      startRef.current = performance.now();
-      setState("running");
-      startLoop();
-    } else {
+      if (delaySeconds > 0) {
+        // Enter countdown
+        beginCountdown(delaySeconds);
+      } else {
+        // Instant start / resume (accRef preserved so stopped time resumes)
+        startRef.current = performance.now();
+        setState("running");
+        startLoop();
+      }
+    } else if (state === "running") {
       // Stop / Pause
       accRef.current = getElapsed();
       stopLoop();
       setState("stopped");
       setDisplayMs(accRef.current);
     }
-  }, [state, getElapsed, startLoop, stopLoop]);
+    // During countdown: do nothing (cancel button handles it separately)
+  }, [state, delaySeconds, beginCountdown, getElapsed, startLoop, stopLoop]);
+
+  const handleCancelCountdown = useCallback(() => {
+    clearCountdown();
+    setCountdownSec(0);
+    // Return to the pre-countdown state: a delayed *resume* (accumulated time
+    // present) goes back to "stopped" so Reset stays reachable; a delayed
+    // fresh start goes back to "idle".
+    setState(accRef.current > 0 ? "stopped" : "idle");
+  }, [clearCountdown]);
 
   const handleLap = useCallback(() => {
     if (state !== "running") return;
@@ -481,13 +584,15 @@ export default function StopwatchPage() {
   }, [state, getElapsed]);
 
   const handleReset = useCallback(() => {
+    clearCountdown();
+    setCountdownSec(0);
     stopLoop();
     accRef.current = 0;
     startRef.current = 0;
     setState("idle");
     setDisplayMs(0);
     setLaps([]);
-  }, [stopLoop]);
+  }, [stopLoop, clearCountdown]);
 
   // ---------------------------------------------------------------------------
   // Large-display mode (#230)
@@ -531,10 +636,12 @@ export default function StopwatchPage() {
   const handleSecondary = useCallback(() => {
     if (state === "running") {
       handleLap();
+    } else if (state === "countdown") {
+      handleCancelCountdown();
     } else {
       handleReset();
     }
-  }, [state, handleLap, handleReset]);
+  }, [state, handleLap, handleReset, handleCancelCountdown]);
 
   // ---------------------------------------------------------------------------
   // Keyboard shortcuts
@@ -548,7 +655,11 @@ export default function StopwatchPage() {
 
       if (e.code === "Space") {
         e.preventDefault();
-        handleStartStop();
+        if (state === "countdown") {
+          handleCancelCountdown();
+        } else {
+          handleStartStop();
+        }
       } else if (e.code === "KeyL") {
         e.preventDefault();
         handleSecondary();
@@ -556,10 +667,7 @@ export default function StopwatchPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleStartStop, handleSecondary]);
-
-  // Cleanup RAF on unmount (useWakeLock releases the wake lock itself)
-  useEffect(() => () => stopLoop(), [stopLoop]);
+  }, [state, handleStartStop, handleSecondary, handleCancelCountdown]);
 
   // ---------------------------------------------------------------------------
   // "Time together" button handler (#182)
@@ -585,10 +693,19 @@ export default function StopwatchPage() {
 
   const bestLapMs = laps.length > 0 ? Math.min(...laps.map((l) => l.lapMs)) : null;
 
-  const secondaryLabel =
-    state === "running" ? "Lap" : state === "stopped" ? "Reset" : "Reset";
+  const isCountdown = state === "countdown";
+  const isRunning   = state === "running";
+  const isIdle      = state === "idle";
 
-  const primaryLabel = state === "running" ? "Stop" : "Start";
+  const secondaryLabel =
+    isCountdown ? "Cancel"
+    : isRunning ? "Lap"
+    : "Reset";
+
+  const primaryLabel =
+    isCountdown ? countdownSec.toString()
+    : isRunning ? "Stop"
+    : "Start";
 
   const togetherLabel = authLoading
     ? "Time together"
@@ -651,87 +768,155 @@ export default function StopwatchPage() {
 
           {/* ── Dial ───────────────────────────────────────────────────────── */}
           <div
-            className={largeMode ? "sw-dial sw-dial--large" : "sw-dial"}
+            className={`sw-dial${largeMode ? " sw-dial--large" : ""}${isCountdown ? " sw-dial--countdown" : ""}`}
             role="timer"
-            aria-label={`Elapsed time: ${main}${sub}`}
+            aria-label={
+              isCountdown
+                ? `Countdown: ${countdownSec}`
+                : `Elapsed time: ${main}${sub}`
+            }
             aria-live="off"
           >
-            <div className="sw-digits flex flex-col items-center">
-              <span
-                className="block"
-                style={{
-                  fontSize: largeMode
-                    ? showsHours
-                      ? "clamp(48px, 16vmin, 132px)"
-                      : "clamp(64px, 22vmin, 180px)"
-                    : showsHours
-                      ? "clamp(30px, 8.5vw, 46px)"
-                      : "clamp(44px, 12vw, 64px)",
-                }}
-                aria-hidden="true"
-              >
-                {main}
-              </span>
-              <span
-                className="block"
-                style={{
-                  fontSize: largeMode
-                    ? "clamp(36px, 12vmin, 100px)"
-                    : "clamp(28px, 7vw, 38px)",
-                  color: "var(--sw-digit-sub-color)",
-                }}
-                aria-hidden="true"
-              >
-                {sub}
-              </span>
-            </div>
+            {isCountdown ? (
+              /* Countdown overlay: large pulsing number */
+              <div className="sw-digits sw-countdown-digits" aria-hidden="true">
+                {/* key forces remount each second, retriggering the pulse animation */}
+                <span
+                  key={countdownSec}
+                  className="sw-countdown-number"
+                  data-testid="sw-countdown-number"
+                >
+                  {countdownSec}
+                </span>
+                <span className="sw-countdown-label">GET READY</span>
+              </div>
+            ) : (
+              <div className="sw-digits flex flex-col items-center">
+                <span
+                  className="block"
+                  style={{
+                    fontSize: largeMode
+                      ? showsHours
+                        ? "clamp(48px, 16vmin, 132px)"
+                        : "clamp(64px, 22vmin, 180px)"
+                      : showsHours
+                        ? "clamp(30px, 8.5vw, 46px)"
+                        : "clamp(44px, 12vw, 64px)",
+                  }}
+                  aria-hidden="true"
+                >
+                  {main}
+                </span>
+                <span
+                  className="block"
+                  style={{
+                    fontSize: largeMode
+                      ? "clamp(36px, 12vmin, 100px)"
+                      : "clamp(28px, 7vw, 38px)",
+                    color: "var(--sw-digit-sub-color)",
+                  }}
+                  aria-hidden="true"
+                >
+                  {sub}
+                </span>
+              </div>
+            )}
           </div>
+
+          {/* ── Delay selector ─────────────────────────────────────────────── */}
+          {(isIdle || state === "stopped") && (
+            <div
+              className="sw-delay-selector"
+              role="group"
+              aria-label="Delayed start"
+              data-testid="sw-delay-selector"
+            >
+              <span className="sw-delay-label">DELAY</span>
+              {DELAY_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  className={`sw-delay-option${delaySeconds === opt ? " sw-delay-option--active" : ""}`}
+                  onClick={() => handleSelectDelay(opt)}
+                  aria-pressed={delaySeconds === opt}
+                  aria-label={`Delayed start ${DELAY_LABELS[opt]}`}
+                  data-testid={`sw-delay-${opt}`}
+                >
+                  {DELAY_LABELS[opt]}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* ── Pushers ────────────────────────────────────────────────────── */}
           <div
             className="mt-10 flex items-center justify-center"
             style={{ gap: "var(--sw-pusher-gap)" }}
           >
-            {/* Secondary: lap / reset */}
+            {/* Secondary: lap / cancel / reset */}
             <button
               type="button"
               className={`sw-pusher ${
-                state === "idle"
+                isIdle
                   ? "sw-pusher--secondary-idle"
                   : "sw-pusher--secondary"
               }`}
               onClick={handleSecondary}
               aria-label={
-                state === "running"
+                isCountdown
+                  ? "Cancel countdown"
+                  : isRunning
                   ? "Record lap (keyboard: L)"
                   : "Reset stopwatch (keyboard: L)"
               }
-              disabled={state === "idle"}
+              disabled={isIdle}
+              data-testid="sw-secondary-btn"
             >
               {secondaryLabel}
             </button>
 
-            {/* Primary: start / stop */}
+            {/* Primary: start / stop; during countdown shows the number */}
             <button
               type="button"
-              className="sw-pusher sw-pusher--primary"
-              onClick={handleStartStop}
+              className={`sw-pusher ${
+                isCountdown ? "sw-pusher--countdown" : "sw-pusher--primary"
+              }`}
+              onClick={isCountdown ? handleCancelCountdown : handleStartStop}
               aria-label={
-                state === "running"
+                isCountdown
+                  ? `Countdown: ${countdownSec} — tap to cancel`
+                  : isRunning
                   ? "Stop stopwatch (keyboard: Space)"
                   : "Start stopwatch (keyboard: Space)"
               }
+              data-testid="sw-primary-btn"
             >
-              {primaryLabel}
+              {isCountdown ? (
+                <span
+                  key={countdownSec}
+                  className="sw-pusher-countdown-num"
+                  aria-hidden="true"
+                >
+                  {countdownSec}
+                </span>
+              ) : (
+                primaryLabel
+              )}
             </button>
           </div>
 
           {/* Keyboard hint */}
           {!largeMode && (
             <p className="mt-4 text-center text-xs font-semibold text-race-muted">
-              <span className="sw-kbd">Space</span> start/stop
-              {" · "}
-              <span className="sw-kbd">L</span> lap
+              {isCountdown ? (
+                <>tap or <span className="sw-kbd">Space</span> to cancel</>
+              ) : (
+                <>
+                  <span className="sw-kbd">Space</span> start/stop
+                  {" · "}
+                  <span className="sw-kbd">L</span> lap
+                </>
+              )}
             </p>
           )}
 

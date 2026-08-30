@@ -1921,6 +1921,13 @@ function SessionScreen({
 }
 
 // ── Screen: Solo (existing standalone stopwatch) ───────────────────────────────
+
+// Delay options for solo mode (shared session keeps instant start)
+type DelayOption = 0 | 3 | 5 | 10;
+const SOLO_DELAY_OPTIONS: DelayOption[] = [0, 3, 5, 10];
+const SOLO_DELAY_LABELS: Record<DelayOption, string> = { 0: "OFF", 3: "3s", 5: "5s", 10: "10s" };
+const SOLO_DELAY_STORAGE_KEY = "sw_delay_seconds";
+
 function SoloScreen({
   fontsLoaded,
   onBack,
@@ -1931,7 +1938,7 @@ function SoloScreen({
   useKeepAwake();
   const { width, height } = useWindowDimensions();
 
-  type SwState = "idle" | "running" | "paused";
+  type SwState = "idle" | "countdown" | "running" | "paused";
 
   const [swState, setSw] = useState<SwState>("idle");
   const [sessionMs, setSession] = useState(0);
@@ -1940,11 +1947,32 @@ function SoloScreen({
     { number: number; splitMs: number; cumulativeMs: number }[]
   >([]);
 
+  // Delayed start
+  const [delaySeconds, setDelaySeconds] = useState<DelayOption>(0);
+  const [countdownSec, setCountdownSec] = useState(0);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countdownEndRef = useRef<number>(0);
+
   const anchor = useRef<number | null>(null);
   const accum = useRef(0);
   const lastLapCum = useRef(0);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
+
+  // ── Load persisted delay from AsyncStorage ──────────────────────────────────
+  useEffect(() => {
+    AsyncStorage.getItem(SOLO_DELAY_STORAGE_KEY).then((val) => {
+      if (val !== null) {
+        const n = Number(val) as DelayOption;
+        if (SOLO_DELAY_OPTIONS.includes(n)) setDelaySeconds(n);
+      }
+    }).catch(() => undefined);
+  }, []);
+
+  const handleSelectDelay = useCallback((opt: DelayOption) => {
+    setDelaySeconds(opt);
+    AsyncStorage.setItem(SOLO_DELAY_STORAGE_KEY, String(opt)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (next) => {
@@ -1980,7 +2008,12 @@ function SoloScreen({
     }
   }, []);
 
-  useEffect(() => () => stopTick(), [stopTick]);
+  const clearCountdown = useCallback(() => {
+    if (countdownIntervalRef.current !== null) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+  }, []);
 
   // ── Ongoing Android notification while running (#231) ──────────────────────
   useEffect(() => {
@@ -1993,12 +2026,60 @@ function SoloScreen({
   }, [swState]);
   useEffect(() => () => clearRunningNotification(), []);
 
-  const handleStart = useCallback(() => {
+  // Commit to running after countdown ends
+  const commitStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     anchor.current = Date.now();
     startTick();
     setSw("running");
   }, [startTick]);
+
+  const beginCountdown = useCallback((seconds: number) => {
+    const endsAt = Date.now() + seconds * 1000;
+    countdownEndRef.current = endsAt;
+    setCountdownSec(seconds);
+    setSw("countdown");
+    // Initial haptic tick
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    let lastTicked = seconds;
+    countdownIntervalRef.current = setInterval(() => {
+      const remaining = Math.ceil((countdownEndRef.current - Date.now()) / 1000);
+      if (remaining <= 0) {
+        clearCountdown();
+        setCountdownSec(0);
+        commitStart();
+      } else {
+        if (remaining !== lastTicked) {
+          lastTicked = remaining;
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        setCountdownSec(remaining);
+      }
+    }, 100);
+  }, [clearCountdown, commitStart]);
+
+  useEffect(() => () => { stopTick(); clearCountdown(); }, [stopTick, clearCountdown]);
+
+  const handleStart = useCallback(() => {
+    if (delaySeconds > 0) {
+      beginCountdown(delaySeconds);
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      anchor.current = Date.now();
+      startTick();
+      setSw("running");
+    }
+  }, [delaySeconds, beginCountdown, startTick]);
+
+  const handleCancelCountdown = useCallback(() => {
+    clearCountdown();
+    setCountdownSec(0);
+    // Return to the pre-countdown state: a delayed resume (accumulated time
+    // present) goes back to "paused" so RESET stays reachable; a delayed
+    // fresh start goes back to "idle".
+    setSw(accum.current > 0 ? "paused" : "idle");
+  }, [clearCountdown]);
 
   const handleStop = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -2028,6 +2109,8 @@ function SoloScreen({
 
   const handleReset = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    clearCountdown();
+    setCountdownSec(0);
     stopTick();
     anchor.current = null;
     accum.current = 0;
@@ -2036,11 +2119,12 @@ function SoloScreen({
     setLapMs(0);
     setLaps([]);
     setSw("idle");
-  }, [stopTick]);
+  }, [stopTick, clearCountdown]);
 
   const isRunning = swState === "running";
   const isPaused = swState === "paused";
   const isIdle = swState === "idle";
+  const isCountdown = swState === "countdown";
   const lapCount = laps.length;
   const lastLap = laps[0] ?? null;
   const bestMs = useMemo(
@@ -2069,46 +2153,109 @@ function SoloScreen({
         <View
           style={[
             s.pill,
-            isRunning && { backgroundColor: C.red, borderColor: C.red },
-            isPaused && { backgroundColor: C.yellow, borderColor: C.yellow },
+            isRunning   && { backgroundColor: C.red,    borderColor: C.red },
+            isPaused    && { backgroundColor: C.yellow,  borderColor: C.yellow },
+            isCountdown && { backgroundColor: C.red,    borderColor: C.red },
           ]}
         >
           <Text
             style={[
               s.pillTxt,
-              isRunning && { color: C.white },
-              isPaused && { color: C.ink },
+              isRunning   && { color: C.white },
+              isPaused    && { color: C.ink },
+              isCountdown && { color: C.white },
             ]}
           >
-            {isRunning ? "● RUN" : isPaused ? "‖ PAUSED" : "READY"}
+            {isRunning   ? "● RUN"
+             : isPaused  ? "‖ PAUSED"
+             : isCountdown ? `◷ ${countdownSec}`
+             : "READY"}
           </Text>
         </View>
       </View>
 
-      {/* ── LCD instrument panel ── */}
-      <View style={s.instrument}>
-        <View style={s.instrHeader}>
-          <Text style={s.instrLabel}>
-            {isIdle ? "LAP TIME" : `LAP ${lapCount + 1}`}
+      {/* ── LCD instrument panel (shows countdown overlay or normal display) ── */}
+      {isCountdown ? (
+        /* Countdown overlay — full instrument area */
+        <View style={[s.instrument, { alignItems: "center", justifyContent: "center", paddingVertical: 24 }]}>
+          <Text style={{ color: "#555550", fontSize: 9, fontWeight: "900", letterSpacing: 2.5, marginBottom: 8 }}>
+            GET READY
+          </Text>
+          <Text
+            style={{
+              fontFamily: fontsLoaded ? "DSEG7Classic-Regular" : "monospace",
+              fontSize: lcdMain * 1.5,
+              color: C.red,
+              letterSpacing: 4,
+              includeFontPadding: false,
+            }}
+            numberOfLines={1}
+            allowFontScaling={false}
+            accessibilityLabel={`Countdown: ${countdownSec}`}
+          >
+            {countdownSec}
+          </Text>
+          <Text style={{ color: "#555550", fontSize: 9, fontWeight: "900", letterSpacing: 2, marginTop: 8 }}>
+            TAP CANCEL TO ABORT
           </Text>
         </View>
-        <View style={s.instrMain}>
-          <LcdDisplay ms={lapMs} mainSize={lcdMain} fontLoaded={fontsLoaded} />
+      ) : (
+        <View style={s.instrument}>
+          <View style={s.instrHeader}>
+            <Text style={s.instrLabel}>
+              {isIdle ? "LAP TIME" : `LAP ${lapCount + 1}`}
+            </Text>
+          </View>
+          <View style={s.instrMain}>
+            <LcdDisplay ms={lapMs} mainSize={lcdMain} fontLoaded={fontsLoaded} />
+          </View>
+          <View style={s.instrFooter}>
+            <Text style={s.instrLabel}>TOTAL SESSION</Text>
+            <LcdDisplay
+              ms={sessionMs}
+              mainSize={Math.round(lcdMain * 0.42)}
+              color={C.lcdSmall}
+              dimColor="#222222"
+              fontLoaded={fontsLoaded}
+            />
+          </View>
         </View>
-        <View style={s.instrFooter}>
-          <Text style={s.instrLabel}>TOTAL SESSION</Text>
-          <LcdDisplay
-            ms={sessionMs}
-            mainSize={Math.round(lcdMain * 0.42)}
-            color={C.lcdSmall}
-            dimColor="#222222"
-            fontLoaded={fontsLoaded}
-          />
+      )}
+
+      {/* ── Delay selector (shown only in idle/paused) ── */}
+      {(isIdle || isPaused) && (
+        <View style={s.delaySelector}>
+          <Text style={s.delayLabel}>DELAY</Text>
+          <View style={s.delayOptions}>
+            {SOLO_DELAY_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt}
+                onPress={() => handleSelectDelay(opt)}
+                style={[
+                  s.delayOption,
+                  delaySeconds === opt && s.delayOptionActive,
+                ]}
+                accessible
+                accessibilityRole="radio"
+                accessibilityLabel={`Delayed start ${SOLO_DELAY_LABELS[opt]}`}
+                accessibilityState={{ selected: delaySeconds === opt }}
+              >
+                <Text
+                  style={[
+                    s.delayOptionText,
+                    delaySeconds === opt && s.delayOptionTextActive,
+                  ]}
+                >
+                  {SOLO_DELAY_LABELS[opt]}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
-      </View>
+      )}
 
       {/* ── Last lap strip ── */}
-      {lastLap && (
+      {lastLap && !isCountdown && (
         <View style={s.lastLap}>
           <View>
             <Text style={s.lastLapTitle}>LAST LAP</Text>
@@ -2119,7 +2266,7 @@ function SoloScreen({
       )}
 
       {/* ── Lap table ── */}
-      {lapCount > 0 ? (
+      {lapCount > 0 && !isCountdown ? (
         <View style={s.table}>
           <View style={s.tableHead}>
             <Text style={[s.th, s.cLap]}>LAP</Text>
@@ -2177,7 +2324,7 @@ function SoloScreen({
             }}
           />
         </View>
-      ) : (
+      ) : !isCountdown ? (
         <View style={s.together}>
           <Pressable
             disabled
@@ -2189,50 +2336,89 @@ function SoloScreen({
             <Text style={s.togetherSub}>BACK → CREATE A SHARED SESSION</Text>
           </Pressable>
         </View>
+      ) : (
+        /* Countdown: flex spacer so button bar stays anchored */
+        <View style={{ flex: 1 }} />
       )}
 
       {/* ── Device bottom button bar ── */}
       <View style={s.btnCasing}>
-        <DeviceBtn
-          label="LAP"
-          sub={lapCount > 0 ? `0${lapCount + 1}`.slice(-2) : undefined}
-          body={C.btnInkBody}
-          hi={C.btnInkHi}
-          lo={C.btnInkLo}
-          disabled={!isRunning}
-          onPress={handleLap}
-        />
-        <View style={{ width: 10 }} />
-        {isRunning ? (
-          <DeviceBtn
-            label="STOP"
-            body={C.btnRedBody}
-            hi={C.btnRedHi}
-            lo={C.btnRedLo}
-            onPress={handleStop}
-            flex={1.4}
-          />
+        {isCountdown ? (
+          /* During countdown: show CANCEL prominently instead of LAP */
+          <>
+            <DeviceBtn
+              label="CANCEL"
+              body={C.btnPaperBody}
+              hi={C.btnPaperHi}
+              lo={C.btnPaperLo}
+              textColor={C.ink}
+              onPress={handleCancelCountdown}
+              flex={1}
+            />
+            <View style={{ width: 10 }} />
+            <DeviceBtn
+              label={String(countdownSec)}
+              sub="COUNTING"
+              body={C.btnRedBody}
+              hi={C.btnRedHi}
+              lo={C.btnRedLo}
+              onPress={handleCancelCountdown}
+              flex={1.4}
+            />
+            <View style={{ width: 10 }} />
+            <DeviceBtn
+              label="RESET"
+              body={C.btnPaperBody}
+              hi={C.btnPaperHi}
+              lo={C.btnPaperLo}
+              textColor={C.ink}
+              onPress={handleReset}
+            />
+          </>
         ) : (
-          <DeviceBtn
-            label={isPaused ? "RESUME" : "START"}
-            body={C.btnBlueBody}
-            hi={C.btnBlueHi}
-            lo={C.btnBlueLo}
-            textColor={C.ink}
-            onPress={handleStart}
-            flex={1.4}
-          />
+          <>
+            <DeviceBtn
+              label="LAP"
+              sub={lapCount > 0 ? `0${lapCount + 1}`.slice(-2) : undefined}
+              body={C.btnInkBody}
+              hi={C.btnInkHi}
+              lo={C.btnInkLo}
+              disabled={!isRunning}
+              onPress={handleLap}
+            />
+            <View style={{ width: 10 }} />
+            {isRunning ? (
+              <DeviceBtn
+                label="STOP"
+                body={C.btnRedBody}
+                hi={C.btnRedHi}
+                lo={C.btnRedLo}
+                onPress={handleStop}
+                flex={1.4}
+              />
+            ) : (
+              <DeviceBtn
+                label={isPaused ? "RESUME" : "START"}
+                body={C.btnBlueBody}
+                hi={C.btnBlueHi}
+                lo={C.btnBlueLo}
+                textColor={C.ink}
+                onPress={handleStart}
+                flex={1.4}
+              />
+            )}
+            <View style={{ width: 10 }} />
+            <DeviceBtn
+              label="RESET"
+              body={C.btnPaperBody}
+              hi={C.btnPaperHi}
+              lo={C.btnPaperLo}
+              textColor={C.ink}
+              disabled={isIdle}
+              onPress={handleReset}
+            />
+          </>
         )}
-        <View style={{ width: 10 }} />
-        <DeviceBtn
-          label="RESET"
-          body={C.btnPaperBody}
-          hi={C.btnPaperHi}
-          lo={C.btnPaperLo}
-          textColor={C.ink}
-          disabled={isIdle}
-          onPress={handleReset}
-        />
       </View>
     </SafeAreaView>
   );
@@ -2525,6 +2711,49 @@ const s = StyleSheet.create({
   cTime:   { flex: 1 },
   cDelta:  { width: 70 },
   cActor:  { width: 70, color: C.muted },
+
+  // Solo — delay selector
+  delaySelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.panelBg,
+  },
+  delayLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 2,
+    color: C.muted,
+    marginRight: 10,
+  },
+  delayOptions: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  delayOption: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1.5,
+    borderColor: C.line,
+    borderRadius: 2,
+    backgroundColor: C.white,
+  },
+  delayOptionActive: {
+    backgroundColor: C.ink,
+    borderColor: C.ink,
+  },
+  delayOptionText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: C.muted,
+    letterSpacing: 0.5,
+  },
+  delayOptionTextActive: {
+    color: C.white,
+  },
 
   // Solo — time together placeholder
   together: { flex: 1, justifyContent: "center", paddingHorizontal: 20 },
