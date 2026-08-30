@@ -1,4 +1,4 @@
-# ADR 0018 — Stopwatch: Durable AsyncStorage Offline Event Queue
+# ADR 0019 — Stopwatch: Durable AsyncStorage Offline Event Queue
 
 **Status:** Accepted  
 **Date:** 2026-08-30  

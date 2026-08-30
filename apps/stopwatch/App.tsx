@@ -1148,8 +1148,9 @@ async function saveDurableQueue(
 ): Promise<void> {
   try {
     await AsyncStorage.setItem(durableQueueKey(sessionCode), JSON.stringify(queue));
-  } catch {
+  } catch (err) {
     // Non-fatal: in-memory optimistic queue still handles the current run.
+    console.warn("Failed to persist durable event queue", err);
   }
 }
 
