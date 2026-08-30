@@ -4,7 +4,7 @@ import React, { use, useEffect, useLayoutEffect, useMemo, useRef, useState } fro
 import Link from "next/link";
 import { MagnifyingGlassIcon } from "@heroicons/react/20/solid";
 import { useRaceData } from "@/lib/useRaceData";
-import { computeStandings, filterByCategory, fmtLapTime, getCategories, isPenalized, type StandingRow } from "@/lib/standings";
+import { computePodiums, computeStandings, filterByCategory, fmtLapTime, getCategories, isPenalized, type StandingRow } from "@/lib/standings";
 import {
   computePointsStandings,
   getCurrentLap,
@@ -23,6 +23,25 @@ function classNames(...classes: (string | false)[]) {
 }
 
 const STATUS_LABEL: Record<string, string> = { dns: "DNS", dnf: "DNF", dsq: "DSQ" };
+
+/**
+ * Classification section kicker + footer copy, driven by publish state
+ * (#72). A race is "unofficial" (live, still subject to change) until an
+ * organizer deliberately publishes it via /score/[raceId]/finalize; after
+ * that it reads as final. Reopening a published race clears the publish
+ * timestamp and flags results as under revision until re-published — see
+ * docs/adr/0018-race-result-finalization.md.
+ */
+function classificationCopy(race: Race): { kicker: string; footer: string } {
+  if (race.results_under_revision) {
+    return { kicker: "Results under revision", footer: "Results under revision · Being corrected by the organizer" };
+  }
+  if (race.results_published_at) {
+    const when = new Date(race.results_published_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+    return { kicker: "Final classification", footer: `Final classification · Published ${when}` };
+  }
+  return { kicker: "Unofficial live standings", footer: "Live unofficial classification · Updates automatically" };
+}
 
 function StatusBadge({ status }: { status: string }) {
   if (status === "ok") return null;
@@ -49,24 +68,6 @@ function RaceClock({ startedAt }: { startedAt: string }) {
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
   return <span className="tabular-nums">{hours > 0 ? `${hours}:` : ""}{String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}</span>;
-}
-
-function computePodiums(
-  crossings: Crossing[],
-  entries: Entry[],
-  raceStartMs: number | null,
-  categories: string[],
-  penalties: EntryPenalty[]
-): { category: string; rows: StandingRow[] }[] {
-  const groups = categories.length > 0 ? categories : ["Overall"];
-  return groups.map((category) => {
-    const { crossings: c, entries: e } =
-      categories.length > 0 ? filterByCategory(crossings, entries, category) : { crossings, entries };
-    const rows = computeStandings(c, e, raceStartMs, penalties)
-      .filter((r) => r.status === "ok" && r.laps > 0)
-      .slice(0, 3);
-    return { category, rows };
-  });
 }
 
 /** Tooltip text summarizing every penalty/adjustment applied to a row. */
@@ -511,7 +512,7 @@ function TimeTrialBoard({
         </table>
       </div>
       <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
-        Live unofficial classification · Updates automatically ·{" "}
+        {classificationCopy(race).footer} ·{" "}
         <Link href={`/announce/${race.id}`} className="underline hover:text-zinc-800">
           Announcer / TV view
         </Link>
@@ -669,6 +670,14 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
         </div>
       </header>
 
+      {race.results_under_revision && (
+        <div className="border-b-4 border-zinc-950 bg-race-yellow px-4 py-2 text-center sm:px-6">
+          <p className="text-xs font-black uppercase tracking-[0.14em] text-race-ink">
+            Results under revision · The organizer is correcting this race before republishing
+          </p>
+        </div>
+      )}
+
       <section className="border-b-4 border-zinc-950 bg-white px-4 py-5 sm:px-6">
         <div className="mx-auto grid max-w-4xl grid-cols-[1.1fr_1fr_1fr] divide-x-2 divide-zinc-950">
           <div className="pr-3 sm:pr-5">
@@ -703,7 +712,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
           <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-zinc-950 pb-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ec1c24]">Official live standings</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ec1c24]">{classificationCopy(race).kicker}</p>
                 <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Classification</h2>
               </div>
               <div className="flex items-center gap-2">
@@ -820,7 +829,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
               </table>
             </div>
             <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
-              Live unofficial classification · Updates automatically ·{" "}
+              {classificationCopy(race).footer} ·{" "}
               <Link href={`/announce/${raceId}`} className="underline hover:text-zinc-800">
                 Announcer / TV view
               </Link>

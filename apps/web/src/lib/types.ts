@@ -9,6 +9,11 @@ export interface Race {
   status: RaceStatus;
   started_at: string | null;
   finished_at: string | null;
+  // Result finalization/publishing (see docs/adr/0018-race-result-finalization.md).
+  // Both are written only by finalize_and_publish_race()/reopen_race() — never
+  // directly by a client.
+  results_published_at: string | null;
+  results_under_revision: boolean;
   // Velodrome points race scoring config (see apps/web/src/lib/pointsRace.ts).
   // Meaningless when is_points_race is false.
   is_points_race: boolean;

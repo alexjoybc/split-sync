@@ -26,6 +26,7 @@
 11. If an official calls a time penalty, lap penalty, or relegation (e.g. illegal feed, blocking), tap **+ Penalty** under that rider's tile, pick the type, enter the value if required, and give a reason — it's applied to the live classification immediately and shown to spectators as a **Penalty** badge, without touching that rider's recorded crossings.
 12. Finish the race only after the final crossing sequence is recorded.
 13. For a points race, nothing extra happens at the scorer screen — sprints and lap-gain bonuses score automatically from the crossings you're already recording. Watch the live board or announcer view to call out each sprint result to spectators as it appears.
+14. Once finished, tap **Review & publish** on the scorer screen. The review checklist flags riders with no crossings, unusually slow last laps (or, for a time trial, riders still on course or flagged **Review**), unresolved DNS/DNF/DSQ statuses, and any penalties applied — review it, then tap **Finalize & publish**. This is advisory, not a hard gate: SplitSync results remain unofficial either way, but publishing marks the race's classification as final for spectators instead of "live."
 
 ### Time Trial Workflow
 
@@ -51,7 +52,8 @@ The scorer screen for a time trial replaces the bib grid with an **Up Next / On 
 
 - A race can only accept new crossings while it is active; a finished or not-yet-started race rejects crossing taps even if attempted.
 - To fix a finished race (e.g. a missed or wrong crossing), tap "Reopen race" in the web scorer or tracker, enter a reason, and confirm. The race returns to active and its finish time clears.
-- Make the correction (record the missing crossing, or undo an incorrect one), then finish the race again.
+- If the race's results had already been published, reopening unpublishes them and the live board shows "Results under revision" until you finalize and publish again.
+- Make the correction (record the missing crossing, or undo an incorrect one), then finish the race again, and review & publish again if you want the board to read as final rather than "unofficial."
 - Every reopen is timestamped with the reason and organizer in the race's audit log.
 
 ## After The Event
