@@ -17,7 +17,7 @@ function RaceNavAuth() {
 
 export function RaceNav({ links, showAuth = false }: { links?: NavLink[]; showAuth?: boolean }) {
   return (
-    <nav className="border-b border-zinc-300 bg-race-panel px-4 py-3 sm:px-6" aria-label="Primary navigation">
+    <nav className="border-b border-race-line bg-race-panel px-4 py-3 sm:px-6" aria-label="Primary navigation">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
         <Link href="/" className="hover:opacity-80"><Logo size="sm" /></Link>
         <div className="flex items-center gap-4">

@@ -137,7 +137,14 @@ body {
 }
 
 .race-action--muted {
-  @apply border-2 border-race-ink bg-race-ink px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-white hover:border-zinc-700 hover:bg-zinc-700;
+  @apply border-2 border-race-ink bg-race-ink px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-white hover:border-race-muted hover:bg-race-muted;
+}
+
+/* Primary (non-destructive) organizer action — submit, save, primary nav.
+   Blue so it is clearly distinct from the red destructive .race-action and the
+   black neutral .race-action--muted. Only use on organizer/admin surfaces. */
+.race-action--primary {
+  @apply border-2 border-race-blue-primary bg-race-blue-primary px-3 py-2 text-xs font-black uppercase tracking-[0.1em] text-white hover:border-race-ink hover:bg-race-ink;
 }
 
 .race-input--muted {

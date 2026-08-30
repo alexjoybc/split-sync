@@ -165,7 +165,7 @@ function RunnerCard({
       </div>
 
       {/* Progress bar */}
-      <div className="h-3 w-full border border-race-muted bg-zinc-100 overflow-hidden">
+      <div className="h-3 w-full border border-race-muted bg-race-panel-alt overflow-hidden">
         {progress.indeterminate ? (
           <div className="h-full w-1/3 bg-race-yellow animate-pulse" />
         ) : (
@@ -307,7 +307,7 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
                   +{queue.length - 5} more above
                 </p>
               )}
-              <ul className="divide-y divide-zinc-300 border-2 border-race-ink">
+              <ul className="divide-y divide-race-line border-2 border-race-ink">
                 {queue.slice(0, 5).reverse().map((row, idx, arr) => {
                   const isNext = idx === arr.length - 1;
                   return (
@@ -382,7 +382,7 @@ function TimeTrialScorer({ race, entries, crossings, onStart, onFinish }: TimeTr
       {finished.length > 0 && (
         <section>
           <p className="race-kicker--muted mb-2">Finished</p>
-          <ul className="divide-y divide-zinc-300 border-2 border-race-ink">
+          <ul className="divide-y divide-race-line border-2 border-race-ink">
             {finished.map((row) => (
               <li key={row.bib} className="flex items-center gap-3 px-3 py-2 text-sm">
                 <span className="w-6 shrink-0 text-right font-black tabular-nums text-race-muted">
@@ -1004,7 +1004,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
       )}
 
       {/* Recent crossings with edit/undo */}
-      <ul className="mt-4 border-y-2 border-race-ink divide-y divide-zinc-300">
+      <ul className="mt-4 border-y-2 border-race-ink divide-y divide-race-line">
         {recent.map((c) => (
           <li key={c.id} className="py-2 text-sm">
             <div className="flex items-center justify-between">
@@ -1089,7 +1089,7 @@ export default function Scorer({ params }: { params: Promise<{ raceId: string }>
       {deletedCrossings.length > 0 && (
         <div className="mt-4">
           <p className="race-kicker--muted">Recently removed</p>
-          <ul className="mt-2 border-y-2 border-race-ink divide-y divide-zinc-300">
+          <ul className="mt-2 border-y-2 border-race-ink divide-y divide-race-line">
             {deletedCrossings.map((c) => (
               <li key={c.id} className="py-2 text-sm">
                 <div className="flex items-center justify-between">

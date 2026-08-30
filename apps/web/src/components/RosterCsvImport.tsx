@@ -188,7 +188,7 @@ export function RosterCsvImport({
   const skippedCount = rows.length - importableRows.length;
 
   return (
-    <div className="mt-4 border-t border-zinc-300 pt-4">
+    <div className="mt-4 border-t border-race-line pt-4">
       <button onClick={() => setOpen(!open)} className="race-action--muted race-action--outline">
         {open ? "Hide CSV import" : "Import from CSV"}
       </button>
@@ -228,7 +228,7 @@ export function RosterCsvImport({
               <div className="max-h-72 overflow-y-auto overflow-x-hidden border-t-2 border-race-ink">
                 <table className="w-full table-fixed border-collapse text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-300 text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
+                    <tr className="border-b border-race-line text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
                       <th className="w-10 py-2">Row</th>
                       <th className="w-14 py-2">Bib</th>
                       <th className="py-2">Name</th>
@@ -248,7 +248,7 @@ export function RosterCsvImport({
                             ? "Bib already in roster"
                             : "Ready";
                       return (
-                        <tr key={row.line} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                        <tr key={row.line} className="border-b border-race-line even:bg-race-panel-alt">
                           <td className="py-1 text-race-muted">{row.line}</td>
                           <td className="py-1 font-black tabular-nums">{row.bib || "—"}</td>
                           <td className="truncate py-1 font-bold">

@@ -11,6 +11,7 @@ import { canCheckIn, canManageEvent, canScore, useEventAccess } from "@/lib/useE
 import { RaceNav } from "@/components/RaceNav";
 import { RosterCsvImport } from "@/components/RosterCsvImport";
 import { raceTemplates } from "@/lib/raceTemplates";
+import { STATUS_COLORS } from "@/lib/statusColors";
 import type { Entry, EventInvite, EventMember, EventMemberRole, EventRow, Participant, Race, Sex } from "@/lib/types";
 
 const roleOptions: { value: EventMemberRole; label: string; hint: string }[] = [
@@ -29,11 +30,7 @@ const sexOptions: { value: Sex; label: string }[] = [
 ];
 const timezones = ["America/Vancouver", "America/Edmonton", "America/Winnipeg", "America/Toronto", "America/Halifax", "UTC"];
 const inputCls = "race-input--muted";
-const raceStatusStyle: Record<string, string> = {
-  upcoming: "bg-zinc-200 text-zinc-700",
-  active: "bg-race-yellow text-race-ink",
-  finished: "bg-zinc-950 text-white",
-};
+
 
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return "";
@@ -555,7 +552,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
             <input value={details.registration_url} onChange={(e) => setDetails({ ...details, registration_url: e.target.value })} placeholder="https://zone4.ca/…" className={`mt-1 ${inputCls}`} />
           </div>
         </div>
-        <button onClick={saveDetails} disabled={savingDetails} className="race-action--muted mt-4 disabled:opacity-50">{savingDetails ? "Saving…" : "Save details"}</button>
+        <button onClick={saveDetails} disabled={savingDetails} className="race-action--primary mt-4 disabled:opacity-50">{savingDetails ? "Saving…" : "Save details"}</button>
       </section>}
 
       {manage && <section className="race-panel mt-6 p-4">
@@ -579,7 +576,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
           <div className="mt-4 overflow-hidden border-t-2 border-race-ink">
             <table className="w-full table-fixed border-collapse text-sm">
               <thead>
-                <tr className="border-b border-zinc-300 text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
+                <tr className="border-b border-race-line text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
                   <th className="w-14 py-2">Bib</th>
                   <th className="py-2">First</th>
                   <th className="py-2">Last</th>
@@ -594,7 +591,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                   const editing = editingId === participant.id;
                   if (editing) {
                     return (
-                      <tr key={participant.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                      <tr key={participant.id} className="border-b border-race-line even:bg-race-panel-alt">
                         <td className="py-1 pr-1"><input value={editDraft.bib} onChange={(e) => setEditDraft({ ...editDraft, bib: e.target.value })} onKeyDown={handleEditKeyDown} inputMode="numeric" className={`${inputCls} !py-1`} /></td>
                         <td className="py-1 pr-1"><input value={editDraft.firstName} onChange={(e) => setEditDraft({ ...editDraft, firstName: e.target.value })} onKeyDown={handleEditKeyDown} className={`${inputCls} !py-1`} /></td>
                         <td className="py-1 pr-1"><input value={editDraft.lastName} onChange={(e) => setEditDraft({ ...editDraft, lastName: e.target.value })} onKeyDown={handleEditKeyDown} className={`${inputCls} !py-1`} /></td>
@@ -614,7 +611,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                     );
                   }
                   return (
-                    <tr key={participant.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                    <tr key={participant.id} className="border-b border-race-line even:bg-race-panel-alt">
                       <td className="py-2 font-black tabular-nums">#{participant.bib}</td>
                       <td className="truncate py-2 font-bold">{participant.first_name}</td>
                       <td className="truncate py-2 font-bold">{participant.last_name ?? "—"}</td>
@@ -659,7 +656,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
           <div className="mt-4 overflow-hidden border-t-2 border-race-ink">
             <table className="w-full table-fixed border-collapse text-sm">
               <thead>
-                <tr className="border-b border-zinc-300 text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
+                <tr className="border-b border-race-line text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
                   <th className="w-14 py-2">Bib</th>
                   <th className="py-2">Name</th>
                   <th className="w-28 py-2">Team</th>
@@ -670,7 +667,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
               </thead>
               <tbody>
                 {checkinList.map((participant) => (
-                  <tr key={participant.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                  <tr key={participant.id} className="border-b border-race-line even:bg-race-panel-alt">
                     <td className="py-2 font-black tabular-nums">#{participant.bib}</td>
                     <td className="truncate py-2 font-bold">{fullName(participant)}</td>
                     <td className="truncate py-2 text-race-muted">{participant.team ?? "—"}</td>
@@ -732,7 +729,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                       {race.is_time_trial && <span className="ml-2 bg-race-panel-alt px-1.5 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide text-race-ink">Time trial</span>}
                     </h3>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-race-muted">
-                      <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${raceStatusStyle[race.status]}`}>{race.status}</span>
+                      <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${STATUS_COLORS[race.status]}`}>{race.status}</span>
                       <span>{race.is_time_trial ? "Time trial" : race.laps_planned ? `${race.laps_planned} laps` : "Open-ended"}</span>
                       <span className="tabular-nums">· {raceEntries.length}/{participants.length} assigned</span>
                       {race.is_points_race && <span>· sprint every {race.sprint_interval_laps} laps</span>}
@@ -788,7 +785,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
                       {assignList.map((participant) => {
                         const assigned = raceEntries.some((entry) => entry.bib === participant.bib);
                         return (
-                          <label key={participant.id} className="flex cursor-pointer items-center gap-2 border-b border-zinc-300 bg-race-panel px-2 py-2 even:bg-race-panel-alt hover:bg-race-yellow/30">
+                            <label key={participant.id} className="flex cursor-pointer items-center gap-2 border-b border-race-line bg-race-panel px-2 py-2 even:bg-race-panel-alt hover:bg-race-yellow/30">
                             <input type="checkbox" checked={assigned} onChange={() => toggleAssignment(race, participant, assigned)} className="size-4 border-2 border-race-ink accent-race-ink" />
                             <span className="text-sm font-bold text-race-ink"><b className="tabular-nums">#{participant.bib}</b> {fullName(participant)}</span>
                             {participant.category && <span className="ml-auto text-xs font-bold uppercase text-race-muted">{participant.category}</span>}
@@ -900,12 +897,12 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
               {roleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </div>
-          <button onClick={createInvite} disabled={creatingInvite} className="race-action--muted disabled:opacity-50">{creatingInvite ? "Generating…" : "Generate invite link"}</button>
+          <button onClick={createInvite} disabled={creatingInvite} className="race-action--primary disabled:opacity-50">{creatingInvite ? "Generating…" : "Generate invite link"}</button>
         </div>
         <p className="mt-1 text-xs text-race-muted">{roleOptions.find((option) => option.value === inviteRole)?.hint} Links expire after 14 days or first use.</p>
 
         {invites.length > 0 && (
-          <ul className="mt-4 divide-y divide-zinc-300 border-y-2 border-race-ink">
+          <ul className="mt-4 divide-y divide-race-line border-y-2 border-race-ink">
             {invites.map((invite) => (
               <li key={invite.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
                 <span><span className="bg-race-yellow px-2 py-0.5 text-xs font-black uppercase">{roleLabel(invite.role)}</span> <span className="ml-2 break-all text-xs text-race-muted">{origin}/invite/{invite.token}</span></span>
@@ -919,7 +916,7 @@ export default function EventPage({ params }: { params: Promise<{ eventId: strin
         )}
 
         {members.length > 0 && (
-          <ul className="mt-4 divide-y divide-zinc-300 border-y-2 border-race-ink">
+          <ul className="mt-4 divide-y divide-race-line border-y-2 border-race-ink">
             {members.map((member) => (
               <li key={member.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                 <span><span className="bg-race-panel-alt px-2 py-0.5 text-xs font-black uppercase">{roleLabel(member.role)}</span> <span className="ml-2 text-xs text-race-muted">{member.user_id}</span></span>

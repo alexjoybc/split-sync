@@ -22,7 +22,7 @@ export default function HelpPage() {
       </header>
 
       <div className="mx-auto max-w-3xl space-y-10 px-4 pt-8 sm:px-6">
-        <p className="text-sm font-bold text-zinc-600">
+        <p className="text-sm font-bold text-race-muted">
           SplitSync provides live situational awareness and unofficial results
           for grassroots velodrome and cyclocross racing. It is not an
           official certified timing system.
@@ -35,7 +35,7 @@ export default function HelpPage() {
               Following live results
             </h2>
           </div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>No sign-in is required. Live and results pages are public and read-only.</li>
             <li>
               A <strong>live</strong> race board shows real-time laps, gaps, and
@@ -122,7 +122,7 @@ export default function HelpPage() {
               Setting up an event
             </h2>
           </div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>Sign in with a magic link sent to your email — no password needed.</li>
             <li>
               Create an event once, then build its roster of participants.
@@ -331,18 +331,18 @@ export default function HelpPage() {
               Volunteer roles &amp; invites
             </h2>
           </div>
-          <p className="mt-4 text-sm font-semibold text-zinc-700">
+          <p className="mt-4 text-sm font-semibold text-race-ink">
             You don&apos;t have to run an event alone. From your event setup
             page&apos;s <strong>Volunteers</strong> section you can generate a
             single-use invite link for each helper and pick their role:
           </p>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li><strong>Organizer</strong> — everything you can do except delete the event: roster, races, publishing, and inviting/revoking other volunteers.</li>
             <li><strong>Scorer</strong> — records and undoes crossings, and starts/finishes races. Cannot edit the roster or event details.</li>
             <li><strong>Check-in</strong> — can view the private roster before publish and one-tap check racers in as they arrive, without being able to edit their bib, name, team, or category.</li>
             <li><strong>Official</strong> — can view the event, roster, races, and crossings, and is the only role (besides organizer) that can apply penalties and adjustments to a rider on the scorer screen. Cannot otherwise edit the roster, races, or crossings.</li>
           </ul>
-          <p className="mt-4 text-sm font-semibold text-zinc-700">
+          <p className="mt-4 text-sm font-semibold text-race-ink">
             Send the generated link directly to that person (text, email,
             whatever&apos;s easiest) — generate one link per person rather
             than sharing a single link with a group. Links expire after 14
@@ -359,7 +359,7 @@ export default function HelpPage() {
               Using the stopwatch
             </h2>
           </div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>
               The <Link href="/stopwatch" className="underline decoration-2 underline-offset-2 hover:text-race-red">solo stopwatch</Link>{" "}
               is available at <code>/stopwatch</code> — free, with no ads, no
@@ -487,14 +487,14 @@ export default function HelpPage() {
               Time Together — shared sessions
             </h2>
           </div>
-          <p className="mt-4 text-sm font-semibold text-zinc-700">
+          <p className="mt-4 text-sm font-semibold text-race-ink">
             The SplitSync Stopwatch app (Android) supports shared timing sessions
             — multiple devices timing the same activity in real time, all seeing
             the same clock and lap splits. Like the solo stopwatch, it is free
             with no ads and no subscription; only the person <em>creating</em> a
             session signs in, and everyone else joins with just a display name.
           </p>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>
               <strong>Creating a session</strong> requires a SplitSync account.
               Sign in, then click <strong>Time together</strong> on the stopwatch
@@ -587,7 +587,7 @@ export default function HelpPage() {
               Using the tracker app
             </h2>
           </div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>
               The SplitSync tracker app records start/finish crossings with a
               single tap and works alongside this website.

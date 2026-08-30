@@ -5,13 +5,8 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/useAuth";
 import { RaceNav } from "@/components/RaceNav";
+import { STATUS_COLORS } from "@/lib/statusColors";
 import type { EventRow, Race } from "@/lib/types";
-
-const statusStyle: Record<string, string> = {
-  upcoming: "bg-zinc-200 text-zinc-700",
-  active: "bg-race-yellow text-race-ink",
-  finished: "bg-zinc-950 text-white",
-};
 
 export default function EventsPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
@@ -36,7 +31,7 @@ export default function EventsPage() {
       </header>
       <div className="mx-auto max-w-3xl px-4 pt-8 sm:px-6">
         {!loading && events.length === 0 && (
-          <p className="py-10 text-center text-sm font-bold uppercase tracking-wide text-zinc-500">
+          <p className="py-10 text-center text-sm font-bold uppercase tracking-wide text-race-muted">
             No events yet.{" "}
             {user ? (
               <Link href="/new" className="underline">
@@ -48,30 +43,30 @@ export default function EventsPage() {
           </p>
         )}
         {events.map((event) => (
-          <section key={event.id} className="border-b-2 border-zinc-950 py-5">
+          <section key={event.id} className="border-b-2 border-race-ink py-5">
             <Link href={`/event/${event.id}`} className="group flex items-baseline justify-between gap-4">
               <div>
                 <h3 className="text-lg font-black uppercase group-hover:underline group-hover:decoration-2 group-hover:underline-offset-4">
                   {event.title}
                 </h3>
-                <p className="mt-1 text-xs font-bold uppercase tracking-wide text-zinc-500">
+                <p className="mt-1 text-xs font-bold uppercase tracking-wide text-race-muted">
                   {event.location ?? "Location to be confirmed"}
                 </p>
               </div>
               <span className="text-xl font-black">→</span>
             </Link>
-            <ul className="mt-4 border-t border-zinc-300">
+            <ul className="mt-4 border-t border-race-line">
               {races
                 .filter((race) => race.event_id === event.id)
                 .map((race) => (
                   <li
                     key={race.id}
-                    className="flex items-center justify-between gap-3 border-b border-zinc-300 bg-race-panel px-3 py-3 even:bg-race-panel-alt"
+                    className="flex items-center justify-between gap-3 border-b border-race-line bg-race-panel px-3 py-3 even:bg-race-panel-alt"
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-black uppercase">{race.name}</p>
                       <span
-                        className={`mt-1 inline-flex px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${statusStyle[race.status]}`}
+                        className={`mt-1 inline-flex px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ${STATUS_COLORS[race.status]}`}
                       >
                         {race.status}
                       </span>
