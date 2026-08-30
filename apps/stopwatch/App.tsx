@@ -2081,6 +2081,42 @@ function SessionScreen({
   );
 }
 
+// ── Solo persistence (state survives app kill / reboot) ───────────────────────
+const SOLO_STORAGE_KEY = "solo_stopwatch_v1";
+
+type PersistedSolo = {
+  /** Only running/paused are persisted; idle clears storage. */
+  state: "running" | "paused";
+  /** Milliseconds accumulated before the last resume (or total, if paused). */
+  accumMs: number;
+  /** Wall-clock (Date.now()) at last start/resume; null when paused. */
+  anchorWall: number | null;
+  /** Cumulative ms at the most recent recorded lap. */
+  lastLapCumMs: number;
+  laps: { number: number; splitMs: number; cumulativeMs: number }[];
+};
+
+function parsePersistedSolo(raw: string | null): PersistedSolo | null {
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw) as PersistedSolo;
+    if (
+      (data.state !== "running" && data.state !== "paused") ||
+      typeof data.accumMs !== "number" ||
+      typeof data.lastLapCumMs !== "number" ||
+      !Array.isArray(data.laps)
+    ) {
+      return null;
+    }
+    if (data.state === "running" && typeof data.anchorWall !== "number") {
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 // ── Screen: Solo (existing standalone stopwatch) ───────────────────────────────
 
 // Delay options for solo mode (shared session keeps instant start)
@@ -2122,6 +2158,9 @@ function SoloScreen({
   const anchor = useRef<number | null>(null);
   const accum = useRef(0);
   const lastLapCum = useRef(0);
+  const lapsRef = useRef<
+    { number: number; splitMs: number; cumulativeMs: number }[]
+  >([]);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
@@ -2138,6 +2177,24 @@ function SoloScreen({
   const handleSelectDelay = useCallback((opt: DelayOption) => {
     setDelaySeconds(opt);
     AsyncStorage.setItem(SOLO_DELAY_STORAGE_KEY, String(opt)).catch(() => undefined);
+  }, []);
+
+  // ── Persistence: save on state transitions, restore on mount ────────────────
+  const persistSolo = useCallback((state: "running" | "paused") => {
+    const data: PersistedSolo = {
+      state,
+      accumMs: accum.current,
+      anchorWall: state === "running" ? anchor.current : null,
+      lastLapCumMs: lastLapCum.current,
+      laps: lapsRef.current,
+    };
+    AsyncStorage.setItem(SOLO_STORAGE_KEY, JSON.stringify(data)).catch(
+      () => {}
+    );
+  }, []);
+
+  const clearPersistedSolo = useCallback(() => {
+    AsyncStorage.removeItem(SOLO_STORAGE_KEY).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -2214,13 +2271,53 @@ function SoloScreen({
     }
   }, [isLocked]);
 
+  // Restore persisted solo state on mount (survives app kill / reboot).
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(SOLO_STORAGE_KEY)
+      .then((raw) => {
+        if (cancelled) return;
+        const saved = parsePersistedSolo(raw);
+        if (!saved) return;
+
+        accum.current = saved.accumMs;
+        lastLapCum.current = saved.lastLapCumMs;
+        lapsRef.current = saved.laps;
+        setLaps(saved.laps);
+
+        if (saved.state === "running" && saved.anchorWall !== null) {
+          // The persisted anchor is a Date.now() wall-clock value — reuse it
+          // directly so elapsed time keeps counting across the kill,
+          // consistent with the drift-free backgrounding approach.
+          anchor.current = saved.anchorWall;
+          const t = accum.current + Date.now() - anchor.current;
+          setSession(t);
+          setLapMs(t - lastLapCum.current);
+          setSw("running");
+          startTick();
+        } else {
+          anchor.current = null;
+          setSession(saved.accumMs);
+          setLapMs(saved.accumMs - saved.lastLapCumMs);
+          setSw("paused");
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Commit to running after countdown ends
   const commitStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     anchor.current = Date.now();
     startTick();
     setSw("running");
-  }, [startTick]);
+    persistSolo("running");
+  }, [startTick, persistSolo]);
 
   const beginCountdown = useCallback((seconds: number) => {
     const endsAt = Date.now() + seconds * 1000;
@@ -2253,12 +2350,9 @@ function SoloScreen({
     if (delaySeconds > 0) {
       beginCountdown(delaySeconds);
     } else {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      anchor.current = Date.now();
-      startTick();
-      setSw("running");
+      commitStart();
     }
-  }, [delaySeconds, beginCountdown, startTick]);
+  }, [delaySeconds, beginCountdown, commitStart]);
 
   const handleCancelCountdown = useCallback(() => {
     clearCountdown();
@@ -2280,7 +2374,8 @@ function SoloScreen({
     setSession(accum.current);
     setLapMs(accum.current - lastLapCum.current);
     setSw("paused");
-  }, [isLocked, showLockedHint, stopTick]);
+    persistSolo("paused");
+  }, [isLocked, showLockedHint, stopTick, persistSolo]);
 
   const handleLap = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2290,11 +2385,16 @@ function SoloScreen({
     const split = cum - lastLapCum.current;
     lastLapCum.current = cum;
     setLapMs(0);
-    setLaps((prev) => [
-      { number: prev.length + 1, splitMs: split, cumulativeMs: cum },
-      ...prev,
-    ]);
-  }, []);
+    setLaps((prev) => {
+      const next = [
+        { number: prev.length + 1, splitMs: split, cumulativeMs: cum },
+        ...prev,
+      ];
+      lapsRef.current = next;
+      persistSolo(anchor.current !== null ? "running" : "paused");
+      return next;
+    });
+  }, [persistSolo]);
 
   const handleReset = useCallback(() => {
     if (isLocked) { showLockedHint(); return; }
@@ -2305,11 +2405,13 @@ function SoloScreen({
     anchor.current = null;
     accum.current = 0;
     lastLapCum.current = 0;
+    lapsRef.current = [];
     setSession(0);
     setLapMs(0);
     setLaps([]);
     setSw("idle");
-  }, [isLocked, showLockedHint, stopTick, clearCountdown]);
+    clearPersistedSolo();
+  }, [isLocked, showLockedHint, stopTick, clearCountdown, clearPersistedSolo]);
 
   const isRunning = swState === "running";
   const isPaused = swState === "paused";

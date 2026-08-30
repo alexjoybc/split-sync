@@ -195,4 +195,68 @@ test.describe('/stopwatch solo page', () => {
     await expect(page.getByRole('button', { name: /start race/i })).not.toBeVisible({ timeout: 2_000 });
     await expect(page.getByRole('button', { name: /finish race/i })).not.toBeVisible({ timeout: 2_000 });
   });
+
+  // ── Persistence across page refresh (#224) ────────────────────────────────
+
+  test('running stopwatch and laps survive a page refresh', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Start and record a lap
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: /record lap/i }).click();
+    await page.waitForTimeout(200);
+
+    // Refresh — the stopwatch should still be running with the lap intact
+    await page.reload();
+
+    await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible();
+    await expect(page.getByRole('table', { name: /lap times/i })).toBeVisible();
+    await expect(page.locator('.sw-lap-table tbody tr')).toHaveCount(1);
+
+    // Elapsed keeps counting across the refresh (wall-clock anchored)
+    await expect(page.getByRole('timer')).not.toHaveAttribute(
+      'aria-label',
+      'Elapsed time: 00:00.00',
+    );
+  });
+
+  test('stopped stopwatch keeps its elapsed time across a refresh', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+
+    // Capture elapsed while stopped
+    const before = await page.getByRole('timer').getAttribute('aria-label');
+
+    await page.reload();
+
+    // Still stopped (Start visible, not Stop). Wait for the restored state:
+    // the Reset pusher is enabled in "stopped" but disabled in "idle".
+    await expect(page.getByRole('button', { name: /start stopwatch/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /reset stopwatch/i })).toBeEnabled();
+
+    // Same elapsed time as before the refresh
+    const after = await page.getByRole('timer').getAttribute('aria-label');
+    expect(after).toBe(before);
+  });
+
+  test('reset clears persisted state — refresh returns to idle 00:00', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await page.waitForTimeout(200);
+    await page.getByRole('button', { name: /record lap/i }).click();
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+    await page.getByRole('button', { name: /reset stopwatch/i }).click();
+
+    await page.reload();
+
+    // Back to idle: 00:00, Reset disabled, no lap table
+    await expect(page.getByRole('timer')).toContainText('00:00');
+    await expect(page.getByRole('button', { name: /reset stopwatch/i })).toBeDisabled();
+    await expect(page.getByRole('table', { name: /lap times/i })).not.toBeVisible({ timeout: 2_000 });
+  });
 });
