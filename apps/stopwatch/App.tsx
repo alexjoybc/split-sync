@@ -2075,7 +2075,10 @@ function SoloScreen({
   const handleCancelCountdown = useCallback(() => {
     clearCountdown();
     setCountdownSec(0);
-    setSw("idle");
+    // Return to the pre-countdown state: a delayed resume (accumulated time
+    // present) goes back to "paused" so RESET stays reachable; a delayed
+    // fresh start goes back to "idle".
+    setSw(accum.current > 0 ? "paused" : "idle");
   }, [clearCountdown]);
 
   const handleStop = useCallback(() => {

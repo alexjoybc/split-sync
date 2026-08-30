@@ -5,7 +5,9 @@
  *   1. Delay selector is visible in idle state.
  *   2. Select 3 s → click Start → countdown appears (shows "3", "2", or "1").
  *   3. Wait for countdown to end → stopwatch transitions to RUNNING.
- *   4. Cancel during countdown → returns to idle without starting.
+ *   4. Cancel during countdown → returns to the prior state without starting
+ *      (idle for a fresh start; stopped — with Reset reachable and elapsed
+ *      frozen — for a delayed resume).
  *   5. With OFF delay, clicking Start immediately transitions to running (no countdown).
  *   6. Stop → Start resumes with accumulated time intact (with and without a delay).
  */
@@ -95,6 +97,35 @@ test.describe('/stopwatch delayed start', () => {
     // We should be back to idle: Start button visible, delay selector visible
     await expect(page.getByRole('button', { name: /start stopwatch/i })).toBeVisible();
     await expect(page.getByTestId('sw-delay-selector')).toBeVisible();
+  });
+
+  test('stop then delayed start then cancel returns to stopped, not idle', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Run ~1 s with no delay, then stop (accumulated time > 0)
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await page.waitForTimeout(1000);
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+    const stoppedMs = await readElapsedMs(page);
+    expect(stoppedMs).toBeGreaterThanOrEqual(800);
+
+    // Select a 5 s delay and start again → countdown begins
+    await page.getByTestId('sw-delay-5').click();
+    await page.getByTestId('sw-primary-btn').click();
+    await expect(page.getByTestId('sw-countdown-number')).toBeVisible({ timeout: 1000 });
+
+    // Cancel the countdown
+    await page.getByTestId('sw-secondary-btn').click();
+    await expect(page.getByTestId('sw-countdown-number')).not.toBeVisible({ timeout: 500 });
+
+    // We must be back in the STOPPED state, not idle:
+    // Reset (secondary button) remains enabled...
+    const resetBtn = page.getByRole('button', { name: /reset stopwatch/i });
+    await expect(resetBtn).toBeVisible();
+    await expect(resetBtn).toBeEnabled();
+
+    // ...and the elapsed time still shows the frozen stopped time.
+    expect(await readElapsedMs(page)).toBe(stoppedMs);
   });
 
   test('OFF delay: Start immediately begins running without countdown', async ({ page }) => {
