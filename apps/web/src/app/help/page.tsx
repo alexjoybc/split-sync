@@ -396,47 +396,45 @@ export default function HelpPage() {
           </p>
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
             <li>
-              <strong>Creating a session</strong> requires a SplitSync organizer
-              account. Sign in with your email and password in the app, then tap{" "}
-              <strong>NEW SESSION</strong>. Name the session, enter a display name
-              for yourself, then tap <strong>START SESSION</strong>.
+              <strong>Creating a session</strong> requires a SplitSync account.
+              Sign in, then click <strong>Time together</strong> on the stopwatch
+              page (web) or tap <strong>NEW SESSION</strong> in the app. Name the
+              session, enter a display name for yourself, and share the link —
+              joiners do <em>not</em> need an account.
             </li>
             <li>
-              After creating a session a share sheet appears with a link in the
-              form{" "}
+              The share link looks like{" "}
               <code>https://splitsync.org/stopwatch/s/AB3K9X</code>. Send it to
-              anyone who should join — they do <em>not</em> need an account.
+              anyone at the other end of the course.
             </li>
             <li>
-              <strong>Joining a session</strong> is frictionless. Open the shared
-              link (or install the app and enter the 6-character code manually),
-              enter a display name, and tap <strong>JOIN</strong>. No sign-in
-              required.
+              <strong>Joining</strong> is frictionless — tap the link, enter a
+              display name, and you're in. No sign-in required.
             </li>
             <li>
               Any participant can press <strong>START</strong>, <strong>LAP</strong>,
-              or <strong>STOP</strong>. The session uses a server-anchored clock so
-              all devices see the same elapsed time regardless of device clock
-              differences.
+              or <strong>STOP</strong>. All devices share a server-anchored clock so
+              everyone sees the same elapsed time.
             </li>
             <li>
               The <strong>lap table</strong> shows each split with the name of who
-              pressed LAP. The <strong>participant strip</strong> at the top shows
-              who is currently in the session.
+              pressed LAP. The <strong>participant strip</strong> shows who is in the
+              session.
             </li>
             <li>
-              Only the <strong>session creator</strong> (shown with ★) can{" "}
-              <strong>Reset</strong> the clock to restart the session.
+              Only the <strong>session creator</strong> (★) can Reset the clock.
             </li>
             <li>
-              Sessions expire after 4 hours of inactivity (extended by 30 minutes
-              with each lap event, up to 16 hours total). A stopped session cannot
-              be resumed; create a new one.
+              Sessions expire after 4 hours (extended by each lap, up to 16 hours).
+              A stopped session cannot be resumed — create a new one.
             </li>
             <li>
-              If you disconnect and reconnect, the app automatically catches up
-              with any events it missed — laps are never lost due to a brief
-              connection drop.
+              If you disconnect, the app catches up automatically — laps are never
+              lost due to a brief connection drop.
+            </li>
+            <li>
+              Signed-in users see their <strong>session history</strong> below the
+              stopwatch and can rejoin or share past sessions at any time.
             </li>
             <li>
               While a stopwatch is running (solo or shared), the Android app
