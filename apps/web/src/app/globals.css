@@ -269,9 +269,9 @@ body {
   --sw-bezel-bg:          #1a1a1c;
   --sw-bezel-inner-bg:    #111113;
 
-  /* Digit display */
-  --sw-digit-color:       #f0ede6;        /* warm off-white on dark dial */
-  --sw-digit-sub-color:   rgba(240,237,230,0.55);
+  /* Digit display — light-blue LCD look matching the native stopwatch */
+  --sw-digit-color:       var(--race-blue-accent);  /* #5BC8F5 light-blue LCD */
+  --sw-digit-sub-color:   var(--race-blue-dim);     /* #00213A dim/off segments */
 
   /* Pushers */
   --sw-pusher-size:       clamp(68px, 16vw, 84px);
