@@ -194,6 +194,21 @@ function fmtAge(iso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+/**
+ * LCD main digit size for the current window (#230).
+ * Portrait keeps the historical cap (72). Landscape lets the digits grow to
+ * fill the available width — the large-display mode readable from a distance —
+ * while capping against the short axis so the button bar and lap list keep
+ * enough room and the layout never breaks.
+ */
+function lcdMainSize(width: number, height: number): number {
+  const widthFit = Math.floor((width - 40) / 7.2);
+  if (width > height) {
+    return Math.max(48, Math.min(widthFit, Math.floor(height * 0.24)));
+  }
+  return Math.min(widthFit, 72);
+}
+
 function extractCodeFromUrl(url: string): string | null {
   // Handles:
   //   https://splitsync.org/stopwatch/s/<code>
@@ -1129,7 +1144,7 @@ function SessionScreen({
   onBack: () => void;
 }) {
   useKeepAwake();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   // ── State ───────────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<SessionStatus>(params.initialStatus);
@@ -1467,7 +1482,7 @@ function SessionScreen({
   }, [params.sessionCode]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
-  const lcdMain = Math.min(Math.floor((width - 40) / 7.2), 72);
+  const lcdMain = lcdMainSize(width, height);
   const lapCount = laps.length;
   const lastLap = laps[0] ?? null;
   const isRunning = status === "running";
@@ -1754,7 +1769,7 @@ function SoloScreen({
   onBack: () => void;
 }) {
   useKeepAwake();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   type SwState = "idle" | "running" | "paused";
 
@@ -1873,7 +1888,7 @@ function SoloScreen({
       laps.length < 2 ? null : Math.min(...laps.map((l) => l.splitMs)),
     [laps]
   );
-  const lcdMain = Math.min(Math.floor((width - 40) / 7.2), 72);
+  const lcdMain = lcdMainSize(width, height);
 
   return (
     <SafeAreaView style={s.screen}>
