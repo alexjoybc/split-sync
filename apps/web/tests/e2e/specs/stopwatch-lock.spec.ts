@@ -9,7 +9,25 @@
  *   - Press-and-hold the lock icon for 1.5 s unlocks controls
  *   - After unlock: Stop works normally
  */
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+/**
+ * Simulate a real press-and-hold on the lock button using raw mouse events.
+ * `dispatchEvent('pointerup')` cannot be used: once the hold unlocks, the
+ * button's aria-label changes and a stale locator would hang forever. Raw
+ * mouse events also fire the trailing `click` on release, exactly like a
+ * real user, which guards against the unlock being undone by that click.
+ * The mouse must stay still during the hold — pointerleave cancels it.
+ */
+async function holdLockButton(page: Page, ms: number): Promise<void> {
+  const lockBtn = page.locator('.sw-lock-btn');
+  const box = await lockBtn.boundingBox();
+  if (!box) throw new Error('lock button not visible');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(ms);
+  await page.mouse.up();
+}
 
 test.describe('/stopwatch lock controls', () => {
 
@@ -55,9 +73,11 @@ test.describe('/stopwatch lock controls', () => {
     // After the click, Stop should still be the button label (timer is still running)
     await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible();
 
-    // Lock hint should appear
-    await expect(page.getByRole('alert')).toBeVisible();
-    await expect(page.getByRole('alert')).toContainText(/locked/i);
+    // Lock hint should appear (scope to the hint — Next.js adds its own
+    // route-announcer element with role="alert")
+    const lockHint = page.locator('.sw-lock-hint');
+    await expect(lockHint).toBeVisible();
+    await expect(lockHint).toContainText(/locked/i);
   });
 
   test('Lap still records while locked', async ({ page }) => {
@@ -98,8 +118,9 @@ test.describe('/stopwatch lock controls', () => {
     // Value should not have reset to 00:00
     expect(valueAfter).toBe(valueBefore);
 
-    // Hint is shown
-    await expect(page.getByRole('alert')).toBeVisible();
+    // Hint is shown (scope to the hint — Next.js adds its own
+    // route-announcer element with role="alert")
+    await expect(page.locator('.sw-lock-hint')).toBeVisible();
   });
 
   test('press-and-hold lock icon for 1.5 s unlocks controls', async ({ page }) => {
@@ -113,10 +134,8 @@ test.describe('/stopwatch lock controls', () => {
     const lockedBtn = page.getByRole('button', { name: /controls locked/i });
     await expect(lockedBtn).toBeVisible();
 
-    // Simulate press-and-hold on the lock icon: pointerdown → wait 1600 ms → pointerup
-    await lockedBtn.dispatchEvent('pointerdown');
-    await page.waitForTimeout(1600);
-    await lockedBtn.dispatchEvent('pointerup');
+    // Simulate press-and-hold on the lock icon: press → wait 1.7 s → release
+    await holdLockButton(page, 1700);
 
     // Should now be unlocked
     await expect(page.getByRole('button', { name: /lock controls/i })).toBeVisible();
@@ -135,10 +154,9 @@ test.describe('/stopwatch lock controls', () => {
     await page.getByRole('button', { name: /lock controls/i }).click();
 
     // Unlock via long press
-    const lockedBtn = page.getByRole('button', { name: /controls locked/i });
-    await lockedBtn.dispatchEvent('pointerdown');
-    await page.waitForTimeout(1600);
-    await lockedBtn.dispatchEvent('pointerup');
+    await expect(page.getByRole('button', { name: /controls locked/i })).toBeVisible();
+    await holdLockButton(page, 1700);
+    await expect(page.getByRole('button', { name: /lock controls/i })).toBeVisible();
 
     // Stop should now work
     await page.getByRole('button', { name: /stop stopwatch/i }).click();
@@ -154,9 +172,8 @@ test.describe('/stopwatch lock controls', () => {
 
     // Short press (< 1.5 s) should NOT unlock
     const lockedBtn = page.getByRole('button', { name: /controls locked/i });
-    await lockedBtn.dispatchEvent('pointerdown');
-    await page.waitForTimeout(500);
-    await lockedBtn.dispatchEvent('pointerup');
+    await expect(lockedBtn).toBeVisible();
+    await holdLockButton(page, 500);
 
     // Still locked
     await expect(lockedBtn).toBeVisible();

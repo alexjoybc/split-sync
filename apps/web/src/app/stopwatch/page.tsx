@@ -350,6 +350,9 @@ export default function StopwatchPage() {
   // Lock-related refs
   const lockHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unlockPressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True right after a successful hold-to-unlock, so the click fired on
+  // release does not immediately re-lock the controls.
+  const justUnlockedRef = useRef(false);
 
   // ---------------------------------------------------------------------------
   // Persist delay preference
@@ -552,9 +555,12 @@ export default function StopwatchPage() {
   }, []);
 
   const handleLockBtnPointerDown = useCallback(() => {
+    // A new press always starts fresh
+    justUnlockedRef.current = false;
     if (!isLocked) return;
     // Start a 1.5 s countdown — releasing early cancels it
     unlockPressRef.current = setTimeout(() => {
+      justUnlockedRef.current = true;
       setIsLocked(false);
       setShowLockHint(false);
     }, 1500);
@@ -993,6 +999,12 @@ export default function StopwatchPage() {
               aria-pressed={isLocked}
               title={isLocked ? "Hold 1.5 s to unlock" : "Lock Stop & Reset"}
               onClick={() => {
+                // A hold-to-unlock ends with a click on release; ignore it so
+                // it doesn't instantly re-lock the controls.
+                if (justUnlockedRef.current) {
+                  justUnlockedRef.current = false;
+                  return;
+                }
                 if (!isLocked) setIsLocked(true);
               }}
               onPointerDown={handleLockBtnPointerDown}
