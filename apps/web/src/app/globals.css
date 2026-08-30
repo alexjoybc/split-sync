@@ -1,22 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  --race-paper: #f4f1ea;
-  --race-panel: #ffffff;
+  /* ── Canonical palette — source of truth: packages/palette/src/index.ts ── */
+  --race-paper:     #f4f1ea;
+  --race-panel:     #ffffff;
   --race-panel-alt: #e9e6df;
-  --race-ink: #18181b;
-  --race-muted: #71717a;
-  --race-red: #ec1c24;
-  --race-yellow: #f6d428;
+  --race-ink:       #18181b;
+  --race-muted:     #636369;   /* darkened from #71717a for WCAG AA */
+  --race-red:       #CC1A22;   /* darkened from #ec1c24 for WCAG AA */
+  --race-yellow:    #FFD700;
+  --race-line:      #d4d1ca;
+
+  /* ── Extended palette ────────────────────────────────────────────────── */
+  --race-blue-accent:  #5BC8F5;
+  --race-blue-primary: #0B6FB3;
+  --race-blue-dim:     #00213A;
+  --race-red-tint:     #FDECEA;
+  --race-yellow-tint:  #FFF8CC;
+  --race-success:      #166534;
+  --race-warning:      #92400E;
 
   /* ── Broadcast depth tokens ─────────────────────────────────────────── */
-  --race-accent-glow:   rgba(220, 38, 38, 0.14);
-  --race-leader-glow:   rgba(246, 212, 40, 0.22);
-  --race-live-shadow:   0 2px 12px rgba(220, 38, 38, 0.20);
-  --race-leader-shadow: 0 2px 12px rgba(246, 212, 40, 0.28);
-
-  /* ── Section line ────────────────────────────────────────────────────── */
-  --race-line: #d4d1ca;
+  --race-accent-glow:   rgba(11, 111, 179, 0.14);   /* blue-primary glow */
+  --race-leader-glow:   rgba(255, 215, 0, 0.22);
+  --race-live-shadow:   0 2px 12px rgba(204, 26, 34, 0.20);  /* red: live/critical */
+  --race-leader-shadow: 0 2px 12px rgba(255, 215, 0, 0.28);
 
   /* ── Angled accent geometry ──────────────────────────────────────────── */
   --race-angle-offset: 14px;
@@ -44,16 +52,25 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  --color-race-paper: var(--race-paper);
-  --color-race-panel: var(--race-panel);
-  --color-race-panel-alt: var(--race-panel-alt);
-  --color-race-ink: var(--race-ink);
-  --color-race-muted: var(--race-muted);
-  --color-race-red: var(--race-red);
-  --color-race-yellow: var(--race-yellow);
+  --color-race-paper:        var(--race-paper);
+  --color-race-panel:        var(--race-panel);
+  --color-race-panel-alt:    var(--race-panel-alt);
+  --color-race-ink:          var(--race-ink);
+  --color-race-muted:        var(--race-muted);
+  --color-race-red:          var(--race-red);
+  --color-race-yellow:       var(--race-yellow);
   --color-race-line:         var(--race-line);
+  --color-race-blue-accent:  var(--race-blue-accent);
+  --color-race-blue-primary: var(--race-blue-primary);
+  --color-race-blue-dim:     var(--race-blue-dim);
+  --color-race-red-tint:     var(--race-red-tint);
+  --color-race-yellow-tint:  var(--race-yellow-tint);
+  --color-race-success:      var(--race-success);
+  --color-race-warning:      var(--race-warning);
   --color-race-accent-glow:  var(--race-accent-glow);
   --color-race-leader-glow:  var(--race-leader-glow);
+  --color-race-live-shadow:  var(--race-live-shadow);
+  --color-race-leader-shadow: var(--race-leader-shadow);
 }
 
 body {

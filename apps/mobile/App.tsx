@@ -9,12 +9,27 @@ import type { Session } from "@supabase/supabase-js";
 import { flushCrossings, getPendingQueue, pendingCrossings, recordCrossing, removePendingCrossing } from "./src/crossingQueue";
 import { supabase } from "./src/supabase";
 import type { Entry, Event, Race } from "./src/types";
+import { palette } from "../../packages/palette/src/index";
 
 type RecentCrossing = { client_id: string; bib: string; client_recorded_at: string };
 
 WebBrowser.maybeCompleteAuthSession();
 
-const colors = { paper: "#f4f1ea", panel: "#ffffff", ink: "#18181b", muted: "#71717a", red: "#ec1c24", yellow: "#f6d428", line: "#d4d1ca", ttSection: "#f0ece3", accentGlow: "rgba(220, 38, 38, 0.14)", leaderGlow: "rgba(246, 212, 40, 0.22)", pulseColor: "#ec1c24" };
+const colors = {
+  paper:       palette.paper,
+  panel:       palette.panel,
+  ink:         palette.ink,
+  muted:       palette.muted,
+  red:         palette.red,
+  yellow:      palette.yellow,
+  line:        palette.line,
+  ttSection:   palette.panelAlt,    // was: #f0ece3 — now canonical panel-alt
+  accentGlow:  palette.accentGlow,
+  leaderGlow:  palette.leaderGlow,
+  pulseColor:  palette.red,
+  blue:        palette.blueAccent,
+  bluePrimary: palette.bluePrimary,
+};
 
 function sortBibNatural(a: string, b: string): number {
   const na = parseInt(a, 10), nb = parseInt(b, 10);

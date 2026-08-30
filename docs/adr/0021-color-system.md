@@ -208,12 +208,27 @@ applies — e.g., focus outlines — use `blue-primary` or `ink` instead of `lin
 - Canonical `yellow` shifts from the current approximate `#f6d428` to `#FFD700`. Visual
   difference is minimal but may require a sweep of hardcoded values in existing components.
 
-### Implementation note
+### Implementation (completed in #261)
 
-This ADR defines the canonical values only. No code changes are made here. The next issue
-(#261) will encode these tokens into `apps/web/src/app/globals.css` CSS custom properties
-and the mobile `colors` object. Until that PR lands, the values in this ADR are the
-normative reference.
+The canonical values defined in this ADR are encoded in a dedicated workspace package:
+
+- **`packages/palette` (`@splitsync/palette`) is the single source of truth** for all color
+  values. The module at `packages/palette/src/index.ts` exports every token as a typed
+  TypeScript constant. All new color references must start here.
+
+- **`apps/web/src/app/globals.css`** CSS custom properties are manually derived from
+  `packages/palette/src/index.ts`. This duplication is unavoidable — CSS cannot import
+  TypeScript at build time in this stack. A comment at the top of `globals.css` cross-
+  references the palette package so contributors know where the authoritative values live.
+
+- **`apps/mobile/App.tsx`** and **`apps/stopwatch/App.tsx`** import colors via a relative
+  path (`../../packages/palette/src/index`) rather than the package name
+  (`@splitsync/palette`). Metro bundler does not resolve pnpm workspace symlinks without a
+  custom resolver, so a direct relative import is used as a pragmatic workaround.
+
+**Invariant for contributors:** canonical color changes must start in
+`packages/palette/src/index.ts`, then be propagated to `globals.css`. Never edit
+`globals.css` hex values without updating the palette package first.
 
 ---
 
