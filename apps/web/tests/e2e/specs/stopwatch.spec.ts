@@ -122,11 +122,14 @@ test.describe('/stopwatch solo page', () => {
     await expect(deal).toContainText(/display name/i);
   });
 
-  test('"Time together" stub is visible but disabled', async ({ page }) => {
+  test('"Time together" shows "Sign in to share" for anonymous users and is clickable', async ({ page }) => {
     await page.goto('/stopwatch');
-    const stub = page.getByLabel(/time together/i);
-    await expect(stub).toBeVisible();
-    await expect(stub).toHaveAttribute('aria-disabled', 'true');
+    // Anonymous users see a "Sign in to share" button (not disabled — it redirects to /login)
+    const btn = page.getByRole('button', { name: /sign in to share/i });
+    await expect(btn).toBeVisible();
+    // It must NOT carry aria-disabled — it is a real interactive button
+    await expect(btn).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(btn).not.toBeDisabled();
   });
 
   test('large display toggle enlarges the timer and toggles back', async ({ page }) => {
