@@ -106,6 +106,22 @@ test.describe('/stopwatch solo page', () => {
     await expect(page.getByRole('table', { name: /lap times/i })).toBeVisible();
   });
 
+  test('positioning promise is stated: free, no ads, no subscription, no account', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Top strip: Free · No ads · No subscription · No account
+    await expect(
+      page.getByLabel('Free. No ads. No subscription. No account needed.'),
+    ).toBeVisible();
+
+    // Spelled-out section at the bottom
+    const deal = page.getByRole('region', { name: /why splitsync stopwatch is free/i });
+    await expect(deal).toBeVisible();
+    await expect(deal).toContainText(/no ads/i);
+    await expect(deal).toContainText(/no.*subscription/i);
+    await expect(deal).toContainText(/display name/i);
+  });
+
   test('"Time together" stub is visible but disabled', async ({ page }) => {
     await page.goto('/stopwatch');
     const stub = page.getByLabel(/time together/i);

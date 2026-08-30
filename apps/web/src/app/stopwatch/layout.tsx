@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Stopwatch",
+  title: "Stopwatch — free, no ads, no account",
   description:
-    "A solo stopwatch with lap recording, best-lap highlighting, and keyboard shortcuts. No sign-in required.",
+    "A free stopwatch with lap recording, best-lap highlighting, and keyboard shortcuts. No ads, no subscription, no account needed — join shared Time Together sessions with just a display name.",
 };
 
 export default function StopwatchLayout({
