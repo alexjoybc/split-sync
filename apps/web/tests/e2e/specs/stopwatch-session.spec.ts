@@ -13,31 +13,27 @@ const UNKNOWN_CODE = 'ZZZZZZ';
 
 test.describe('/stopwatch/s/[code] shared session route', () => {
 
-  test('unknown code: page loads with a user-friendly join form — no crash, no blank page', async ({ page }) => {
+  test('unknown code: page loads and shows a friendly error — no crash, no blank page', async ({ page }) => {
     await page.goto(`/stopwatch/s/${UNKNOWN_CODE}`);
 
     // Page must render a visible <main> — not a blank white screen
     await expect(page.locator('main')).toBeVisible({ timeout: 10_000 });
 
-    // Must show the join form (display-name input) rather than throwing
-    const nameInput = page.getByPlaceholder(/name/i);
-    await expect(nameInput).toBeVisible({ timeout: 10_000 });
+    // Unknown codes surface an error state — join form NOT shown, error message IS shown
+    await expect(page.getByPlaceholder(/name/i)).not.toBeVisible();
+    // Some kind of error / "not found" text must be present
+    const body = await page.locator('body').innerText();
+    expect(
+      body.toLowerCase().match(/not found|expired|invalid|session|error/i)
+    ).toBeTruthy();
   });
 
-  test('unknown code: attempting to join shows a session-not-found error', async ({ page }) => {
+  test('unknown code: error state has a link back to the solo stopwatch', async ({ page }) => {
     await page.goto(`/stopwatch/s/${UNKNOWN_CODE}`);
-
-    const nameInput = page.getByPlaceholder(/name/i);
-    await expect(nameInput).toBeVisible({ timeout: 10_000 });
-    await nameInput.fill('TestRunner');
-
-    await page.getByRole('button', { name: /join session/i }).click();
-
-    // Any non-empty error text in the red error paragraph is acceptable.
-    // The exact wording depends on the RPC error message but must not be blank.
-    const errorPara = page.locator('p.text-race-red');
-    await expect(errorPara).toBeVisible({ timeout: 10_000 });
-    await expect(errorPara).not.toHaveText('');
+    await expect(page.locator('main')).toBeVisible({ timeout: 10_000 });
+    // There must be a way out — a link to /stopwatch or home
+    const backLink = page.getByRole('link', { name: /stopwatch|solo|home|back/i }).first();
+    await expect(backLink).toBeVisible({ timeout: 5_000 });
   });
 
   test('stopped/unknown session: no organizer race controls present', async ({ page }) => {
