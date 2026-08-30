@@ -40,6 +40,10 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "./src/supabase";
+import {
+  clearRunningNotification,
+  showRunningNotification,
+} from "./src/notification";
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const C = {
@@ -1266,6 +1270,16 @@ function SessionScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // only on mount
 
+  // ── Ongoing Android notification while running (#231) ──────────────────────
+  useEffect(() => {
+    if (status === "running" && clientT0Ref.current !== null) {
+      showRunningNotification(params.sessionName, clientT0Ref.current);
+    } else {
+      clearRunningNotification();
+    }
+  }, [status, params.sessionName]);
+  useEffect(() => () => clearRunningNotification(), []);
+
   // ── Realtime subscription ───────────────────────────────────────────────────
   const rebuildFromServer = useCallback(async () => {
     const { data } = await supabase.rpc("get_session_state", {
@@ -1792,6 +1806,17 @@ function SoloScreen({
   }, []);
 
   useEffect(() => () => stopTick(), [stopTick]);
+
+  // ── Ongoing Android notification while running (#231) ──────────────────────
+  useEffect(() => {
+    if (swState === "running" && anchor.current !== null) {
+      // Chronometer zero point = now - elapsed = anchor - accumulated.
+      showRunningNotification("Solo Stopwatch", anchor.current - accum.current);
+    } else {
+      clearRunningNotification();
+    }
+  }, [swState]);
+  useEffect(() => () => clearRunningNotification(), []);
 
   const handleStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
