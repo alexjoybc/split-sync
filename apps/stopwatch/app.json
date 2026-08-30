@@ -8,6 +8,7 @@
     "userInterfaceStyle": "light",
     "android": {
       "package": "org.splitsync.stopwatch",
+      "permissions": ["android.permission.POST_NOTIFICATIONS"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F5F0E8"

@@ -424,6 +424,15 @@ export default function HelpPage() {
               with any events it missed — laps are never lost due to a brief
               connection drop.
             </li>
+            <li>
+              While a stopwatch is running (solo or shared), the Android app
+              shows an <strong>ongoing notification</strong> with the session
+              name and the ticking elapsed time, so you can switch to other apps
+              without losing sight of the clock. Tap it to return to the
+              stopwatch; it disappears on stop or reset. The app asks for
+              notification permission once — declining it never blocks timing
+              and you won&apos;t be asked again.
+            </li>
           </ul>
         </section>
 

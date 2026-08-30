@@ -1,0 +1,8 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": [
+      "org.splitsync.stopwatch.notification.StopwatchNotificationModule"
+    ]
+  }
+}
