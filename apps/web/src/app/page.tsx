@@ -404,6 +404,7 @@ export default function Home() {
             <a href="#how-it-works" className="hover:text-race-red">How it works</a>
             <Link href="/events" className="hover:text-race-red">Live events</Link>
             <Link href="/help" className="hover:text-race-red">Help</Link>
+            <Link href="/privacy" className="hover:text-race-red">Privacy</Link>
             <Link href="/login" className="hover:text-race-red">Sign in</Link>
           </div>
         </div>
