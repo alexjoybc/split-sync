@@ -33,8 +33,8 @@ const C = {
 
   // LCD instrument panel
   instrument:   "#0D0D0D",
-  lcd:          "#00FF87",   // bright mint-green — classic timing instrument (Casio/Garmin)
-  lcdDim:       "#002918",   // off-segment ghost (dark green)
+  lcd:          "#5BC8F5",   // light blue — readable, distinct, accessible on dark
+  lcdDim:       "#00213A",   // off-segment ghost (dark blue)
   lcdSmall:     "#FFFFFF",   // session sub-display — pure white, clearly secondary
 
   // SplitSync content surfaces
