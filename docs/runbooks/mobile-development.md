@@ -80,6 +80,12 @@ pnpm --filter stopwatch exec expo run:android
 
 The generated `apps/stopwatch/android` directory is git-ignored. Regenerate it with `expo prebuild --clean` inside `apps/stopwatch` after adding a native module.
 
+### Local native module: running-stopwatch notification
+
+`apps/stopwatch/modules/stopwatch-notification` is a small local Expo module (Kotlin, Android-only, autolinked from the `modules/` directory) that posts the ongoing chronometer notification while a stopwatch is running (#231). Android renders the ticking elapsed time natively — there are no per-second JS wakeups. It requests `POST_NOTIFICATIONS` (Android 13+) at most once; if declined, the stopwatch works normally with no notification and no re-prompt.
+
+Changing anything under `modules/stopwatch-notification` (or first pulling this module) **requires a native rebuild**: `expo prebuild --clean` then `pnpm --filter stopwatch exec expo run:android`. Until rebuilt, the JS side degrades to a no-op.
+
 ### Deep-link scheme
 
 The stopwatch registers the scheme `org.splitsync.stopwatch://` and an Android App Links intent filter for `https://splitsync.org/stopwatch/s/`. Both open the Join screen. See `docs/runbooks/stopwatch-release.md` for how to configure `assetlinks.json` for verified App Links.

@@ -4,7 +4,7 @@
     "slug": "splitsync-stopwatch",
     "owner": "split-sync",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "scheme": "org.splitsync.stopwatch",
     "userInterfaceStyle": "light",
     "runtimeVersion": {
@@ -15,6 +15,7 @@
     },
     "android": {
       "package": "org.splitsync.stopwatch",
+      "permissions": ["android.permission.POST_NOTIFICATIONS"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#F5F0E8"
@@ -41,6 +42,6 @@
       }
     },
     "platforms": ["android"],
-    "plugins": ["expo-font", "expo-status-bar"]
+    "plugins": ["expo-font"]
   }
 }

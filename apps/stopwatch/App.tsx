@@ -40,6 +40,10 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "./src/supabase";
+import {
+  clearRunningNotification,
+  showRunningNotification,
+} from "./src/notification";
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 const C = {
@@ -188,6 +192,21 @@ function fmtAge(iso: string): string {
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
+}
+
+/**
+ * LCD main digit size for the current window (#230).
+ * Portrait keeps the historical cap (72). Landscape lets the digits grow to
+ * fill the available width — the large-display mode readable from a distance —
+ * while capping against the short axis so the button bar and lap list keep
+ * enough room and the layout never breaks.
+ */
+function lcdMainSize(width: number, height: number): number {
+  const widthFit = Math.floor((width - 40) / 7.2);
+  if (width > height) {
+    return Math.max(48, Math.min(widthFit, Math.floor(height * 0.24)));
+  }
+  return Math.min(widthFit, 72);
 }
 
 function extractCodeFromUrl(url: string): string | null {
@@ -1114,6 +1133,64 @@ function JoinScreen({
   );
 }
 
+// ── Durable offline queue ──────────────────────────────────────────────────────
+// Events are persisted to AsyncStorage keyed by session code so they survive
+// app kill during a connectivity gap. The idempotency key (client_event_id)
+// ensures the server upsert is safe to replay (ON CONFLICT DO NOTHING).
+// See ADR docs/adr/0018-stopwatch-durable-offline-queue.md.
+
+interface DurableQueueEntry {
+  client_event_id: string;
+  event_type: SessionEventType;
+  client_recorded_at: string;
+  /** Local monotonic sequence — preserves recording order across replay. */
+  sequence: number;
+  sessionCode: string;
+}
+
+function durableQueueKey(sessionCode: string): string {
+  return `pending_events_${sessionCode}`;
+}
+
+async function loadDurableQueue(sessionCode: string): Promise<DurableQueueEntry[]> {
+  try {
+    const raw = await AsyncStorage.getItem(durableQueueKey(sessionCode));
+    return raw ? (JSON.parse(raw) as DurableQueueEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveDurableQueue(
+  sessionCode: string,
+  queue: DurableQueueEntry[]
+): Promise<void> {
+  try {
+    await AsyncStorage.setItem(durableQueueKey(sessionCode), JSON.stringify(queue));
+  } catch (err) {
+    // Non-fatal: in-memory optimistic queue still handles the current run.
+    console.warn("Failed to persist durable event queue", err);
+  }
+}
+
+async function addToDurableQueue(
+  sessionCode: string,
+  entry: DurableQueueEntry
+): Promise<void> {
+  const queue = await loadDurableQueue(sessionCode);
+  queue.push(entry);
+  await saveDurableQueue(sessionCode, queue);
+}
+
+async function removeFromDurableQueue(
+  sessionCode: string,
+  clientEventId: string
+): Promise<void> {
+  const queue = await loadDurableQueue(sessionCode);
+  const filtered = queue.filter((e) => e.client_event_id !== clientEventId);
+  await saveDurableQueue(sessionCode, filtered);
+}
+
 // ── Screen: Session (shared stopwatch) ────────────────────────────────────────
 function SessionScreen({
   params,
@@ -1125,7 +1202,7 @@ function SessionScreen({
   onBack: () => void;
 }) {
   useKeepAwake();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   // ── State ───────────────────────────────────────────────────────────────────
   const [status, setStatus] = useState<SessionStatus>(params.initialStatus);
@@ -1142,6 +1219,8 @@ function SessionScreen({
       clientRecordedAt: string;
     }>
   >([]);
+  /** Tracks durable (AsyncStorage) queue depth for the pending indicator. */
+  const [durableQueueDepth, setDurableQueueDepth] = useState(0);
 
   // Clock sync: clientT0 = Date.now() when we first learn t0_server
   const clientT0Ref = useRef<number | null>(null);
@@ -1157,6 +1236,8 @@ function SessionScreen({
   useEffect(() => {
     eventsRef.current = events;
   }, [events]);
+  /** Local monotonic counter — ensures replay order is preserved after app kill. */
+  const localSeqRef = useRef(0);
 
   // ── Derived lap table ───────────────────────────────────────────────────────
   const laps = useMemo<DerivedLap[]>(() => {
@@ -1254,7 +1335,8 @@ function SessionScreen({
     [startTick, stopTick]
   );
 
-  // If session was already running on mount, start ticking from known offset
+  // If session was already running on mount, start ticking from known offset.
+  // Also initialise the durable queue depth indicator from AsyncStorage.
   useEffect(() => {
     if (status === "running" && t0Server) {
       clientT0Ref.current = Date.now() - (Date.now() - new Date(t0Server).getTime());
@@ -1263,8 +1345,23 @@ function SessionScreen({
         Date.now() - Math.max(0, Date.now() - new Date(t0Server).getTime());
       startTick();
     }
+    // Load the durable queue depth so the pending indicator is correct immediately
+    // on relaunch (the channel subscription will trigger flushDurableQueue shortly).
+    loadDurableQueue(params.sessionCode).then((q) => {
+      setDurableQueueDepth(q.length);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // only on mount
+
+  // ── Ongoing Android notification while running (#231) ──────────────────────
+  useEffect(() => {
+    if (status === "running" && clientT0Ref.current !== null) {
+      showRunningNotification(params.sessionName, clientT0Ref.current);
+    } else {
+      clearRunningNotification();
+    }
+  }, [status, params.sessionName]);
+  useEffect(() => () => clearRunningNotification(), []);
 
   // ── Realtime subscription ───────────────────────────────────────────────────
   const rebuildFromServer = useCallback(async () => {
@@ -1291,7 +1388,74 @@ function SessionScreen({
     } else {
       stopTick();
     }
+    return state;
   }, [params.sessionId, params.participantId, startTick, stopTick]);
+
+  // ── Durable queue flush ──────────────────────────────────────────────────────
+  // Called on mount and on channel reconnect. Reconciles the durable queue
+  // against server state, drops events the server already accepted, then
+  // replays the rest in local-sequence order (preserving original timestamps).
+  const flushDurableQueue = useCallback(async () => {
+    const queue = await loadDurableQueue(params.sessionCode);
+    if (queue.length === 0) {
+      setDurableQueueDepth(0);
+      return;
+    }
+
+    // Fetch server state to reconcile (reuse rebuildFromServer side-effects).
+    const { data } = await supabase.rpc("get_session_state", {
+      p_session_id: params.sessionId,
+      p_participant_id: params.participantId,
+    });
+
+    const serverEventIds = new Set<string>();
+    if (data) {
+      const state = data as { events: SessionEvent[] };
+      (state.events ?? []).forEach((e) => serverEventIds.add(e.id));
+    }
+
+    // Filter out events the server already accepted (idempotency reconciliation).
+    const toReplay = queue
+      .filter((e) => !serverEventIds.has(e.client_event_id))
+      .sort((a, b) => a.sequence - b.sequence);
+
+    // Drop already-acknowledged entries from durable storage right away.
+    const alreadyAcked = queue.filter((e) => serverEventIds.has(e.client_event_id));
+    for (const e of alreadyAcked) {
+      await removeFromDurableQueue(params.sessionCode, e.client_event_id);
+    }
+
+    // Replay unacknowledged events in order.
+    for (const entry of toReplay) {
+      const { data: evData, error } = await supabase.rpc("record_session_event", {
+        p_session_id: params.sessionId,
+        p_participant_id: params.participantId,
+        p_event_type: entry.event_type,
+        p_client_recorded_at: entry.client_recorded_at,
+        p_client_event_id: entry.client_event_id,
+      });
+
+      if (!error) {
+        await removeFromDurableQueue(params.sessionCode, entry.client_event_id);
+        if (evData) {
+          const accepted = evData as SessionEvent;
+          channelRef.current?.send({
+            type: "broadcast",
+            event: "session_event",
+            payload: accepted,
+          });
+          applyEvent(accepted);
+        }
+      } else {
+        // Concurrency or permission error — stop replay; full rebuild will sync state.
+        break;
+      }
+    }
+
+    // Update the indicator to reflect what's left.
+    const remaining = await loadDurableQueue(params.sessionCode);
+    setDurableQueueDepth(remaining.length);
+  }, [params.sessionCode, params.sessionId, params.participantId, applyEvent]);
 
   useEffect(() => {
     const channel = supabase.channel(`stopwatch:${params.sessionCode}`);
@@ -1364,8 +1528,10 @@ function SessionScreen({
               payload: { last_sequence: lastSequenceRef.current },
             });
           }
+          // Flush any events that were queued offline / during a previous kill.
+          flushDurableQueue();
         } else if (subscribeStatus === "CHANNEL_ERROR") {
-          rebuildFromServer();
+          rebuildFromServer().then(() => flushDurableQueue());
         }
       });
 
@@ -1388,8 +1554,20 @@ function SessionScreen({
     async (eventType: SessionEventType) => {
       const clientEventId = generateUUID();
       const clientRecordedAt = new Date().toISOString();
+      const localSeq = ++localSeqRef.current;
 
-      // Optimistic queue
+      // 1. Persist to durable queue BEFORE the network attempt — survives app kill.
+      const durableEntry: DurableQueueEntry = {
+        client_event_id: clientEventId,
+        event_type: eventType,
+        client_recorded_at: clientRecordedAt,
+        sequence: localSeq,
+        sessionCode: params.sessionCode,
+      };
+      await addToDurableQueue(params.sessionCode, durableEntry);
+      setDurableQueueDepth((d) => d + 1);
+
+      // 2. Optimistic in-memory queue (drives spinner while inflight).
       setPendingQueue((q) => [...q, { type: eventType, clientEventId, clientRecordedAt }]);
 
       const { data, error } = await supabase.rpc("record_session_event", {
@@ -1403,10 +1581,19 @@ function SessionScreen({
       setPendingQueue((q) => q.filter((e) => e.clientEventId !== clientEventId));
 
       if (error) {
-        // Concurrency rejection — refresh state
+        // Network error or concurrency rejection.
+        // The event stays in the durable queue and will be replayed on reconnect.
+        // Rebuild server state to stay consistent for concurrency errors.
         await rebuildFromServer();
+        // Re-sync the depth indicator from durable storage.
+        const remaining = await loadDurableQueue(params.sessionCode);
+        setDurableQueueDepth(remaining.length);
         return;
       }
+
+      // 3. Success: remove from durable queue.
+      await removeFromDurableQueue(params.sessionCode, clientEventId);
+      setDurableQueueDepth((d) => Math.max(0, d - 1));
 
       if (data) {
         const accepted = data as SessionEvent;
@@ -1419,7 +1606,7 @@ function SessionScreen({
         applyEvent(accepted);
       }
     },
-    [params.sessionId, params.participantId, applyEvent, rebuildFromServer]
+    [params.sessionId, params.participantId, params.sessionCode, applyEvent, rebuildFromServer]
   );
 
   // ── Button handlers ─────────────────────────────────────────────────────────
@@ -1453,13 +1640,15 @@ function SessionScreen({
   }, [params.sessionCode]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
-  const lcdMain = Math.min(Math.floor((width - 40) / 7.2), 72);
+  const lcdMain = lcdMainSize(width, height);
   const lapCount = laps.length;
   const lastLap = laps[0] ?? null;
   const isRunning = status === "running";
   const isStopped = status === "stopped";
   const isWaiting = status === "waiting";
-  const pendingCount = pendingQueue.length;
+  // Pending indicator: show spinner whenever there are unacknowledged events,
+  // whether inflight (pendingQueue) or queued for replay (durableQueueDepth).
+  const pendingCount = Math.max(pendingQueue.length, durableQueueDepth);
 
   // Current lap elapsed (time since last lap event or since start)
   const lastLapCumMs = laps[0]?.cumulativeMs ?? 0;
@@ -1740,7 +1929,7 @@ function SoloScreen({
   onBack: () => void;
 }) {
   useKeepAwake();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
 
   type SwState = "idle" | "running" | "paused";
 
@@ -1792,6 +1981,17 @@ function SoloScreen({
   }, []);
 
   useEffect(() => () => stopTick(), [stopTick]);
+
+  // ── Ongoing Android notification while running (#231) ──────────────────────
+  useEffect(() => {
+    if (swState === "running" && anchor.current !== null) {
+      // Chronometer zero point = now - elapsed = anchor - accumulated.
+      showRunningNotification("Solo Stopwatch", anchor.current - accum.current);
+    } else {
+      clearRunningNotification();
+    }
+  }, [swState]);
+  useEffect(() => () => clearRunningNotification(), []);
 
   const handleStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1848,7 +2048,7 @@ function SoloScreen({
       laps.length < 2 ? null : Math.min(...laps.map((l) => l.splitMs)),
     [laps]
   );
-  const lcdMain = Math.min(Math.floor((width - 40) / 7.2), 72);
+  const lcdMain = lcdMainSize(width, height);
 
   return (
     <SafeAreaView style={s.screen}>

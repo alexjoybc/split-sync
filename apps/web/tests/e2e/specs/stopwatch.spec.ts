@@ -106,11 +106,68 @@ test.describe('/stopwatch solo page', () => {
     await expect(page.getByRole('table', { name: /lap times/i })).toBeVisible();
   });
 
-  test('"Time together" stub is visible but disabled', async ({ page }) => {
+  test('positioning promise is stated: free, no ads, no subscription, no account', async ({ page }) => {
     await page.goto('/stopwatch');
-    const stub = page.getByLabel(/time together/i);
-    await expect(stub).toBeVisible();
-    await expect(stub).toHaveAttribute('aria-disabled', 'true');
+
+    // Top strip: Free · No ads · No subscription · No account
+    await expect(
+      page.getByLabel('Free. No ads. No subscription. No account needed.'),
+    ).toBeVisible();
+
+    // Spelled-out section at the bottom
+    const deal = page.getByRole('region', { name: /why splitsync stopwatch is free/i });
+    await expect(deal).toBeVisible();
+    await expect(deal).toContainText(/no ads/i);
+    await expect(deal).toContainText(/no.*subscription/i);
+    await expect(deal).toContainText(/display name/i);
+  });
+
+  test('"Time together" shows "Sign in to share" for anonymous users and is clickable', async ({ page }) => {
+    await page.goto('/stopwatch');
+    // Anonymous users see a "Sign in to share" button (not disabled — it redirects to /login)
+    const btn = page.getByRole('button', { name: /sign in to share/i });
+    await expect(btn).toBeVisible();
+    // It must NOT carry aria-disabled — it is a real interactive button
+    await expect(btn).not.toHaveAttribute('aria-disabled', 'true');
+    await expect(btn).not.toBeDisabled();
+  });
+
+  test('large display toggle enlarges the timer and toggles back', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    const toggle = page.getByRole('button', { name: /enter large display mode/i });
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+    // Enter large-display mode
+    await toggle.click();
+    const exitToggle = page.getByRole('button', { name: /exit large display mode/i });
+    await expect(exitToggle).toBeVisible();
+    await expect(exitToggle).toHaveAttribute('aria-pressed', 'true');
+
+    // Dial carries the enlarged modifier and the timer stays visible
+    await expect(page.locator('.sw-dial--large')).toBeVisible();
+    await expect(page.getByRole('timer')).toBeVisible();
+
+    // Masthead is hidden to maximise the timer
+    await expect(page.getByRole('heading', { name: /stopwatch/i })).not.toBeVisible();
+
+    // Exit large-display mode
+    await exitToggle.click();
+    await expect(page.getByRole('button', { name: /enter large display mode/i })).toBeVisible();
+    await expect(page.locator('.sw-dial--large')).not.toBeVisible();
+    await expect(page.getByRole('heading', { name: /stopwatch/i })).toBeVisible();
+  });
+
+  test('large display mode still allows start/stop', async ({ page }) => {
+    await page.goto('/stopwatch');
+    await page.getByRole('button', { name: /enter large display mode/i }).click();
+
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible();
+    await page.waitForTimeout(150);
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+    await expect(page.getByRole('button', { name: /start stopwatch/i })).toBeVisible();
   });
 
   test('no organizer controls present', async ({ page }) => {

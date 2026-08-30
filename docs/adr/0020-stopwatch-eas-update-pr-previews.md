@@ -1,4 +1,4 @@
-# ADR 0018 — EAS Update PR Previews for the Stopwatch App
+# ADR 0020 — EAS Update PR Previews for the Stopwatch App
 
 ## Status
 
