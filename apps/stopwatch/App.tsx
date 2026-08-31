@@ -120,6 +120,7 @@ type AppScreen =
   | "home"
   | "create"
   | "join"
+  | "viewer"
   | "session"
   | "solo";
 
@@ -170,6 +171,10 @@ interface SessionNavParams {
 }
 
 interface JoinNavParams {
+  code: string;
+}
+
+interface LiveViewNavParams {
   code: string;
 }
 
@@ -299,6 +304,10 @@ function extractCodeFromUrl(url: string): string | null {
   //   org.splitsync.stopwatch://s/<code>
   const m = url.match(/\/s\/([A-Z2-9]{6})(?:[/?#]|$)/i);
   return m ? m[1].toUpperCase() : null;
+}
+
+function isLiveViewUrl(url: string): boolean {
+  return /\/s\/[A-Z2-9]{6}\/live(?:[/?#]|$)/i.test(url);
 }
 
 // ── Lap trend chart (native) ───────────────────────────────────────────────────
@@ -1541,10 +1550,12 @@ function CreateScreen({
 function JoinScreen({
   pendingCode,
   onJoined,
+  onView,
   onBack,
 }: {
   pendingCode: string | null;
   onJoined: (params: SessionNavParams) => void;
+  onView: (code: string) => void;
   onBack: () => void;
 }) {
   const [code, setCode] = useState(pendingCode ?? "");
@@ -1675,9 +1686,79 @@ function JoinScreen({
             <Text style={s.primaryBtnText}>JOIN</Text>
           )}
         </Pressable>
+        <Pressable
+          onPress={() => onView(code.trim().toUpperCase())}
+          disabled={code.trim().length !== 6}
+          style={({ pressed }) => [
+            s.outlineBtn,
+            { marginTop: 12, opacity: pressed || code.trim().length !== 6 ? 0.7 : 1 },
+          ]}
+        >
+          <Text style={s.outlineBtnText}>VIEW ONLY</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+// ── Screen: Live viewer ───────────────────────────────────────────────────────
+// A viewer has only a code. The live-view RPC omits all bearer identifiers, and
+// Broadcast is used solely to prompt an authoritative RPC refresh.
+function LiveViewerScreen({ code, fontsLoaded, onBack }: { code: string; fontsLoaded: boolean; onBack: () => void }) {
+  useKeepAwake();
+  const { width, height } = useWindowDimensions();
+  const [payload, setPayload] = useState<{
+    session: { name: string; status: "waiting" | "running" | "stopped"; t0_server: string | null };
+    participants: { display_name: string; is_owner: boolean }[];
+    events: { event_type: SessionEventType; client_recorded_at: string; actor_name: string; sequence: number }[];
+  } | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const refresh = useCallback(async () => {
+    const { data, error } = await supabase.rpc("get_casual_session_live_view", { p_code: code });
+    if (error || !data) { setUnavailable(true); return; }
+    setPayload(data as NonNullable<typeof payload>);
+  }, [code]);
+  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const channel = supabase.channel(`stopwatch:${code}`)
+      .on("broadcast", { event: "session_event" }, refresh)
+      .on("broadcast", { event: "participant_joined" }, refresh)
+      .on("broadcast", { event: "participant_left" }, refresh)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [code, refresh]);
+  useEffect(() => {
+    const tick = setInterval(() => {
+      if (payload?.session.status === "running" && payload.session.t0_server) setElapsedMs(Math.max(0, Date.now() - new Date(payload.session.t0_server).getTime()));
+    }, 30);
+    return () => clearInterval(tick);
+  }, [payload?.session.status, payload?.session.t0_server]);
+  const laps = useMemo(() => {
+    let previous: string | null = null;
+    let total = 0;
+    const derived: DerivedLap[] = [];
+    for (const event of [...(payload?.events ?? [])].sort((a, b) => a.sequence - b.sequence)) {
+      if (event.event_type === "reset") { previous = null; total = 0; derived.length = 0; }
+      else if (event.event_type === "start") previous = event.client_recorded_at;
+      else if (event.event_type === "lap" && previous) {
+        const splitMs = new Date(event.client_recorded_at).getTime() - new Date(previous).getTime();
+        total += splitMs;
+        derived.push({ lapNum: derived.length + 1, splitMs, cumulativeMs: total, actorName: event.actor_name });
+        previous = event.client_recorded_at;
+      }
+    }
+    return derived.reverse();
+  }, [payload]);
+  return <SafeAreaView style={s.screen}>
+    <StatusBar barStyle="light-content" backgroundColor={C.casing} />
+    <CasingBar title={payload?.session.name ?? "LIVE VIEW"} rightSlot={<Pressable onPress={onBack} style={s.backBtn}><Text style={s.backBtnText}>← Back</Text></Pressable>} />
+    {unavailable ? <View style={s.together}><Text style={s.mutedText}>This live session is unavailable.</Text></View> : !payload ? <View style={s.together}><ActivityIndicator color={C.ink} /></View> : <>
+      <ScrollView horizontal style={s.participantStrip} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 6 }}><Text style={s.instrLabel}>VIEW ONLY · {payload.session.status.toUpperCase()}</Text>{payload.participants.map((participant, index) => <View key={`${participant.display_name}-${index}`} style={s.participantPill}><Text style={s.participantPillText}>{participant.display_name}{participant.is_owner ? " ★" : ""}</Text></View>)}</ScrollView>
+      <View style={s.instrument}><View style={s.instrHeader}><Text style={s.instrLabel}>LIVE RIDER DISPLAY</Text><Text style={[s.instrLabel, { marginLeft: "auto" as unknown as number }]}>{code}</Text></View><View style={s.instrMain}><LcdDisplay ms={elapsedMs} mainSize={lcdMainSize(width, height)} fontLoaded={fontsLoaded} /></View></View>
+      {laps.length ? <View style={s.table}><View style={s.tableHead}><Text style={[s.th, s.cLap]}>LAP</Text><Text style={[s.th, s.cSplit]}>SPLIT</Text><Text style={[s.th, s.cTime]}>TIME</Text><Text style={[s.th, s.cActor]}>BY</Text></View><FlatList data={laps} keyExtractor={(lap) => String(lap.lapNum)} renderItem={({ item }) => <View style={s.tableRow}><Text style={[s.td, s.cLap]}>{item.lapNum}</Text><Text style={[s.td, s.cSplit]}>{fmtCompact(item.splitMs)}</Text><Text style={[s.td, s.cTime]}>{fmtCompact(item.cumulativeMs)}</Text><Text style={[s.td, s.cActor]}>{item.actorName}</Text></View>} /></View> : <View style={s.together}><Text style={s.mutedText}>Waiting for laps…</Text></View>}
+    </>}
+  </SafeAreaView>;
 }
 
 // ── Durable offline queue ──────────────────────────────────────────────────────
@@ -4217,6 +4298,7 @@ function RootNavigator() {
   const [userName, setUserName] = useState<string | null>(null);
   const [sessionParams, setSessionParams] = useState<SessionNavParams | null>(null);
   const [joinParams, setJoinParams] = useState<JoinNavParams | null>(null);
+  const [liveViewParams, setLiveViewParams] = useState<LiveViewNavParams | null>(null);
 
   // ── Auth check on mount ─────────────────────────────────────────────────────
   // This only tracks whether the user already has a session so "Time
@@ -4257,8 +4339,13 @@ function RootNavigator() {
       if (url) {
         const code = extractCodeFromUrl(url);
         if (code) {
-          setJoinParams({ code });
-          setScreen("join");
+          if (isLiveViewUrl(url)) {
+            setLiveViewParams({ code });
+            setScreen("viewer");
+          } else {
+            setJoinParams({ code });
+            setScreen("join");
+          }
         }
       }
     });
@@ -4267,8 +4354,13 @@ function RootNavigator() {
     const sub = ExpoLinking.addEventListener("url", ({ url }) => {
       const code = extractCodeFromUrl(url);
       if (code) {
-        setJoinParams({ code });
-        setScreen("join");
+        if (isLiveViewUrl(url)) {
+          setLiveViewParams({ code });
+          setScreen("viewer");
+        } else {
+          setJoinParams({ code });
+          setScreen("join");
+        }
       }
     });
     return () => sub.remove();
@@ -4340,9 +4432,17 @@ function RootNavigator() {
           setSessionParams(params);
           setScreen("session");
         }}
+        onView={(code) => {
+          setLiveViewParams({ code });
+          setScreen("viewer");
+        }}
         onBack={() => setScreen(userEmail ? "home" : "login")}
       />
     );
+  }
+
+  if (screen === "viewer" && liveViewParams) {
+    return <LiveViewerScreen code={liveViewParams.code} fontsLoaded={!!fontsLoaded} onBack={() => setScreen(userEmail ? "home" : "login")} />;
   }
 
   if (screen === "session" && sessionParams) {

@@ -227,6 +227,7 @@ Three tables support this surface (migration `20260830000001_casual_stopwatch_se
 | `record_session_event(session_id, participant_id, event_type, client_recorded_at, client_event_id)` | Anon | Validates membership, enforces concurrency rules, upserts event (idempotent on client id) |
 | `get_session_state(session_id, participant_id)` | Anon | Returns full session + participants + events for catch-up on reconnect |
 | `get_casual_session_results(code)` | Anon | Read-only results for **terminal** sessions (stopped or expired) — session header, participant display names, and the ordered event log. Serves the `/stopwatch/s/<code>/results` permalink (migration `20260830000003`, ADR 0022) |
+| `get_casual_session_live_view(code)` | Anon | Read-only sanitized state for non-expired sessions. Serves `/stopwatch/s/<code>/live` and returns no bearer identifiers (migration `20260831000001`, ADR 0023) |
 
 The `participant_id` UUID returned on join acts as a bearer token: calls without a valid `(session_id, participant_id)` pair are rejected. The owner RLS policy (`owner_id = auth.uid()::text`) allows authenticated creators to list their own sessions directly.
 
@@ -249,6 +250,8 @@ split_ms   = client_recorded_at[lap_N] - client_recorded_at[lap_N-1]
 
 Both `casual_session_events` and `casual_session_participants` are added to the `supabase_realtime` publication. The Broadcast channel key is `stopwatch:<code>` (e.g., `stopwatch:AB3K9X`). All participants in the same session subscribe to the same channel. The anon role can use Broadcast channels without table SELECT grants, which is why Broadcast is preferred over `postgres_changes` for this surface.
 
+The public live-view clients treat Broadcast only as an invalidation signal and re-fetch the sanitized live-view RPC; Broadcast payloads are not an authorization boundary. Viewers have no participant record and do not count toward `participant_cap`.
+
 Migration `20260829000001_realtime_publication.sql` first enabled the publication; `20260830000001_casual_stopwatch_sessions.sql` adds the three casual-stopwatch tables.
 
 ### Deep links
@@ -256,6 +259,7 @@ Migration `20260829000001_realtime_publication.sql` first enabled the publicatio
 | Surface | URL pattern |
 | --- | --- |
 | Web (HTTPS App Link) | `https://splitsync.org/stopwatch/s/<code>` |
+| Web/native live view | `https://splitsync.org/stopwatch/s/<code>/live` |
 | Android native scheme | `org.splitsync.stopwatch://s/<code>` |
 
 Both link directly into the Join screen. The native app registers an Android intent filter for the HTTPS pattern (App Links / `autoVerify: true`); `assetlinks.json` at `apps/web/public/.well-known/assetlinks.json` must include the app's signing-certificate SHA-256 to enable verified deep links. The `<code>` is the 6-character alphanumeric join code stored in `casual_sessions.code`.
