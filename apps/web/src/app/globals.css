@@ -333,6 +333,10 @@ a:focus-visible {
   /* Icon-only controls — 44px minimum meets WCAG 2.5.5 touch-target guideline */
   --sw-icon-btn-size:     44px;
 
+  /* Brand wordmark (relocated from masthead to page footer, #290) */
+  --sw-brand-font-size:   11px;
+  --sw-brand-tracking:    0.15em;
+
   /* Lap list */
   --sw-lap-best-bg:       var(--race-yellow);
   --sw-lap-best-color:    var(--race-ink);
@@ -659,6 +663,21 @@ a:focus-visible {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--race-muted);
+}
+
+/* SplitSync wordmark relocated from masthead to page bottom (#290) */
+.sw-brand-footer {
+  font-size: var(--sw-brand-font-size);
+  font-weight: 900;
+  letter-spacing: var(--sw-brand-tracking);
+  text-transform: uppercase;
+  color: var(--race-muted);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.sw-brand-footer:hover {
+  color: var(--race-ink);
 }
 
 /* ── Lap stats strip (BEST / WORST / AVG) ────────────────────────────── */

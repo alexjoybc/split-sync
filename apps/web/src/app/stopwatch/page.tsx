@@ -1770,7 +1770,7 @@ export default function StopwatchPage() {
             <div className="mt-6 text-center no-print" data-testid="sw-brand-footer">
               <Link
                 href="/"
-                className="text-[11px] font-black uppercase tracking-[0.15em] text-race-muted hover:text-race-ink transition-colors"
+                className="sw-brand-footer"
                 aria-label="SplitSync home"
               >
                 SplitSync
