@@ -49,7 +49,7 @@ function StatusBadge({ status }: { status: string }) {
     <span
       className={classNames(
         "inline-flex px-1.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-white",
-        status === "dsq" ? "bg-[#ec1c24]" : "bg-zinc-500"
+        status === "dsq" ? "bg-race-red" : "bg-race-muted"
       )}
     >
       {STATUS_LABEL[status] ?? status}
@@ -87,7 +87,7 @@ function PenaltyBadge({ row }: { row: StandingRow }) {
   return (
     <span
       title={penaltyTooltip(row)}
-      className="ml-1 inline-flex cursor-help px-1 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white bg-[#ec1c24]"
+      className="ml-1 inline-flex cursor-help px-1 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white bg-race-red"
     >
       Penalty
     </span>
@@ -115,7 +115,7 @@ function PointsClassification({ race, crossings, entries }: { race: Race; crossi
   return (
     <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
       {activeSprint && (
-        <div className={classNames("border-2 border-zinc-950 px-4 py-3", activeSprint.isFinal ? "bg-[#ec1c24] text-white" : "bg-race-yellow text-race-ink")}>
+        <div className={classNames("border-2 border-race-ink px-4 py-3", activeSprint.isFinal ? "bg-race-red text-white" : "bg-race-yellow text-race-ink")}>
           <p className="text-xs font-black uppercase tracking-[0.2em]">
             {activeSprint.isFinal ? `Final sprint — lap ${activeSprint.lap} — double points` : `Sprint lap ${activeSprint.lap}`}
           </p>
@@ -131,23 +131,23 @@ function PointsClassification({ race, crossings, entries }: { race: Race; crossi
         </div>
       )}
 
-      <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-b-2 border-zinc-950 pb-3">
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-b-2 border-race-ink pb-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ec1c24]">Sprint points overlay</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-blue-primary">Sprint points overlay</p>
           <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Points classification</h2>
         </div>
-        <p className="text-xs font-black uppercase tracking-[0.1em] text-zinc-600">{nextSprintText}</p>
+        <p className="text-xs font-black uppercase tracking-[0.1em] text-race-muted">{nextSprintText}</p>
       </div>
 
-      <div className="mt-4 overflow-hidden border-b-2 border-zinc-950">
+      <div className="mt-4 overflow-hidden border-b-2 border-race-ink">
         <table className="w-full table-fixed border-collapse">
           <thead>
-            <tr className="bg-zinc-950 text-left text-[10px] font-black uppercase tracking-[0.14em] text-white">
+            <tr className="bg-race-ink text-left text-[10px] font-black uppercase tracking-[0.14em] text-white">
               <th className="w-12 py-2 text-center sm:w-16">Rank</th>
-              <th className="w-14 border-l border-zinc-700 py-2 text-center sm:w-16">Bib</th>
-              <th className="border-l border-zinc-700 px-3 py-2">Rider</th>
-              <th className="w-16 border-l border-zinc-700 py-2 text-center">Points</th>
-              <th className="w-12 border-l border-zinc-700 py-2 text-center">Laps</th>
+              <th className="w-14 border-l border-white/20 py-2 text-center sm:w-16">Bib</th>
+              <th className="border-l border-white/20 px-3 py-2">Rider</th>
+              <th className="w-16 border-l border-white/20 py-2 text-center">Points</th>
+              <th className="w-12 border-l border-white/20 py-2 text-center">Laps</th>
             </tr>
           </thead>
           <tbody>
@@ -157,16 +157,16 @@ function PointsClassification({ race, crossings, entries }: { race: Race; crossi
               return (
                 <tr
                   key={row.bib}
-                  className={classNames("border-t border-zinc-300", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", statused && "opacity-70")}
+                  className={classNames("border-t border-race-line", isLeader ? "bg-race-yellow" : index % 2 === 0 ? "bg-white" : "bg-race-panel-alt", statused && "opacity-70")}
                   style={isLeader ? { boxShadow: "var(--race-leader-shadow)" } : undefined}
                 >
-                  <td className={classNames("py-3 text-center text-lg font-black race-numeral", isLeader ? "bg-zinc-950 text-[#f6d428] race-angle-cut" : "text-zinc-700")}>
+                  <td className={classNames("py-3 text-center text-lg font-black race-numeral", isLeader ? "bg-race-ink text-race-yellow race-angle-cut" : "text-race-muted")}>
                     {statused ? <StatusBadge status={row.status} /> : row.position ?? "—"}
                   </td>
-                  <td className="border-l border-zinc-300 py-3 text-center"><span className="race-numeral inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black text-white">{row.bib}</span></td>
-                  <td className="border-l border-zinc-300 px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
-                  <td className="race-numeral border-l border-zinc-300 py-3 text-center text-base font-black">{row.points}</td>
-                  <td className="race-numeral border-l border-zinc-300 py-3 text-center text-base font-black">{row.laps}</td>
+                  <td className="border-l border-race-line py-3 text-center"><span className="race-numeral inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-sm font-black text-white">{row.bib}</span></td>
+                  <td className="border-l border-race-line px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}</p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-race-muted">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
+                  <td className="race-numeral border-l border-race-line py-3 text-center text-base font-black">{row.points}</td>
+                  <td className="race-numeral border-l border-race-line py-3 text-center text-base font-black">{row.laps}</td>
                 </tr>
               );
             })}
@@ -208,16 +208,16 @@ function LiveRunnerCard({
   const progress = getProgress(elapsedMs, fastestMs);
 
   return (
-    <div className="flex items-center gap-3 border-t border-zinc-200 px-4 py-3">
-      <span className="inline-flex min-w-10 justify-center bg-zinc-950 px-2 py-1 text-sm font-black tabular-nums text-white">
+    <div className="flex items-center gap-3 border-t border-race-line px-4 py-3">
+      <span className="inline-flex min-w-10 justify-center bg-race-ink px-2 py-1 text-sm font-black tabular-nums text-white">
         #{runner.bib}
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-black uppercase">{runner.name}</p>
         {runner.team && (
-          <p className="text-xs font-bold uppercase text-zinc-500">{runner.team}</p>
+          <p className="text-xs font-bold uppercase text-race-muted">{runner.team}</p>
         )}
-        <div className="mt-1 h-2 w-full bg-zinc-200">
+        <div className="mt-1 h-2 w-full bg-race-panel-alt">
         {progress.indeterminate ? (
           <div className="h-2 w-full animate-pulse bg-race-yellow" />
         ) : (
@@ -316,27 +316,27 @@ function TimeTrialBoard({
     <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
       {/* Now Running section — hidden once the race is finished */}
       {race.status !== "finished" && (
-        <div className="mb-6 border-4 border-zinc-950 bg-white">
-          <div className="border-b-2 border-zinc-950 bg-zinc-950 px-4 py-2">
+          <div className="mb-6 border-4 border-race-ink bg-white">
+          <div className="border-b-2 border-race-ink bg-race-ink px-4 py-2">
             <p className="text-[10px] font-black uppercase tracking-[0.24em] text-race-yellow">
               Now on course{runningEntries.length > 1 ? ` (${runningEntries.length})` : ""}
             </p>
           </div>
           {runningEntries.length === 0 ? (
-            <p className="px-4 py-5 text-sm font-black uppercase text-zinc-500">
+            <p className="px-4 py-5 text-sm font-black uppercase text-race-muted">
               Waiting for next rider
             </p>
           ) : runningEntries.length === 1 && singleRunner ? (
             /* Hero layout for a single runner */
             <div className="p-4">
               <div className="flex items-baseline gap-3">
-                <span className="inline-flex min-w-10 justify-center bg-zinc-950 px-2 py-1 text-xl font-black tabular-nums text-white">
+                <span className="inline-flex min-w-10 justify-center bg-race-ink px-2 py-1 text-xl font-black tabular-nums text-white">
                   #{singleRunner.bib}
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xl font-black uppercase">{singleRunner.name}</p>
                   {singleRunner.team && (
-                    <p className="text-xs font-bold uppercase text-zinc-500">{singleRunner.team}</p>
+                    <p className="text-xs font-bold uppercase text-race-muted">{singleRunner.team}</p>
                   )}
                 </div>
                 <span className="ml-auto flex items-baseline gap-2">
@@ -345,14 +345,14 @@ function TimeTrialBoard({
                   </span>
                   {showRank && projectedPosition != null && (
                     <span
-                      className={`inline-block px-2 py-0.5 text-xs font-black tabular-nums ${projectedPosition === 1 ? "bg-race-yellow text-race-ink" : "bg-zinc-200 text-zinc-800"}`}
+                      className={`inline-block px-2 py-0.5 text-xs font-black tabular-nums ${projectedPosition === 1 ? "bg-race-yellow text-race-ink" : "bg-race-panel-alt text-race-ink"}`}
                     >
                       P{projectedPosition}
                     </span>
                   )}
                 </span>
               </div>
-              <div className="mt-3 h-3 w-full bg-zinc-300">
+              <div className="mt-3 h-3 w-full bg-race-line">
                 {heroProgress?.indeterminate ? (
                   <div className="h-3 w-full animate-pulse bg-race-yellow" />
                 ) : (
@@ -382,13 +382,13 @@ function TimeTrialBoard({
       {/* Up Next */}
       {queue.length > 0 && (
         <div className="mb-6">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-zinc-500">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-race-muted">
             Up next
           </p>
-          <ol className="divide-y divide-zinc-200 border-y-2 border-zinc-950">
+          <ol className="divide-y divide-race-line border-y-2 border-race-ink">
             {queue.slice(0, 5).map((r) => (
               <li key={r.bib} className="flex items-center gap-3 bg-race-paper px-3 py-2">
-                <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black tabular-nums text-white">
+                <span className="inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-sm font-black tabular-nums text-white">
                   {r.bib}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm font-black uppercase text-race-ink">
@@ -398,7 +398,7 @@ function TimeTrialBoard({
             ))}
           </ol>
           {queue.length > 5 && (
-            <p className="mt-2 text-xs font-bold uppercase text-zinc-500">
+            <p className="mt-2 text-xs font-bold uppercase text-race-muted">
               +{queue.length - 5} more
             </p>
           )}
@@ -406,23 +406,23 @@ function TimeTrialBoard({
       )}
 
       {/* Results table */}
-      <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-zinc-950 pb-3">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-race-ink pb-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ec1c24]">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-blue-primary">
             Live ranking by time
           </p>
           <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Classification</h2>
         </div>
       </div>
-      <div className="overflow-hidden border-b-2 border-zinc-950">
+      <div className="overflow-hidden border-b-2 border-race-ink">
         <table className="w-full table-fixed border-collapse">
           <thead>
-            <tr className="bg-zinc-950 text-left text-[10px] font-black uppercase tracking-[0.14em] text-white">
+            <tr className="bg-race-ink text-left text-[10px] font-black uppercase tracking-[0.14em] text-white">
               <th className="w-12 py-2 text-center sm:w-16">Pos</th>
-              <th className="w-14 border-l border-zinc-700 py-2 text-center sm:w-16">Bib</th>
-              <th className="border-l border-zinc-700 px-3 py-2">Rider</th>
-              <th className="w-24 border-l border-zinc-700 py-2 text-center sm:w-28">Time</th>
-              <th className="w-20 border-l border-zinc-700 py-2 pr-2 text-right sm:w-24">Gap</th>
+              <th className="w-14 border-l border-white/20 py-2 text-center sm:w-16">Bib</th>
+              <th className="border-l border-white/20 px-3 py-2">Rider</th>
+              <th className="w-24 border-l border-white/20 py-2 text-center sm:w-28">Time</th>
+              <th className="w-20 border-l border-white/20 py-2 pr-2 text-right sm:w-24">Gap</th>
             </tr>
           </thead>
           <tbody>
@@ -432,68 +432,68 @@ function TimeTrialBoard({
                 <tr
                   key={row.bib}
                   className={classNames(
-                    "border-t border-zinc-300",
-                    isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]"
+                    "border-t border-race-line",
+                    isLeader ? "bg-race-yellow" : index % 2 === 0 ? "bg-white" : "bg-race-panel-alt"
                   )}
                   style={isLeader ? { boxShadow: "var(--race-leader-shadow)" } : undefined}
                 >
                   <td
                     className={classNames(
                       "py-3 text-center text-lg font-black race-numeral",
-                      isLeader ? "bg-zinc-950 text-[#f6d428] race-angle-cut" : "text-zinc-700"
+                      isLeader ? "bg-race-ink text-race-yellow race-angle-cut" : "text-race-muted"
                     )}
                   >
                     {row.position ?? "—"}
                   </td>
-                  <td className="border-l border-zinc-300 py-3 text-center">
-                    <span className="race-numeral inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black text-white">
+                  <td className="border-l border-race-line py-3 text-center">
+                    <span className="race-numeral inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-sm font-black text-white">
                       {row.bib}
                     </span>
                   </td>
-                  <td className="border-l border-zinc-300 px-3 py-3">
+                  <td className="border-l border-race-line px-3 py-3">
                     <p className="truncate text-sm font-black uppercase sm:text-base">{row.name}</p>
                     {row.team && (
-                      <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                      <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-race-muted">
                         {row.team}
                       </p>
                     )}
                     {row.phase === "needs-review" && (
-                      <span className="mt-0.5 inline-flex px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white bg-zinc-500">
+                      <span className="mt-0.5 inline-flex px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-white bg-race-muted">
                         Review
                       </span>
                     )}
                   </td>
-                  <td className="race-numeral border-l border-zinc-300 py-3 text-center text-sm font-bold">
+                  <td className="race-numeral border-l border-race-line py-3 text-center text-sm font-bold">
                     {row.elapsedMs != null ? fmtElapsedMs(row.elapsedMs) : "—"}
                   </td>
-                  <td className="race-numeral border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black">
+                  <td className="race-numeral border-l border-race-line py-3 pr-2 text-right text-sm font-black">
                     {row.gapText || "—"}
                   </td>
                 </tr>
               );
             })}
             {dnsRows.map((row) => (
-              <tr key={row.bib} className="border-t border-zinc-300 bg-white opacity-70">
+              <tr key={row.bib} className="border-t border-race-line bg-white opacity-70">
                 <td className="py-3 text-center">
                   <StatusBadge status={row.status} />
                 </td>
-                <td className="border-l border-zinc-300 py-3 text-center">
-                  <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black tabular-nums text-white">
+                <td className="border-l border-race-line py-3 text-center">
+                  <span className="inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-sm font-black tabular-nums text-white">
                     {row.bib}
                   </span>
                 </td>
-                <td className="border-l border-zinc-300 px-3 py-3">
+                <td className="border-l border-race-line px-3 py-3">
                   <p className="truncate text-sm font-black uppercase sm:text-base">{row.name}</p>
                   {row.team && (
-                    <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">
+                    <p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-race-muted">
                       {row.team}
                     </p>
                   )}
                 </td>
-                <td className="border-l border-zinc-300 py-3 text-center text-sm font-bold tabular-nums">
+                <td className="border-l border-race-line py-3 text-center text-sm font-bold tabular-nums">
                   —
                 </td>
-                <td className="border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black tabular-nums">
+                <td className="border-l border-race-line py-3 pr-2 text-right text-sm font-black tabular-nums">
                   —
                 </td>
               </tr>
@@ -502,7 +502,7 @@ function TimeTrialBoard({
               <tr>
                 <td
                   colSpan={5}
-                  className="py-8 text-center text-sm font-bold uppercase text-zinc-500"
+                  className="py-8 text-center text-sm font-bold uppercase text-race-muted"
                 >
                   No finishers yet
                 </td>
@@ -511,9 +511,9 @@ function TimeTrialBoard({
           </tbody>
         </table>
       </div>
-      <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+      <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-race-muted">
         {classificationCopy(race).footer} ·{" "}
-        <Link href={`/announce/${race.id}`} className="underline hover:text-zinc-800">
+        <Link href={`/announce/${race.id}`} className="underline hover:text-race-ink">
           Announcer / TV view
         </Link>
       </p>
@@ -662,7 +662,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
             <h1 className="mt-1 truncate text-xl font-black uppercase tracking-tight sm:text-2xl">{race.name}</h1>
           </div>
           <div className="shrink-0 border-l border-white/25 pl-4 text-right">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400">Race time</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-race-muted">Race time</p>
             <p className="mt-0.5 text-lg font-black tabular-nums">
               {race.status === "active" && race.started_at ? <RaceClock startedAt={race.started_at} /> : "—"}
             </p>
@@ -671,21 +671,21 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
       </header>
 
       {race.results_under_revision && (
-        <div className="border-b-4 border-zinc-950 bg-race-yellow px-4 py-2 text-center sm:px-6">
+        <div className="border-b-4 border-race-ink bg-race-yellow px-4 py-2 text-center sm:px-6">
           <p className="text-xs font-black uppercase tracking-[0.14em] text-race-ink">
             Results under revision · The organizer is correcting this race before republishing
           </p>
         </div>
       )}
 
-      <section className="border-b-4 border-zinc-950 bg-white px-4 py-5 sm:px-6">
-        <div className="mx-auto grid max-w-4xl grid-cols-[1.1fr_1fr_1fr] divide-x-2 divide-zinc-950">
+      <section className="border-b-4 border-race-ink bg-white px-4 py-5 sm:px-6">
+        <div className="mx-auto grid max-w-4xl grid-cols-[1.1fr_1fr_1fr] divide-x-2 divide-race-ink">
           <div className="pr-3 sm:pr-5">
-            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-zinc-500">Race status</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-race-muted">Race status</p>
             {race.status === "active" ? (
               <div
                 className="race-angle-cut mt-1 inline-flex items-center gap-1.5 bg-race-red px-2 py-1"
-                style={{ boxShadow: "var(--race-live-shadow)", "--race-pulse-color": "#ffffff" } as React.CSSProperties}
+                style={{ boxShadow: "var(--race-live-shadow)" }}
               >
                 <span className="race-live-pulse shrink-0" aria-hidden="true" />
                 <span className="text-xs font-black uppercase tracking-[0.2em] text-white">Live</span>
@@ -710,9 +710,9 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
       ) : (
         <>
           <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
-            <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-zinc-950 pb-3">
+            <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-race-ink pb-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#ec1c24]">{classificationCopy(race).kicker}</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-blue-primary">{classificationCopy(race).kicker}</p>
                 <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Classification</h2>
               </div>
               <div className="flex items-center gap-2">
@@ -720,15 +720,15 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                   type="button"
                   onClick={() => setShowPodium((v) => !v)}
                   className={classNames(
-                    "border-2 border-zinc-950 px-3 py-2 text-xs font-black uppercase tracking-[0.1em]",
-                    showPodium ? "bg-zinc-950 text-white" : "bg-white text-zinc-950 hover:bg-zinc-100"
+                    "border-2 border-race-ink px-3 py-2 text-xs font-black uppercase tracking-[0.1em]",
+                    showPodium ? "bg-race-ink text-white" : "bg-white text-race-ink hover:bg-race-panel-alt"
                   )}
                 >
                   Podium
                 </button>
                 <div className="relative w-48 sm:w-60">
-                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find bib / rider" className="w-full border-2 border-zinc-950 bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-zinc-400 focus:border-[#ec1c24]" />
-                  <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-zinc-500" />
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find bib / rider" className="w-full border-2 border-race-ink bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-race-muted focus:border-race-blue-primary" />
+                  <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-race-muted" />
                 </div>
               </div>
             </div>
@@ -739,8 +739,8 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                   type="button"
                   onClick={() => setCategory(null)}
                   className={classNames(
-                    "border-2 border-zinc-950 px-3 py-1.5 text-xs font-black uppercase tracking-[0.08em]",
-                    category === null ? "bg-zinc-950 text-white" : "bg-white text-zinc-950 hover:bg-zinc-100"
+                    "border-2 border-race-ink px-3 py-1.5 text-xs font-black uppercase tracking-[0.08em]",
+                    category === null ? "bg-race-ink text-white" : "bg-white text-race-ink hover:bg-race-panel-alt"
                   )}
                 >
                   Overall
@@ -751,8 +751,8 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                     type="button"
                     onClick={() => setCategory(cat)}
                     className={classNames(
-                      "border-2 border-zinc-950 px-3 py-1.5 text-xs font-black uppercase tracking-[0.08em]",
-                      category === cat ? "bg-zinc-950 text-white" : "bg-white text-zinc-950 hover:bg-zinc-100"
+                      "border-2 border-race-ink px-3 py-1.5 text-xs font-black uppercase tracking-[0.08em]",
+                      category === cat ? "bg-race-ink text-white" : "bg-white text-race-ink hover:bg-race-panel-alt"
                     )}
                   >
                     {cat}
@@ -764,16 +764,16 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
             {showPodium && (
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 {podiums.map(({ category: cat, rows }) => (
-                  <div key={cat} className="border-2 border-zinc-950 bg-white">
-                    <p className="border-b-2 border-zinc-950 bg-zinc-950 px-3 py-1.5 text-xs font-black uppercase tracking-[0.1em] text-[#f6d428]">{cat}</p>
+                  <div key={cat} className="border-2 border-race-ink bg-white">
+                    <p className="border-b-2 border-race-ink bg-race-ink px-3 py-1.5 text-xs font-black uppercase tracking-[0.1em] text-race-yellow">{cat}</p>
                     {rows.length === 0 ? (
-                      <p className="px-3 py-3 text-xs font-bold uppercase tracking-wide text-zinc-500">No finishers yet</p>
+                      <p className="px-3 py-3 text-xs font-bold uppercase tracking-wide text-race-muted">No finishers yet</p>
                     ) : (
-                      <ol className="divide-y divide-zinc-200">
+                      <ol className="divide-y divide-race-line">
                         {rows.map((row) => (
                           <li key={row.bib} className="flex items-center gap-3 px-3 py-2">
-                            <span className="w-5 shrink-0 text-lg font-black tabular-nums text-zinc-700">{row.position}</span>
-                            <span className="inline-flex min-w-8 shrink-0 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black tabular-nums text-white">{row.bib}</span>
+                            <span className="w-5 shrink-0 text-lg font-black tabular-nums text-race-muted">{row.position}</span>
+                            <span className="inline-flex min-w-8 shrink-0 justify-center bg-race-ink px-1.5 py-1 text-xs font-black tabular-nums text-white">{row.bib}</span>
                             <span className="min-w-0 flex-1 truncate text-sm font-black uppercase">{row.name}<PenaltyBadge row={row} /></span>
                           </li>
                         ))}
@@ -784,16 +784,16 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
               </div>
             )}
 
-            <div className="overflow-hidden border-b-2 border-zinc-950">
+            <div className="overflow-hidden border-b-2 border-race-ink">
               <table className="w-full table-fixed border-collapse">
                 <thead>
-                  <tr className="bg-zinc-950 text-left text-[10px] font-black uppercase tracking-[0.14em] text-white">
+                  <tr className="bg-race-ink text-left text-[10px] font-black uppercase tracking-[0.14em] text-white">
                     <th className="w-12 py-2 text-center sm:w-16">Rank</th>
-                    <th className="w-14 border-l border-zinc-700 py-2 text-center sm:w-16">Bib</th>
-                    <th className="border-l border-zinc-700 px-3 py-2">Rider</th>
-                    <th className="w-12 border-l border-zinc-700 py-2 text-center sm:w-16">Laps</th>
-                    <th className="hidden w-20 border-l border-zinc-700 py-2 text-center sm:table-cell">Last lap</th>
-                    <th className="w-20 border-l border-zinc-700 py-2 pr-2 text-right sm:w-28">Gap</th>
+                    <th className="w-14 border-l border-white/20 py-2 text-center sm:w-16">Bib</th>
+                    <th className="border-l border-white/20 px-3 py-2">Rider</th>
+                    <th className="w-12 border-l border-white/20 py-2 text-center sm:w-16">Laps</th>
+                    <th className="hidden w-20 border-l border-white/20 py-2 text-center sm:table-cell">Last lap</th>
+                    <th className="w-20 border-l border-white/20 py-2 pr-2 text-right sm:w-28">Gap</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -809,17 +809,17 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                           if (el) rowRefs.current.set(row.bib, el);
                           else rowRefs.current.delete(row.bib);
                         }}
-                        className={classNames("relative border-t border-zinc-300 transition-opacity", isLeader ? "bg-[#f6d428]" : index % 2 === 0 ? "bg-white" : "bg-[#e9e6df]", hit && !isLeader && "bg-[#ffdfdf] ring-2 ring-inset ring-[#ec1c24]", !hit && q !== "" && "opacity-35", statused && "opacity-70")}
+                        className={classNames("relative border-t border-race-line transition-opacity", isLeader ? "bg-race-yellow" : index % 2 === 0 ? "bg-white" : "bg-race-panel-alt", hit && !isLeader && "bg-race-red-tint ring-2 ring-inset ring-race-red", !hit && q !== "" && "opacity-35", statused && "opacity-70")}
                         style={isLeader ? { boxShadow: "var(--race-leader-shadow)" } : undefined}
                       >
-                        <td className={classNames("py-3 text-center text-lg font-black race-numeral", isLeader ? "bg-zinc-950 text-[#f6d428] race-angle-cut" : podium ? "text-[#ec1c24]" : "text-zinc-700")}>
+                        <td className={classNames("py-3 text-center text-lg font-black race-numeral", isLeader ? "bg-race-ink text-race-yellow race-angle-cut" : podium ? "text-race-red" : "text-race-muted")}>
                           {statused ? <StatusBadge status={row.status} /> : row.laps > 0 ? row.position : "—"}
                         </td>
-                        <td className="border-l border-zinc-300 py-3 text-center"><span className="race-numeral inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-sm font-black text-white">{row.bib}</span></td>
-                        <td className="border-l border-zinc-300 px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}<PenaltyBadge row={row} /></p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-zinc-500">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
-                        <td className="race-numeral border-l border-zinc-300 py-3 text-center text-base font-black">{row.laps}</td>
-                        <td className="race-numeral hidden border-l border-zinc-300 py-3 text-center text-sm font-bold sm:table-cell">{fmtLapTime(row.lastLapMs)}</td>
-                        <td className={classNames("race-numeral border-l border-zinc-300 py-3 pr-2 text-right text-sm font-black", row.gapText.startsWith("-") ? "text-[#ec1c24]" : "text-zinc-900")}>
+                        <td className="border-l border-race-line py-3 text-center"><span className="race-numeral inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-sm font-black text-white">{row.bib}</span></td>
+                        <td className="border-l border-race-line px-3 py-3"><p className="truncate text-sm font-black uppercase sm:text-base">{row.name}<PenaltyBadge row={row} /></p><p className="mt-0.5 truncate text-[10px] font-bold uppercase tracking-wide text-race-muted">{row.team ?? (row.isUnknownBib ? "Unregistered rider" : "Independent")}</p></td>
+                        <td className="race-numeral border-l border-race-line py-3 text-center text-base font-black">{row.laps}</td>
+                        <td className="race-numeral hidden border-l border-race-line py-3 text-center text-sm font-bold sm:table-cell">{fmtLapTime(row.lastLapMs)}</td>
+                        <td className={classNames("race-numeral border-l border-race-line py-3 pr-2 text-right text-sm font-black", row.gapText.startsWith("-") ? "text-race-red" : "text-race-ink")}>
                           {statused ? "" : isLeader ? "Leader" : row.gapText}
                         </td>
                       </tr>
@@ -828,9 +828,9 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-500">
+            <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.14em] text-race-muted">
               {classificationCopy(race).footer} ·{" "}
-              <Link href={`/announce/${raceId}`} className="underline hover:text-zinc-800">
+              <Link href={`/announce/${raceId}`} className="underline hover:text-race-ink">
                 Announcer / TV view
               </Link>
             </p>

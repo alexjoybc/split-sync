@@ -30,7 +30,7 @@
   --race-angle-offset: 14px;
 
   /* ── Live-pulse color ────────────────────────────────────────────────── */
-  --race-pulse-color: var(--race-red);
+  --race-pulse-color: white;
 
   /* ── Motion tokens ───────────────────────────────────────────────────── */
   --motion-live-pulse-duration:    1.4s;
