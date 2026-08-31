@@ -1,3 +1,5 @@
+import { palette } from '../../../../packages/palette/src/index';
+
 interface SplitSyncMarkProps {
   className?: string;
   /** Override width (default: derived from viewBox aspect ratio) */
@@ -31,17 +33,17 @@ export function SplitSyncMark({
       className={className}
     >
       {/* Dark "SPLIT" panel — left side of the diagonal */}
-      <polygon points="0,0 50,0 42,20 0,20" fill="#18181b" />
+      <polygon points="0,0 50,0 42,20 0,20" fill={palette.ink} />
       {/* Yellow "SYNC" panel — right side of the diagonal */}
-      <polygon points="50,0 86,0 86,20 42,20" fill="#f6d428" />
+      <polygon points="50,0 86,0 86,20 42,20" fill={palette.yellow} />
       {/* Paper-coloured diagonal cut — echoes --race-angle-offset clip-path */}
-      <polygon points="48,0 50,0 42,20 40,20" fill="#f4f1ea" />
+      <polygon points="48,0 50,0 42,20 40,20" fill={palette.paper} />
 
       {/* "SPLIT" — centred in the dark panel (midpoint ≈ x 21 at half-height) */}
       <text
         x="21"
         y="13.5"
-        fill="white"
+        fill={palette.panel}
         fontSize="7.5"
         fontWeight="900"
         letterSpacing="0.8"
@@ -55,7 +57,7 @@ export function SplitSyncMark({
       <text
         x="66"
         y="13.5"
-        fill="#18181b"
+        fill={palette.ink}
         fontSize="7.5"
         fontWeight="900"
         letterSpacing="0.8"

@@ -7,7 +7,7 @@ import type { EventRow, Race } from "@/lib/types";
 import { RaceNav } from "@/components/RaceNav";
 
 const statusStyle: Record<string, string> = {
-  upcoming: "bg-zinc-200 text-zinc-700",
+  upcoming: "bg-race-panel-alt text-race-muted",
   active: "bg-race-yellow text-race-ink",
   finished: "bg-race-ink text-white",
 };
@@ -26,7 +26,7 @@ function RaceListItem({ race }: { race: Race }) {
   return (
     <li
       className={[
-        "flex items-center justify-between gap-3 border-b border-zinc-300 px-4 py-4",
+        "flex items-center justify-between gap-3 border-b border-race-line px-4 py-4",
         isActive
           ? "race-angle-cut border-l-4 border-l-race-red bg-race-panel"
           : "bg-race-panel even:bg-race-panel-alt",
@@ -46,7 +46,7 @@ function RaceListItem({ race }: { race: Race }) {
         {race.status === "finished" && (
           <span
             className={`inline-flex px-2 py-1 text-[10px] font-black uppercase tracking-wide ${
-              race.results_under_revision ? "bg-race-yellow text-race-ink" : race.results_published_at ? "bg-race-ink text-white" : "bg-zinc-200 text-zinc-700"
+              race.results_under_revision ? "bg-race-yellow text-race-ink" : race.results_published_at ? "bg-race-ink text-white" : "bg-race-panel-alt text-race-muted"
             }`}
           >
             {race.results_under_revision ? "Under revision" : race.results_published_at ? "Published" : "Unofficial"}
