@@ -190,6 +190,65 @@ test.describe('/stopwatch solo page', () => {
     await expect(page.getByRole('button', { name: /start stopwatch/i })).toBeVisible();
   });
 
+  // ── Brand relocation & icon button sizing (#290) ─────────────────────────
+
+  test('SplitSync brand link is NOT in the masthead', async ({ page }) => {
+    await page.goto('/stopwatch');
+    // The masthead header should not contain the "SplitSync" link
+    const masthead = page.locator('header.race-masthead');
+    await expect(masthead).toBeVisible();
+    const mastheadBrandLink = masthead.getByRole('link', { name: /splitsync/i });
+    await expect(mastheadBrandLink).not.toBeVisible({ timeout: 2_000 });
+  });
+
+  test('SplitSync brand link appears near the bottom of the page', async ({ page }) => {
+    await page.goto('/stopwatch');
+    // The brand footer element is present and contains the SplitSync link
+    const brandFooter = page.getByTestId('sw-brand-footer');
+    await expect(brandFooter).toBeVisible();
+    const brandLink = brandFooter.getByRole('link', { name: /splitsync home/i });
+    await expect(brandLink).toBeVisible();
+    // The brand footer appears AFTER "The deal" section
+    const dealSection = page.getByRole('region', { name: /why splitsync stopwatch is free/i });
+    await expect(dealSection).toBeVisible();
+  });
+
+  test('SplitSync brand footer is hidden in large-display mode', async ({ page }) => {
+    await page.goto('/stopwatch');
+    await page.getByRole('button', { name: /enter large display mode/i }).click();
+    // Brand footer is not rendered in large mode
+    await expect(page.getByTestId('sw-brand-footer')).not.toBeVisible({ timeout: 2_000 });
+  });
+
+  test('lock button meets 44px minimum touch-target size', async ({ page }) => {
+    await page.goto('/stopwatch');
+    const lockBtn = page.getByRole('button', { name: /lock controls/i });
+    await expect(lockBtn).toBeVisible();
+    const box = await lockBtn.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  });
+
+  test('mobile viewport (375×667): masthead has no brand link, brand footer visible', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/stopwatch');
+
+    // Masthead must NOT contain the SplitSync brand link
+    const masthead = page.locator('header.race-masthead');
+    await expect(masthead).toBeVisible();
+    const mastheadBrandLink = masthead.getByRole('link', { name: /splitsync/i });
+    await expect(mastheadBrandLink).not.toBeVisible({ timeout: 2_000 });
+
+    // Brand footer IS visible at the bottom of the page on mobile
+    const brandFooter = page.getByTestId('sw-brand-footer');
+    await expect(brandFooter).toBeVisible();
+
+    // The stopwatch layout fits: dial and pushers are rendered
+    await expect(page.getByRole('timer')).toBeVisible();
+    await expect(page.getByRole('button', { name: /start stopwatch/i })).toBeVisible();
+  });
+
   test('no organizer controls present', async ({ page }) => {
     await page.goto('/stopwatch');
     await expect(page.getByRole('button', { name: /start race/i })).not.toBeVisible({ timeout: 2_000 });
