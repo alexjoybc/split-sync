@@ -1188,6 +1188,15 @@ function LoginScreen({
             ℹ  Help &amp; about
           </Text>
         </Pressable>
+
+        <Pressable
+          onPress={() => ExpoLinking.openURL("https://splitsync.org/privacy")}
+          style={[s.ghostBtn, { marginTop: 4 }]}
+        >
+          <Text style={[s.ghostBtnText, { color: C.muted, fontSize: 11 }]}>
+            Privacy Policy
+          </Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
