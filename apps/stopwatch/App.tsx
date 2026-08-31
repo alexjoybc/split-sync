@@ -990,6 +990,40 @@ function TargetOverrunStrip({
   );
 }
 
+// ── Double-tap hook ────────────────────────────────────────────────────────────
+/**
+ * Returns a tap handler that distinguishes a double-tap from a single tap.
+ * - Two taps within `delay` ms → calls `onDoubleTap`.
+ * - A tap with no second tap within `delay` ms → calls `onSingleTap`.
+ */
+function useDoubleTap(
+  onDoubleTap: () => void,
+  onSingleTap: () => void,
+  delay = 300
+): () => void {
+  const lastTapRef = useRef<number>(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  return useCallback(() => {
+    const now = Date.now();
+    if (now - lastTapRef.current <= delay) {
+      // Double-tap detected — cancel pending single-tap callback
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+      lastTapRef.current = 0;
+      onDoubleTap();
+    } else {
+      lastTapRef.current = now;
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        onSingleTap();
+      }, delay);
+    }
+  }, [onDoubleTap, onSingleTap, delay]);
+}
+
 // ♪ toggle button for the casing bar
 function CueBarButton({
   active,
@@ -2203,6 +2237,8 @@ function SessionScreen({
     }
   }, [isLocked]);
 
+  const handleLockTap = useDoubleTap(handleUnlock, handleLockToggle);
+
   // ── Button handlers ─────────────────────────────────────────────────────────
   const handleStart = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -2321,14 +2357,12 @@ function SessionScreen({
           {pendingCount > 0 && (
             <ActivityIndicator size="small" color={C.yellow} />
           )}
-          {/* Lock toggle: tap to lock, long-press (1.5 s) to unlock */}
+          {/* Lock toggle: tap to lock, double-tap to unlock */}
           <Pressable
-            onPress={handleLockToggle}
-            onLongPress={handleUnlock}
-            delayLongPress={1500}
+            onPress={handleLockTap}
             hitSlop={8}
             style={s.iconBtn}
-            accessibilityLabel={isLocked ? "Controls locked — hold to unlock" : "Lock controls"}
+            accessibilityLabel={isLocked ? "Controls locked — double-tap to unlock" : "Tap to lock controls"}
             accessibilityRole="button"
           >
             <Text style={{ fontSize: 16, color: isLocked ? C.red : C.dimGray }}>
@@ -2659,9 +2693,9 @@ function SessionScreen({
         <View
           style={s.lockHintToast}
           accessibilityLiveRegion="assertive"
-          accessibilityLabel="Controls locked — hold the lock icon to unlock"
+          accessibilityLabel="Controls locked — double-tap the lock icon to unlock"
         >
-          <Text style={s.lockHintText}>Controls locked — hold 🔒 to unlock</Text>
+          <Text style={s.lockHintText}>Controls locked — double-tap 🔒 to unlock</Text>
         </View>
       )}
     </SafeAreaView>
@@ -2926,6 +2960,8 @@ function SoloScreen({
     }
   }, [isLocked]);
 
+  const handleLockTap = useDoubleTap(handleUnlock, handleLockToggle);
+
   // Restore persisted solo state on mount (survives app kill / reboot).
   useEffect(() => {
     let cancelled = false;
@@ -3188,14 +3224,12 @@ function SoloScreen({
           <Text style={s.casingTitle}>STOPWATCH</Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-          {/* Lock toggle: tap to lock, long-press (1.5 s) to unlock */}
+          {/* Lock toggle: tap to lock, double-tap to unlock */}
           <Pressable
-            onPress={handleLockToggle}
-            onLongPress={handleUnlock}
-            delayLongPress={1500}
+            onPress={handleLockTap}
             hitSlop={8}
             style={s.iconBtn}
-            accessibilityLabel={isLocked ? "Controls locked — hold to unlock" : "Lock controls"}
+            accessibilityLabel={isLocked ? "Controls locked — double-tap to unlock" : "Tap to lock controls"}
             accessibilityRole="button"
           >
             <Text style={{ fontSize: 16, color: isLocked ? C.red : C.dimGray }}>
@@ -3577,9 +3611,9 @@ function SoloScreen({
         <View
           style={s.lockHintToast}
           accessibilityLiveRegion="assertive"
-          accessibilityLabel="Controls locked — hold the lock icon to unlock"
+          accessibilityLabel="Controls locked — double-tap the lock icon to unlock"
         >
-          <Text style={s.lockHintText}>Controls locked — hold 🔒 to unlock</Text>
+          <Text style={s.lockHintText}>Controls locked — double-tap 🔒 to unlock</Text>
         </View>
       )}
     </SafeAreaView>
@@ -4762,7 +4796,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  cueBtnText: { color: C.casingMuted, fontSize: 16, fontWeight: "900" },
+  cueBtnText: { color: C.casingMuted, fontSize: 26, fontWeight: "900" },
   cuePanel: {
     backgroundColor: C.panelBg,
     borderBottomWidth: 2,
