@@ -144,6 +144,55 @@ test.describe('/stopwatch delayed start', () => {
     await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible({ timeout: 500 });
   });
 
+  /**
+   * #292 — audio beep countdown.
+   * Audio itself is not assertable in Playwright; we assert on the UI state
+   * transitions that are synchronised with the beep timing:
+   *   • initial value shown on the dial is exactly the selected delay,
+   *   • the displayed number decrements each second,
+   *   • the countdown exits normally after the full delay.
+   */
+  test('#292 3s delay: countdown dial shows initial value then decrements', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Select 3 s delay
+    await page.getByTestId('sw-delay-3').click();
+
+    // Trigger Start (user gesture that also unlocks AudioContext)
+    await page.getByTestId('sw-primary-btn').click();
+
+    // The countdown number should appear immediately showing "3"
+    const number = page.getByTestId('sw-countdown-number');
+    await expect(number).toBeVisible({ timeout: 500 });
+    const initialText = await number.textContent();
+    expect(Number(initialText?.trim())).toBe(3);
+
+    // After ~1.1 s the displayed value must have decremented to ≤ 2
+    await page.waitForTimeout(1100);
+    const afterOneSecText = await page.getByTestId('sw-countdown-number').textContent();
+    expect(Number(afterOneSecText?.trim())).toBeLessThanOrEqual(2);
+
+    // Wait for the full countdown to complete — stopwatch must transition to running
+    await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible({ timeout: 4000 });
+    await expect(number).not.toBeVisible();
+  });
+
+  test('#292 0s delay: no countdown (no beep sequence, instant start)', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Ensure OFF is selected
+    await page.getByTestId('sw-delay-0').click();
+
+    // Click Start
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+
+    // Countdown number must never appear (0 s delay = instant start)
+    await expect(page.getByTestId('sw-countdown-number')).not.toBeVisible({ timeout: 300 });
+
+    // Stop button should be visible immediately
+    await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible({ timeout: 500 });
+  });
+
   test('delay selector is hidden while running', async ({ page }) => {
     await page.goto('/stopwatch');
 
