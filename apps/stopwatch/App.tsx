@@ -2,13 +2,16 @@
  * SplitSync Stopwatch
  *
  * Screens (state-machine navigation):
- *   loading  → check auth session
- *   login    → email/password sign-in (no signup; accounts via web)
+ *   solo     → standalone stopwatch (no auth required) — always the landing screen
+ *   loading  → transient, shown only while a deep link is being resolved
+ *   login    → email/password sign-in, reached via "Time together" (no signup; accounts via web)
  *   home     → My Sessions + New Session + Solo option
  *   create   → name session + display name → creates session → session
  *   join     → display name prompt after deep-link lands
  *   session  → shared stopwatch (creator or joiner)
- *   solo     → existing standalone stopwatch (no auth required)
+ *
+ * The app opens directly on the solo stopwatch. Tapping "Time together" on
+ * that screen is the only path into the shared-session / sign-in flow.
  *
  * Design: dark device casing (masthead/footer), DSEG7 LCD instrument,
  * SplitSync race-paper content areas, physical raised buttons.
@@ -2793,10 +2796,12 @@ function SoloScreen({
   fontsLoaded,
   onBack,
   onSelectMode,
+  onGoShared,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
   onSelectMode: (m: SoloMode) => void;
+  onGoShared: () => void;
 }) {
   useKeepAwake();
   const { width, height } = useWindowDimensions();
@@ -3502,13 +3507,17 @@ function SoloScreen({
       ) : !isCountdown ? (
         <View style={s.together}>
           <Pressable
-            disabled
-            style={s.togetherBtn}
+            onPress={onGoShared}
+            style={({ pressed }) => [
+              s.togetherBtn,
+              { opacity: pressed ? 0.8 : 1 },
+            ]}
             accessible
+            accessibilityRole="button"
             accessibilityLabel="Time together"
           >
             <Text style={s.togetherLabel}>⏱  TIME TOGETHER</Text>
-            <Text style={s.togetherSub}>BACK → CREATE A SHARED SESSION</Text>
+            <Text style={s.togetherSub}>TAP TO CREATE A SHARED SESSION</Text>
           </Pressable>
         </View>
       ) : (
@@ -4153,9 +4162,11 @@ function TimerScreen({
 function SoloContainer({
   fontsLoaded,
   onBack,
+  onGoShared,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
+  onGoShared: () => void;
 }) {
   const [mode, setMode] = useState<SoloMode>("stopwatch");
   const [modeLoaded, setModeLoaded] = useState(false);
@@ -4187,6 +4198,7 @@ function SoloContainer({
       fontsLoaded={fontsLoaded}
       onBack={onBack}
       onSelectMode={handleSelectMode}
+      onGoShared={onGoShared}
     />
   );
 }
@@ -4197,18 +4209,23 @@ function RootNavigator() {
     "DSEG7Classic-Regular": require("./assets/fonts/DSEG7Classic-Regular.ttf"),
   });
 
-  const [screen, setScreen] = useState<AppScreen>("loading");
+  // The stopwatch is the app's primary purpose and needs no account, so it is
+  // always the landing screen. Shared/"Time together" sessions still require
+  // sign-in, surfaced only when the user opts into that flow (see onGoShared).
+  const [screen, setScreen] = useState<AppScreen>("solo");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [sessionParams, setSessionParams] = useState<SessionNavParams | null>(null);
   const [joinParams, setJoinParams] = useState<JoinNavParams | null>(null);
 
   // ── Auth check on mount ─────────────────────────────────────────────────────
+  // This only tracks whether the user already has a session so "Time
+  // together" can skip straight to the session list — it never redirects
+  // away from the stopwatch on its own.
   useEffect(() => {
     // Shared sessions require Supabase credentials. Without them, skip the
     // auth check entirely — solo mode must work with no backend configured.
     if (!isSupabaseConfigured) {
-      setScreen("login");
       return;
     }
 
@@ -4216,9 +4233,6 @@ function RootNavigator() {
       if (session?.user) {
         setUserEmail(session.user.email ?? null);
         setUserName(session.user.user_metadata?.full_name ?? null);
-        setScreen("home");
-      } else {
-        setScreen("login");
       }
     });
 
@@ -4285,6 +4299,7 @@ function RootNavigator() {
       <SoloContainer
         fontsLoaded={!!fontsLoaded}
         onBack={() => setScreen(userEmail ? "home" : "login")}
+        onGoShared={() => setScreen(userEmail ? "home" : "login")}
       />
     );
   }
