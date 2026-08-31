@@ -344,8 +344,9 @@ const STORAGE_KEY_VOL_KEYS = "stopwatch_volume_keys_enabled";
 /**
  * useVolumeKeys — maps Android hardware volume keys to stopwatch actions.
  *
- * Volume DOWN = LAP (only while running)
- * Volume UP   = START / STOP (toggle)
+ * Volume DOWN (while running)     = LAP
+ * Volume DOWN (while NOT running) = RESET
+ * Volume UP                       = START / STOP (toggle)
  *
  * The system volume overlay is suppressed while the mapping is active.
  * While active, the media volume is pinned to a mid-level (0.5) so that both
@@ -359,10 +360,12 @@ function useVolumeKeys({
   isRunning,
   onLap,
   onStartStop,
+  onReset,
 }: {
   isRunning: boolean;
   onLap: () => void;
   onStartStop: () => void;
+  onReset?: () => void;
 }): { volumeKeysEnabled: boolean; toggleVolumeKeys: () => void } {
   const [enabled, setEnabled] = useState(true);
 
@@ -385,9 +388,11 @@ function useVolumeKeys({
   const isRunningRef = useRef(isRunning);
   const onLapRef = useRef(onLap);
   const onStartStopRef = useRef(onStartStop);
+  const onResetRef = useRef(onReset);
   useEffect(() => { isRunningRef.current = isRunning; }, [isRunning]);
   useEffect(() => { onLapRef.current = onLap; }, [onLap]);
   useEffect(() => { onStartStopRef.current = onStartStop; }, [onStartStop]);
+  useEffect(() => { onResetRef.current = onReset; }, [onReset]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -431,9 +436,12 @@ function useVolumeKeys({
           if (repinAt !== 0 && Date.now() - repinAt < REPIN_COOLDOWN_MS) return;
 
           if (newVolume < PIN) {
-            // Volume DOWN → LAP (only while running)
             if (isRunningRef.current) {
+              // Volume DOWN while running → LAP
               onLapRef.current();
+            } else {
+              // Volume DOWN while stopped → RESET
+              onResetRef.current?.();
             }
           } else {
             // Volume UP → START / STOP
@@ -2246,6 +2254,7 @@ function SessionScreen({
     isRunning: status === "running",
     onLap: handleLap,
     onStartStop: handleVolumeStartStop,
+    onReset: handleReset,
   });
 
   // Changing the target re-arms the cue (unless the new target already passed)
@@ -3122,6 +3131,7 @@ function SoloScreen({
     isRunning,
     onLap: handleLap,
     onStartStop: handleVolumeStartStop,
+    onReset: handleReset,
   });
   const lapCount = laps.length;
   const lastLap = laps[0] ?? null;
