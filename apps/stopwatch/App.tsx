@@ -2974,8 +2974,9 @@ function SoloScreen({
     countdownEndRef.current = endsAt;
     setCountdownSec(seconds);
     setSw("countdown");
-    // Initial haptic tick
+    // Initial haptic + audio tick for the first second
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (cueRef.current.soundEnabled) playCue("tick");
 
     let lastTicked = seconds;
     countdownIntervalRef.current = setInterval(() => {
@@ -2987,12 +2988,14 @@ function SoloScreen({
       } else {
         if (remaining !== lastTicked) {
           lastTicked = remaining;
+          // Haptic + audio tick for each subsequent countdown second
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          if (cueRef.current.soundEnabled) playCue("tick");
         }
         setCountdownSec(remaining);
       }
     }, 100);
-  }, [clearCountdown, commitStart]);
+  }, [clearCountdown, commitStart, cueRef]);
 
   useEffect(() => () => { stopTick(); clearCountdown(); }, [stopTick, clearCountdown]);
 
