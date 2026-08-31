@@ -133,7 +133,7 @@ function PointsClassification({ race, crossings, entries }: { race: Race; crossi
 
       <div className="mt-5 flex flex-wrap items-end justify-between gap-4 border-b-2 border-race-ink pb-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-red">Sprint points overlay</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-blue-primary">Sprint points overlay</p>
           <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Points classification</h2>
         </div>
         <p className="text-xs font-black uppercase tracking-[0.1em] text-race-muted">{nextSprintText}</p>
@@ -408,7 +408,7 @@ function TimeTrialBoard({
       {/* Results table */}
       <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-race-ink pb-3">
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-red">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-blue-primary">
             Live ranking by time
           </p>
           <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Classification</h2>
@@ -712,7 +712,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
           <div className="mx-auto max-w-4xl px-4 pt-7 sm:px-6">
             <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-race-ink pb-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-red">{classificationCopy(race).kicker}</p>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-race-blue-primary">{classificationCopy(race).kicker}</p>
                 <h2 className="mt-1 text-2xl font-black uppercase tracking-tight">Classification</h2>
               </div>
               <div className="flex items-center gap-2">
@@ -727,7 +727,7 @@ export default function LiveBoard({ params }: { params: Promise<{ raceId: string
                   Podium
                 </button>
                 <div className="relative w-48 sm:w-60">
-                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find bib / rider" className="w-full border-2 border-race-ink bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-race-muted focus:border-race-red" />
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find bib / rider" className="w-full border-2 border-race-ink bg-white py-2 pr-3 pl-9 text-sm font-bold outline-none placeholder:text-race-muted focus:border-race-blue-primary" />
                   <MagnifyingGlassIcon className="pointer-events-none absolute top-2.5 left-3 size-4 text-race-muted" />
                 </div>
               </div>
