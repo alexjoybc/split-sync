@@ -362,6 +362,29 @@ function clearPersisted() {
 }
 
 // ---------------------------------------------------------------------------
+// Countdown beep helper (#292) — square-wave oscillator, same pattern as
+// the time-trial scorer. Called independently of the soundEnabled preference
+// because countdown audio is integral to the countdown UX, not the generic
+// start/stop/lap cue system.
+// ---------------------------------------------------------------------------
+
+/** Play a short Web Audio beep (square wave, 2ms attack). freq: Hz, dur: ms */
+function beep(audioCtx: AudioContext, freq: number, dur: number, gainPeak = 0.2) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = "square";
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.frequency.value = freq;
+  // 2ms linear attack to avoid click/pop of square wave at full amplitude
+  gain.gain.setValueAtTime(0, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(gainPeak, audioCtx.currentTime + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur / 1000);
+  osc.start(audioCtx.currentTime);
+  osc.stop(audioCtx.currentTime + dur / 1000);
+}
+
+// ---------------------------------------------------------------------------
 // Sound cues (#227) — WebAudio oscillator beeps, no audio assets.
 // Optional and OFF by default; settings persist in localStorage.
 // ---------------------------------------------------------------------------
@@ -482,6 +505,9 @@ export default function StopwatchPage() {
   const [countdownSec, setCountdownSec] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownEndRef = useRef<number>(0); // target Date.now() when countdown ends
+  // Tracks the last second we played a countdown beep to avoid firing twice
+  // for the same displayed value (100ms tick granularity).
+  const lastBeepedSecRef = useRef<number>(-1);
 
   // Lock state (#235) — local to this device, never broadcast
   const [isLocked, setIsLocked] = useState(false);
@@ -829,17 +855,35 @@ export default function StopwatchPage() {
     setCountdownSec(seconds);
     setState("countdown");
 
+    // Play the first beep immediately for the initial countdown display (#292).
+    // ensureAudioCtx is safe to call here because beginCountdown is always
+    // triggered by a user gesture (the Start button click).
+    const ctxInit = ensureAudioCtx();
+    if (ctxInit) {
+      beep(ctxInit, 660, 80, 0.18);
+      lastBeepedSecRef.current = seconds;
+    }
+
     countdownRef.current = setInterval(() => {
       const remaining = Math.ceil((countdownEndRef.current - Date.now()) / 1000);
       if (remaining <= 0) {
         clearCountdown();
         setCountdownSec(0);
+        // Final GO beep — longer and louder to distinguish it from the tick beeps
+        const ctxFinal = ensureAudioCtx();
+        if (ctxFinal) beep(ctxFinal, 880, 200, 0.25);
         commitStart();
       } else {
+        // Only beep once per displayed second (interval runs at 100ms)
+        if (remaining !== lastBeepedSecRef.current) {
+          lastBeepedSecRef.current = remaining;
+          const ctxTick = ensureAudioCtx();
+          if (ctxTick) beep(ctxTick, 660, 80, 0.18);
+        }
         setCountdownSec(remaining);
       }
     }, 100); // 100ms granularity so we catch the transition exactly
-  }, [clearCountdown, commitStart]);
+  }, [clearCountdown, commitStart, ensureAudioCtx]);
 
   // ---------------------------------------------------------------------------
   // Visibility change — pause/resume RAF without losing accumulated time
