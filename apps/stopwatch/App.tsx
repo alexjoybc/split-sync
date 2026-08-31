@@ -76,6 +76,25 @@ const C = {
   casingBorder: '#0A0A0A',
   instrument:   palette.instrumentFace,
   white:    '#FFFFFF',
+  black:    '#000000',            // pure black — shadow, logo chip bg, borders
+  // Named dark-scale tokens (instrument / device chrome)
+  deepDark:         '#111111',    // near-black strip backgrounds
+  instrumentBorder: '#1E1E1E',    // separator inside instrument panel / btn dim lo
+  lcdSmallDim:      '#222222',    // ghost-dim for small (total) LCD counter
+  pillBg:           '#2A2A2A',    // participant pill background
+  dark:             '#333333',    // default pill border, waiting-state chip
+  pillBorder:       '#444444',    // participant pill border + disabled btn text
+  dimGray:          '#555555',    // lock-icon (unlocked), waiting status badge
+  casingMuted:      '#555550',    // instrument labels, casing title text
+  faint:            '#888888',    // back-button text, navigation chevron
+  inactive:         '#999999',    // waiting-state pill text
+  pillText:         '#AAAAAA',    // participant pill text
+  lcdBg:            '#0A2030',    // LCD dark bg — vol-key chip + participant-self pill
+  errorBg:          '#FFF0F0',    // error box background tint
+  // Semi-transparent overlays
+  toastBg:          'rgba(0,0,0,0.85)',       // lock-hint floating toast
+  btnSubLabel:      'rgba(255,255,255,0.5)',   // device-button sub-label (normal state)
+  overrunLabel:     'rgba(255,255,255,0.75)',  // target-overrun strip label
   // Status
   green:  palette.success,
   worse:  palette.red,
@@ -607,7 +626,7 @@ function DeviceBtn({
   const bg = disabled ? C.btnDimBody : body;
   const top = disabled ? C.btnDimHi : hi;
   const bot = disabled ? C.btnDimLo : lo;
-  const txt = disabled ? "#444444" : textColor;
+  const txt = disabled ? C.pillBorder : textColor;
 
   return (
     <Pressable
@@ -631,7 +650,7 @@ function DeviceBtn({
             borderBottomColor: bot,
             borderLeftColor: pressed ? bg : top,
             borderRightColor: bot,
-            shadowColor: "#000",
+            shadowColor: C.black,
             shadowOpacity: pressed ? 0.1 : 0.55,
             shadowRadius: pressed ? 1 : 5,
             shadowOffset: { width: 0, height: pressed ? 1 : 4 },
@@ -646,10 +665,10 @@ function DeviceBtn({
             <Text
               style={{
                 color: pressed
-                  ? "#888"
+                  ? C.faint
                   : disabled
-                  ? "#333"
-                  : "rgba(255,255,255,0.5)",
+                  ? C.dark
+                  : C.btnSubLabel,
                 fontSize: 9,
                 fontWeight: "900",
                 letterSpacing: 2,
@@ -714,15 +733,15 @@ function VolumeKeyToggle({
         paddingVertical: 3,
         borderRadius: 10,
         borderWidth: 1.5,
-        borderColor: enabled ? C.lcd : "#333",
-        backgroundColor: enabled ? "#0A2030" : "transparent",
+        borderColor: enabled ? C.lcd : C.dark,
+        backgroundColor: enabled ? C.lcdBg : "transparent",
         opacity: pressed ? 0.7 : 1,
         marginRight: 6,
       })}
     >
       <Text
         style={{
-          color: enabled ? C.lcd : "#555550",
+          color: enabled ? C.lcd : C.casingMuted,
           fontSize: 9,
           fontWeight: "900",
           letterSpacing: 1.5,
@@ -745,7 +764,7 @@ function StatusPill({ status }: { status: SessionStatus | "ready" }) {
         s.pill,
         isRunning && { backgroundColor: C.red, borderColor: C.red },
         isStopped && { backgroundColor: C.ink, borderColor: C.ink },
-        isWaiting && { backgroundColor: "#333", borderColor: "#333" },
+        isWaiting && { backgroundColor: C.dark, borderColor: C.dark },
       ]}
     >
       <Text
@@ -753,7 +772,7 @@ function StatusPill({ status }: { status: SessionStatus | "ready" }) {
           s.pillTxt,
           isRunning && { color: C.white },
           isStopped && { color: C.white },
-          isWaiting && { color: "#999" },
+          isWaiting && { color: C.inactive },
         ]}
       >
         {isRunning
@@ -1281,7 +1300,7 @@ function HomeScreen({
                   session.status === "running" && { backgroundColor: C.red },
                   session.status === "stopped" && { backgroundColor: C.ink },
                   session.status === "waiting" && {
-                    backgroundColor: "#555",
+                    backgroundColor: C.dimGray,
                   },
                 ]}
               >
@@ -2266,7 +2285,7 @@ function SessionScreen({
       <View style={s.casing}>
         <View style={s.casingLeft}>
           <Pressable onPress={onBack} style={{ marginRight: 8 }}>
-            <Text style={{ color: "#888", fontSize: 20 }}>‹</Text>
+            <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
           </Pressable>
           <View style={s.logoChip}>
             <Text style={s.logoSplit}>SPLIT</Text>
@@ -2289,7 +2308,7 @@ function SessionScreen({
             accessibilityLabel={isLocked ? "Controls locked — hold to unlock" : "Lock controls"}
             accessibilityRole="button"
           >
-            <Text style={{ fontSize: 16, color: isLocked ? C.red : "#555" }}>
+            <Text style={{ fontSize: 16, color: isLocked ? C.red : C.dimGray }}>
               {isLocked ? "🔒" : "🔓"}
             </Text>
           </Pressable>
@@ -2350,7 +2369,7 @@ function SessionScreen({
             ms={elapsedMs}
             mainSize={Math.round(lcdMain * 0.42)}
             color={C.lcdSmall}
-            dimColor="#222222"
+            dimColor={C.lcdSmallDim}
             fontLoaded={fontsLoaded}
           />
         </View>
@@ -3134,7 +3153,7 @@ function SoloScreen({
       <View style={s.casing}>
         <View style={s.casingLeft}>
           <Pressable onPress={onBack} style={{ marginRight: 8 }}>
-            <Text style={{ color: "#888", fontSize: 20 }}>‹</Text>
+            <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
           </Pressable>
           <View style={s.logoChip}>
             <Text style={s.logoSplit}>SPLIT</Text>
@@ -3152,7 +3171,7 @@ function SoloScreen({
             accessibilityLabel={isLocked ? "Controls locked — hold to unlock" : "Lock controls"}
             accessibilityRole="button"
           >
-            <Text style={{ fontSize: 16, color: isLocked ? C.red : "#555" }}>
+            <Text style={{ fontSize: 16, color: isLocked ? C.red : C.dimGray }}>
               {isLocked ? "🔒" : "🔓"}
             </Text>
           </Pressable>
@@ -3195,7 +3214,7 @@ function SoloScreen({
       {isCountdown ? (
         /* Countdown overlay — full instrument area */
         <View style={[s.instrument, { alignItems: "center", justifyContent: "center", paddingVertical: 24 }]}>
-          <Text style={{ color: "#555550", fontSize: 9, fontWeight: "900", letterSpacing: 2.5, marginBottom: 8 }}>
+          <Text style={{ color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 2.5, marginBottom: 8 }}>
             GET READY
           </Text>
           <Text
@@ -3212,7 +3231,7 @@ function SoloScreen({
           >
             {countdownSec}
           </Text>
-          <Text style={{ color: "#555550", fontSize: 9, fontWeight: "900", letterSpacing: 2, marginTop: 8 }}>
+          <Text style={{ color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 2, marginTop: 8 }}>
             TAP CANCEL TO ABORT
           </Text>
         </View>
@@ -3237,7 +3256,7 @@ function SoloScreen({
               ms={sessionMs}
               mainSize={Math.round(lcdMain * 0.42)}
               color={C.lcdSmall}
-              dimColor="#222222"
+              dimColor={C.lcdSmallDim}
               fontLoaded={fontsLoaded}
             />
           </View>
@@ -4332,7 +4351,7 @@ const s = StyleSheet.create({
   casingLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
   logoChip: {
     flexDirection: "row",
-    backgroundColor: "#000",
+    backgroundColor: C.black,
     paddingHorizontal: 7,
     paddingVertical: 3,
     borderRadius: 2,
@@ -4340,15 +4359,15 @@ const s = StyleSheet.create({
   },
   logoSplit: { color: C.white, fontSize: 13, fontWeight: "900", letterSpacing: 1 },
   logoSync:  { color: C.yellow, fontSize: 13, fontWeight: "900", letterSpacing: 1 },
-  casingTitle: { color: "#555550", fontSize: 10, fontWeight: "900", letterSpacing: 3 },
+  casingTitle: { color: C.casingMuted, fontSize: 10, fontWeight: "900", letterSpacing: 3 },
   pill: {
     borderWidth: 1.5,
-    borderColor: "#333",
+    borderColor: C.dark,
     borderRadius: 20,
     paddingHorizontal: 9,
     paddingVertical: 3,
   },
-  pillTxt: { color: "#555550", fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  pillTxt: { color: C.casingMuted, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
 
   // LCD instrument panel
   instrument: {
@@ -4363,7 +4382,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  instrLabel: { color: "#555550", fontSize: 9, fontWeight: "900", letterSpacing: 2.5 },
+  instrLabel: { color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 2.5 },
   instrMain:  { paddingHorizontal: 20, paddingBottom: 10 },
   instrFooter: {
     flexDirection: "row",
@@ -4372,29 +4391,29 @@ const s = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 14,
     borderTopWidth: 1,
-    borderColor: "#1E1E1E",
+    borderColor: C.instrumentBorder,
     paddingTop: 10,
   },
 
   // Participant strip
   participantStrip: {
-    backgroundColor: "#111",
+    backgroundColor: C.deepDark,
     borderBottomWidth: 1,
-    borderColor: "#000",
+    borderColor: C.black,
     maxHeight: 40,
   },
   participantPill: {
-    backgroundColor: "#2A2A2A",
+    backgroundColor: C.pillBg,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "#444",
+    borderColor: C.pillBorder,
   },
-  participantPillSelf: { borderColor: C.lcd, backgroundColor: "#0A2030" },
+  participantPillSelf: { borderColor: C.lcd, backgroundColor: C.lcdBg },
   participantPillOwner: { borderColor: C.yellow },
   participantPillText: {
-    color: "#AAA",
+    color: C.pillText,
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.5,
@@ -4543,7 +4562,7 @@ const s = StyleSheet.create({
     fontWeight: "600",
   },
   errorBox: {
-    backgroundColor: "#FFF0F0",
+    backgroundColor: C.errorBg,
     borderWidth: 1.5,
     borderColor: C.red,
     borderRadius: 3,
@@ -4620,7 +4639,7 @@ const s = StyleSheet.create({
   ghostBtn: { paddingVertical: 12, alignItems: "center" },
   ghostBtnText: { color: C.red, fontSize: 13, fontWeight: "700", letterSpacing: 0.5 },
   backBtn: { paddingVertical: 4, paddingHorizontal: 2 },
-  backBtnText: { color: "#888", fontSize: 13, fontWeight: "700" },
+  backBtnText: { color: C.faint, fontSize: 13, fontWeight: "700" },
 
   // Lock hint toast — floating above the button bar
   lockHintToast: {
@@ -4632,8 +4651,8 @@ const s = StyleSheet.create({
     zIndex: 100,
   },
   lockHintText: {
-    backgroundColor: "rgba(0,0,0,0.85)",
-    color: "#fff",
+    backgroundColor: C.toastBg,
+    color: C.white,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.5,
@@ -4695,7 +4714,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-  cueBtnText: { color: "#555550", fontSize: 16, fontWeight: "900" },
+  cueBtnText: { color: C.casingMuted, fontSize: 16, fontWeight: "900" },
   cuePanel: {
     backgroundColor: C.panelBg,
     borderBottomWidth: 2,
@@ -4767,7 +4786,7 @@ const s = StyleSheet.create({
     paddingVertical: 6,
   },
   targetOverrunLabel: {
-    color: "rgba(255,255,255,0.75)",
+    color: C.overrunLabel,
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 2,
@@ -4806,7 +4825,7 @@ const s = StyleSheet.create({
     letterSpacing: 0.2,
   },
   statusBadge: {
-    backgroundColor: "#555",
+    backgroundColor: C.dimGray,
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 3,
