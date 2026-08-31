@@ -53,7 +53,7 @@ export default function PrivacyPage() {
                 </li>
                 <li>
                   <strong>Display name</strong> — the name you enter when
-                  creating or joining a session (e.g. "Coach Alex"). This name
+                  creating or joining a session (e.g. &quot;Coach Alex&quot;). This name
                   is visible to other participants in the same session and is
                   stored with session events.
                 </li>
@@ -168,7 +168,7 @@ export default function PrivacyPage() {
             >
               hello@splitsync.org
             </a>{" "}
-            with the subject line <strong>"Data deletion request"</strong> and
+            with the subject line <strong>&quot;Data deletion request&quot;</strong> and
             include the email address associated with your account.
           </p>
           <p className="mt-3 text-sm font-semibold text-race-ink">
