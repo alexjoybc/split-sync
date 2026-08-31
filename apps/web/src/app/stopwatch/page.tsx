@@ -1237,14 +1237,9 @@ export default function StopwatchPage() {
         {/* Masthead — hidden in large-display mode to maximise the timer */}
         {!largeMode && (
           <header className="race-masthead no-print">
-            <div className="mx-auto flex max-w-lg items-end justify-between gap-4">
-              <div>
-                <p className="race-kicker">Solo timer</p>
-                <h1 className="race-title">Stopwatch</h1>
-              </div>
-              <Link href="/" className="race-action race-action--outline text-sm">
-                SplitSync
-              </Link>
+            <div className="mx-auto max-w-lg">
+              <p className="race-kicker">Solo timer</p>
+              <h1 className="race-title">Stopwatch</h1>
             </div>
           </header>
         )}
@@ -1769,6 +1764,19 @@ export default function StopwatchPage() {
               session asks only for a display name — never a sign-up.
             </p>
           </section>
+
+          {/* ── SplitSync wordmark — relocated from masthead (#290) ──────────── */}
+          {!largeMode && (
+            <div className="mt-6 text-center no-print" data-testid="sw-brand-footer">
+              <Link
+                href="/"
+                className="text-[11px] font-black uppercase tracking-[0.15em] text-race-muted hover:text-race-ink transition-colors"
+                aria-label="SplitSync home"
+              >
+                SplitSync
+              </Link>
+            </div>
+          )}
         </div>
       </main>
     </>

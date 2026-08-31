@@ -330,6 +330,9 @@ a:focus-visible {
   --sw-pusher-size:       clamp(68px, 16vw, 84px);
   --sw-pusher-gap:        clamp(32px, 8vw, 52px);
 
+  /* Icon-only controls — 44px minimum meets WCAG 2.5.5 touch-target guideline */
+  --sw-icon-btn-size:     44px;
+
   /* Lap list */
   --sw-lap-best-bg:       var(--race-yellow);
   --sw-lap-best-color:    var(--race-ink);
@@ -615,18 +618,23 @@ a:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: var(--sw-icon-btn-size);
+  height: var(--sw-icon-btn-size);
   border: 2px solid var(--race-line);
   border-radius: 50%;
   background: var(--race-panel);
-  font-size: 15px;
+  font-size: 20px;
   line-height: 1;
   cursor: pointer;
   transition: border-color 120ms ease, background 120ms ease;
   user-select: none;
   -webkit-user-select: none;
   flex-shrink: 0;
+}
+
+.sw-lock-btn:focus-visible {
+  outline: 2px solid var(--race-blue-primary);
+  outline-offset: 2px;
 }
 
 .sw-lock-btn:hover {
