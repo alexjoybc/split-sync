@@ -16,6 +16,7 @@
     },
     "android": {
       "package": "org.splitsync.stopwatch",
+      "allowBackup": false,
       "permissions": ["android.permission.POST_NOTIFICATIONS"],
       "intentFilters": [
         {
