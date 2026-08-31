@@ -547,6 +547,12 @@ export default function HelpPage() {
               display name, and you&apos;re in. No sign-in required.
             </li>
             <li>
+              <strong>View-only rider screen:</strong> add <code>/live</code> to
+              the shared link (for example, <code>/stopwatch/s/AB3K9X/live</code>)
+              to show the live clock, laps, and participants without joining.
+              It has no timing controls and does not use a participant slot.
+            </li>
+            <li>
               Any participant can press <strong>START</strong>, <strong>LAP</strong>,
               or <strong>STOP</strong>. All devices share a server-anchored clock so
               everyone sees the same elapsed time.

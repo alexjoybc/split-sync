@@ -218,6 +218,40 @@ test.describe('Shared controls', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Live viewer: anonymous, read-only, no participant bearer token
+// ---------------------------------------------------------------------------
+
+test.describe('Live viewer', () => {
+  test('shows live clock and laps but exposes no timing controls', async ({
+    browser,
+    authenticatedPage: creatorPage,
+  }) => {
+    const code = await createSessionAndNavigate(creatorPage, 'Rider Display', 'Creator');
+
+    const viewerCtx = await browser.newContext();
+    const viewerPage = await viewerCtx.newPage();
+    await viewerPage.goto(`/stopwatch/s/${code}/live`);
+    await expect(viewerPage.getByText(/view only/i)).toBeVisible({ timeout: 10_000 });
+    await expect(viewerPage.getByRole('timer')).toBeVisible();
+    await expect(viewerPage.getByRole('button', { name: /start|stop|lap|reset/i })).toHaveCount(0);
+    await expect(viewerPage.evaluate((sessionCode) =>
+      localStorage.getItem(`splitsync_stopwatch_${sessionCode}`), code,
+    )).resolves.toBeNull();
+
+    await creatorPage.getByRole('button', { name: /start session/i }).click();
+    await expect(viewerPage.getByText(/live view/i)).toBeVisible({ timeout: 10_000 });
+
+    await creatorPage.getByRole('button', { name: /record lap/i }).click();
+    await expect(viewerPage.getByRole('region', { name: /shared lap times/i })).toBeVisible({ timeout: 10_000 });
+    await expect(viewerPage.getByText('Creator').last()).toBeVisible();
+
+    // The viewer session has no stored participant credential that could write.
+    await expect(viewerPage.locator('body')).not.toContainText('Reset & start again');
+    await viewerCtx.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Scenario 4: Reload reconnect
 // ---------------------------------------------------------------------------
 

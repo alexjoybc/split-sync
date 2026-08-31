@@ -247,6 +247,12 @@ function JoinForm({ code, sessionName, onJoined }: JoinFormProps) {
           >
             {loading ? "Joining…" : "Join session"}
           </button>
+          <Link
+            href={`/stopwatch/s/${code}/live`}
+            className="race-action race-action--outline mt-3 block w-full text-center"
+          >
+            Join as viewer
+          </Link>
         </div>
         <p className="mt-4 text-xs text-race-muted text-center">
           Session code:{" "}
