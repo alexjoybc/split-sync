@@ -109,6 +109,41 @@ function setSoundEnabled(enabled: boolean) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Countdown beep — square-wave oscillator (same design as page.tsx)
+// ---------------------------------------------------------------------------
+
+/**
+ * Play a short square-wave beep. Safe to call with a null ctx (no-op).
+ * @param freq   Frequency in Hz
+ * @param dur    Duration in ms
+ * @param peak   Peak gain (0–1)
+ */
+function beepTone(
+  ctx: AudioContext,
+  freq: number,
+  dur: number,
+  peak = 0.2
+) {
+  try {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(peak, ctx.currentTime + 0.002);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur / 1000);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + dur / 1000);
+  } catch {
+    // Ignore — audio context may have been closed.
+  }
+}
+
+/** Seconds that receive an individual beep cue during countdown. */
+const BEEP_SECONDS = new Set([10, 5, 4, 3, 2, 1]);
+
 /** Three rising tones — clearly distinct from the stopwatch's short cues. */
 const ALARM_SEGMENTS = [
   { freq: 880, durationMs: 160 },
@@ -168,6 +203,13 @@ export default function CountdownTimer() {
   /** Set when a persisted running timer finished while the page was closed. */
   const [finishedWhileAway, setFinishedWhileAway] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
+  /**
+   * Fullscreen countdown overlay.
+   * null  = hidden
+   * number = show that second in the big overlay (5 → 1)
+   * "GO"  = show "GO!" for ~1 s after reaching zero
+   */
+  const [countdownOverlay, setCountdownOverlay] = useState<number | "GO" | null>(null);
 
   // Timing refs — wall-clock anchors, never accumulated intervals
   const endAtWallRef = useRef<number | null>(null); // Date.now() at zero, while running
@@ -178,8 +220,56 @@ export default function CountdownTimer() {
   const alarmCountRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
+  // Fullscreen tracking
+  const enteredFsRef = useRef(false);
+  /** Dedup beep: store the last second that triggered a beep. */
+  const lastBeepedSecRef = useRef<number>(-1);
+  /** Timer ID for the "GO" overlay auto-dismiss. */
+  const goTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Keep the display on while counting down (same as the running stopwatch)
   useWakeLock(state === "running");
+
+  // -------------------------------------------------------------------------
+  // Fullscreen helpers
+  // -------------------------------------------------------------------------
+
+  const enterFullscreen = useCallback(() => {
+    const el = document.documentElement;
+    if (typeof el.requestFullscreen === "function" && !document.fullscreenElement) {
+      el.requestFullscreen().then(() => {
+        enteredFsRef.current = true;
+      }).catch(() => undefined);
+    }
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    if (document.fullscreenElement && enteredFsRef.current) {
+      enteredFsRef.current = false;
+      document.exitFullscreen().catch(() => undefined);
+    }
+  }, []);
+
+  const clearOverlay = useCallback(() => {
+    if (goTimerRef.current !== null) {
+      clearTimeout(goTimerRef.current);
+      goTimerRef.current = null;
+    }
+    setCountdownOverlay(null);
+    exitFullscreen();
+  }, [exitFullscreen]);
+
+  // Sync when user presses Esc / browser exits fullscreen unilaterally
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement && enteredFsRef.current) {
+        enteredFsRef.current = false;
+        setCountdownOverlay(null);
+      }
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
 
   // -------------------------------------------------------------------------
   // Audio
@@ -266,16 +356,29 @@ export default function CountdownTimer() {
   const complete = useCallback(() => {
     stopTick();
     endAtWallRef.current = null;
-    // Auto-reset to the ORIGINAL duration — ready to restart with one tap.
-    remainingRef.current = durationRef.current;
-    setRemainingMs(durationRef.current);
-    setState("alerting");
-    clearPersistedTimer();
-    startAlarm();
-  }, [stopTick, startAlarm]);
+    // Play GO beep — longer and louder than the tick beeps.
+    const ctx = audioCtxRef.current;
+    if (ctx && isSoundEnabled()) {
+      beepTone(ctx, 880, 300, 0.3);
+    }
+    // Show "GO!" overlay for 1 s then exit fullscreen and proceed to alert.
+    setCountdownOverlay("GO");
+    goTimerRef.current = setTimeout(() => {
+      goTimerRef.current = null;
+      setCountdownOverlay(null);
+      exitFullscreen();
+      // Auto-reset to the ORIGINAL duration — ready to restart with one tap.
+      remainingRef.current = durationRef.current;
+      setRemainingMs(durationRef.current);
+      setState("alerting");
+      clearPersistedTimer();
+      startAlarm();
+    }, 1000);
+  }, [stopTick, startAlarm, exitFullscreen]);
 
   const startTick = useCallback(() => {
     stopTick();
+    lastBeepedSecRef.current = -1;
     tickRef.current = setInterval(() => {
       if (endAtWallRef.current === null) return;
       const remaining = endAtWallRef.current - Date.now();
@@ -284,9 +387,31 @@ export default function CountdownTimer() {
         complete();
       } else {
         setRemainingMs(remaining);
+        const secs = Math.ceil(remaining / 1000);
+
+        // Per-second dedup: only fire once per displayed second.
+        if (secs !== lastBeepedSecRef.current) {
+          lastBeepedSecRef.current = secs;
+
+          // Beep cue: at 10 s (single warning) and at 5→1 s.
+          const ctx = audioCtxRef.current;
+          if (ctx && isSoundEnabled() && BEEP_SECONDS.has(secs)) {
+            beepTone(ctx, 660, 80, 0.18);
+          }
+
+          // Auto-enter fullscreen and show big overlay at 5 s.
+          if (secs === 5) {
+            enterFullscreen();
+          }
+
+          // Update overlay when we're in the final 5 seconds.
+          if (secs <= 5) {
+            setCountdownOverlay(secs);
+          }
+        }
       }
     }, 100);
-  }, [stopTick, complete]);
+  }, [stopTick, complete, enterFullscreen]);
 
   // Snap immediately when the tab is foregrounded (intervals are throttled
   // while hidden; the wall-clock anchor keeps the value drift-free).
@@ -365,6 +490,7 @@ export default function CountdownTimer() {
     () => () => {
       stopTick();
       stopAlarm();
+      if (goTimerRef.current !== null) clearTimeout(goTimerRef.current);
     },
     [stopTick, stopAlarm]
   );
@@ -375,7 +501,9 @@ export default function CountdownTimer() {
 
   const handleStart = useCallback(() => {
     // User gesture — safe to unlock the AudioContext for the completion alarm.
-    if (isSoundEnabled()) ensureAudioCtx();
+    // Always ensure the ctx so beep cues work even when the sound setting was
+    // turned on after the page loaded.
+    ensureAudioCtx();
     setFinishedWhileAway(false);
     stopAlarm();
     const startFrom =
@@ -397,6 +525,7 @@ export default function CountdownTimer() {
     if (endAtWallRef.current === null) return;
     remainingRef.current = Math.max(0, endAtWallRef.current - Date.now());
     endAtWallRef.current = null;
+    clearOverlay();
     stopTick();
     setRemainingMs(remainingRef.current);
     setState("paused");
@@ -411,13 +540,14 @@ export default function CountdownTimer() {
   const handleReset = useCallback(() => {
     stopTick();
     stopAlarm();
+    clearOverlay();
     endAtWallRef.current = null;
     remainingRef.current = durationRef.current;
     setRemainingMs(durationRef.current);
     setState("idle");
     setFinishedWhileAway(false);
     clearPersistedTimer();
-  }, [stopTick, stopAlarm]);
+  }, [stopTick, stopAlarm, clearOverlay]);
 
   /** Single tap silences the completion alert without restarting. */
   const handleDismissAlert = useCallback(() => {
@@ -473,6 +603,61 @@ export default function CountdownTimer() {
   const secondaryLabel = isAlerting ? "Dismiss" : "Reset";
 
   return (
+    <>
+      {/* ── Fullscreen final-seconds overlay ─────────────────────────────── */}
+      {countdownOverlay !== null && (
+        <div
+          role="status"
+          aria-live="assertive"
+          aria-label={
+            countdownOverlay === "GO"
+              ? "Go!"
+              : `${countdownOverlay} seconds`
+          }
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#000",
+            color: "#fff",
+          }}
+          data-testid="timer-countdown-overlay"
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(160px, 40vw, 320px)",
+              lineHeight: 1,
+              letterSpacing: "-0.04em",
+              color: countdownOverlay === "GO" ? "#22c55e" : "#fff",
+            }}
+          >
+            {countdownOverlay === "GO" ? "GO!" : countdownOverlay}
+          </span>
+          {countdownOverlay !== "GO" && (
+            <span
+              aria-hidden="true"
+              style={{
+                marginTop: "1rem",
+                fontSize: "clamp(18px, 4vw, 32px)",
+                fontWeight: 700,
+                letterSpacing: "0.25em",
+                textTransform: "uppercase",
+                color: "rgba(255,255,255,0.55)",
+              }}
+            >
+              seconds
+            </span>
+          )}
+        </div>
+      )}
+
     <div className="flex w-full flex-col items-center" data-testid="timer-mode">
       {/* ── Dial ─────────────────────────────────────────────────────────── */}
       <div
@@ -625,5 +810,6 @@ export default function CountdownTimer() {
         </p>
       </section>
     </div>
+    </>
   );
 }
