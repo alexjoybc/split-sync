@@ -7,6 +7,7 @@
     "orientation": "default",
     "scheme": "org.splitsync.stopwatch",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "runtimeVersion": {
       "policy": "sdkVersion"
     },
@@ -16,10 +17,6 @@
     "android": {
       "package": "org.splitsync.stopwatch",
       "permissions": ["android.permission.POST_NOTIFICATIONS"],
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#F5F0E8"
-      },
       "intentFilters": [
         {
           "action": "VIEW",
