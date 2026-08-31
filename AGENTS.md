@@ -42,7 +42,14 @@ The product has four deliberate surfaces. Do not blend their permissions or goal
 
 ## UI System
 
-- The visual language is professional cycling classification: race-paper background, black rules, red actions, yellow leader emphasis, dense square tables.
+- The visual language is professional cycling classification: race-paper background, black rules, dense square tables.
+- **Color hierarchy** (see `docs/adr/0021-color-system.md` for full contrast audit):
+  - blue-primary (`#0B6FB3`) for all interactive/action elements (buttons, links, focus rings)
+  - red (`#CC1A22`) reserved for LIVE badge, errors, DSQ/penalty indicators, and destructive actions only — never generic navigation or branding
+  - yellow (`#FFD700`) for leader/highlight emphasis only — ink text always, never white
+  - light blue accent (`#5BC8F5`) for instrument surfaces (stopwatch LCD display) — ink text only
+- **All canonical color values live in `packages/palette/src/index.ts`.** `apps/web/src/app/globals.css` CSS custom properties are manually derived from that package. Never edit `globals.css` hex values without updating the palette package first.
+- **Accessibility**: every status/state indicator (LIVE, DSQ, DNS, DNF, Penalty, Leader) must carry a text label in addition to its color (WCAG 1.4.1). All interactive CSS classes use `:focus-visible` with a 2px blue-primary outline (WCAG 2.4.7).
 - Web theme tokens and reusable component classes live in `apps/web/src/app/globals.css`. Reuse `race-*` tokens/classes rather than introducing arbitrary hex values.
 - The spectator board may use a stronger black masthead. Organizer screens stay predominantly light and editorial.
 - Mobile uses the same palette in `apps/mobile/App.tsx`; centralize new colors in its `colors` object.

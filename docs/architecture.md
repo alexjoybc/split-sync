@@ -262,12 +262,21 @@ Both link directly into the Join screen. The native app registers an Android int
 
 ## UI System
 
-The visual design system is a shared contract across web and mobile, documented in [`docs/adr/0015-broadcast-ui-refresh.md`](adr/0015-broadcast-ui-refresh.md).
+The visual design system is a shared contract across web and mobile, documented in [`docs/adr/0015-broadcast-ui-refresh.md`](adr/0015-broadcast-ui-refresh.md) and [`docs/adr/0021-color-system.md`](adr/0021-color-system.md).
 
 Key elements:
 
+- **Single source of truth**: `packages/palette/src/index.ts` (`@splitsync/palette`) exports every canonical color token as a typed TypeScript constant. `apps/web/src/app/globals.css` CSS custom properties are manually derived from this package. Never edit `globals.css` hex values without updating the palette package first.
+- **Color hierarchy**:
+  - `blue-primary` (`#0B6FB3`) — all interactive/action elements: primary buttons, links, focus rings. White text on this background passes AA (5.33:1).
+  - `red` (`#CC1A22`) — critical states only: the LIVE badge, errors, DSQ/penalty indicators, destructive actions. Never used for generic navigation or branding.
+  - `yellow` (`#FFD700`) — leader / gold emphasis exclusively. Ink text only — white on yellow fails (1.40:1).
+  - `blue-accent` (`#5BC8F5`) — instrument surfaces only (stopwatch LCD display, decorative badges). Ink text only — white on blue-accent fails (1.91:1).
+  - `muted` (`#636369`) — secondary / de-emphasised text. Passes AA on paper (5.29:1) and panel-alt (4.79:1).
+- **Focus visibility**: all interactive CSS classes (`.race-action`, `.race-input`, `.race-chip`, `.sw-pusher`, and global `a`) carry a `2px solid var(--race-blue-primary)` `:focus-visible` outline. Mouse/touch users never see the ring; keyboard users always do. See ADR 0021 for the contrast verification.
+- **Non-color status cues**: every state indicator (LIVE, DSQ, DNS, DNF, Penalty, Leader) carries a visible text label in addition to its color, satisfying WCAG 1.4.1.
 - **Tokens**: `--race-*` CSS custom properties in `apps/web/src/app/globals.css` and matching keys in the `colors` object in `apps/mobile/App.tsx`.
 - **Typography**: Geist Sans (body), Barlow Condensed 700 (numeral display columns — rank, lap, gap, elapsed).
 - **Motion vocabulary**: three named patterns — `live-pulse`, `rank-flash`, `leader-change` — defined as CSS `@keyframes` utility classes respecting `prefers-reduced-motion`.
-- **Element rule table**: which UI elements receive broadcast depth/motion treatment (hero/live only) vs. which remain flat (organizer admin, static content) — see the ADR for the full table.
+- **Element rule table**: which UI elements receive broadcast depth/motion treatment (hero/live only) vs. which remain flat (organizer admin, static content) — see ADR 0015 for the full table.
 - **Cross-surface contract**: every token added to web's `:root` block has a matching mobile `colors` key, and vice versa.
