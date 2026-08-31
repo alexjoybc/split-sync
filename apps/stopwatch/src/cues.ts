@@ -143,7 +143,7 @@ function toneWavDataUri(segments: ToneSegment[]): string {
 
 // ── Cue playback ───────────────────────────────────────────────────────────────
 
-export type CueType = "start" | "stop" | "lap" | "target" | "alarm";
+export type CueType = "start" | "stop" | "lap" | "target" | "alarm" | "tick";
 
 const CUE_SEGMENTS: Record<CueType, ToneSegment[]> = {
   start: [{ freq: 880, durationMs: 130 }],
@@ -169,6 +169,9 @@ const CUE_SEGMENTS: Record<CueType, ToneSegment[]> = {
     { freq: 0, durationMs: 40 },
     { freq: 1568, durationMs: 260 },
   ],
+  // Delayed-start countdown tick (#293): short 660 Hz beep, distinct from the
+  // louder "start" cue fired at GO. One per second for each second ≥ 1.
+  tick: [{ freq: 660, durationMs: 80 }],
 };
 
 const players: Partial<Record<CueType, AudioPlayer>> = {};
