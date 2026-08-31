@@ -106,6 +106,10 @@ const C = {
   btnBlueBody:  '#5BC8F5', btnBlueHi:  '#8DDBFB', btnBlueLo:  '#2E86C1',
 };
 
+// ── Touch target constant ─────────────────────────────────────────────────────
+/** Minimum 44×44 pt touch target — apply to all icon-only controls. */
+const ICON_BTN_SIZE = 44;
+
 // ── Domain types ───────────────────────────────────────────────────────────────
 type AppScreen =
   | "loading"
@@ -1000,10 +1004,23 @@ function CueBarButton({
       accessible
       accessibilityRole="button"
       accessibilityLabel="Sound settings"
+      hitSlop={8}
       style={s.cueBtn}
     >
       <Text style={[s.cueBtnText, active && { color: C.yellow }]}>♪</Text>
     </Pressable>
+  );
+}
+
+// Subtle SplitSync logo footer — shown at the bottom of control-dense screens
+function LogoFooter() {
+  return (
+    <View style={s.logoFooter}>
+      <View style={s.logoChip}>
+        <Text style={s.logoSplit}>SPLIT</Text>
+        <Text style={s.logoSync}>SYNC</Text>
+      </View>
+    </View>
   );
 }
 
@@ -2293,18 +2310,14 @@ function SessionScreen({
       {/* ── Casing top ── */}
       <View style={s.casing}>
         <View style={s.casingLeft}>
-          <Pressable onPress={onBack} style={{ marginRight: 8 }}>
+          <Pressable onPress={onBack} hitSlop={8} style={s.iconBtn}>
             <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
           </Pressable>
-          <View style={s.logoChip}>
-            <Text style={s.logoSplit}>SPLIT</Text>
-            <Text style={s.logoSync}>SYNC</Text>
-          </View>
           <Text style={s.casingTitle} numberOfLines={1}>
             {params.sessionName.toUpperCase().slice(0, 16)}
           </Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
           {pendingCount > 0 && (
             <ActivityIndicator size="small" color={C.yellow} />
           )}
@@ -2313,7 +2326,8 @@ function SessionScreen({
             onPress={handleLockToggle}
             onLongPress={handleUnlock}
             delayLongPress={1500}
-            style={{ padding: 6 }}
+            hitSlop={8}
+            style={s.iconBtn}
             accessibilityLabel={isLocked ? "Controls locked — hold to unlock" : "Lock controls"}
             accessibilityRole="button"
           >
@@ -2586,6 +2600,9 @@ function SessionScreen({
           </Text>
         </View>
       )}
+
+      {/* ── Logo footer ── */}
+      <LogoFooter />
 
       {/* ── Device bottom button bar ── */}
       <View style={s.btnCasing}>
@@ -3162,22 +3179,19 @@ function SoloScreen({
       {/* ── Device top casing ── */}
       <View style={s.casing}>
         <View style={s.casingLeft}>
-          <Pressable onPress={onBack} style={{ marginRight: 8 }}>
+          <Pressable onPress={onBack} hitSlop={8} style={s.iconBtn}>
             <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
           </Pressable>
-          <View style={s.logoChip}>
-            <Text style={s.logoSplit}>SPLIT</Text>
-            <Text style={s.logoSync}>SYNC</Text>
-          </View>
           <Text style={s.casingTitle}>STOPWATCH</Text>
         </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
           {/* Lock toggle: tap to lock, long-press (1.5 s) to unlock */}
           <Pressable
             onPress={handleLockToggle}
             onLongPress={handleUnlock}
             delayLongPress={1500}
-            style={{ padding: 6 }}
+            hitSlop={8}
+            style={s.iconBtn}
             accessibilityLabel={isLocked ? "Controls locked — hold to unlock" : "Lock controls"}
             accessibilityRole="button"
           >
@@ -3464,6 +3478,9 @@ function SoloScreen({
         /* Countdown: flex spacer so button bar stays anchored */
         <View style={{ flex: 1 }} />
       )}
+
+      {/* ── Logo footer ── */}
+      <LogoFooter />
 
       {/* ── Device bottom button bar ── */}
       <View style={s.btnCasing}>
@@ -3882,13 +3899,9 @@ function TimerScreen({
       {/* ── Device top casing ── */}
       <View style={s.casing}>
         <View style={s.casingLeft}>
-          <Pressable onPress={onBack} style={{ marginRight: 8 }}>
-            <Text style={{ color: "#888", fontSize: 20 }}>‹</Text>
+          <Pressable onPress={onBack} hitSlop={8} style={s.iconBtn}>
+            <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
           </Pressable>
-          <View style={s.logoChip}>
-            <Text style={s.logoSplit}>SPLIT</Text>
-            <Text style={s.logoSync}>SYNC</Text>
-          </View>
           <Text style={s.casingTitle}>TIMER</Text>
         </View>
         <View
@@ -4030,6 +4043,9 @@ function TimerScreen({
 
       {/* Spacer keeps the button bar anchored */}
       <View style={{ flex: 1 }} />
+
+      {/* ── Logo footer ── */}
+      <LogoFooter />
 
       {/* ── Device bottom button bar ── */}
       <View style={s.btnCasing}>
@@ -4719,10 +4735,29 @@ const s = StyleSheet.create({
     overflow: "hidden",
   } as const,
 
+  // Icon-only button — shared 44×44 pt touch target
+  iconBtn: {
+    width: ICON_BTN_SIZE,
+    height: ICON_BTN_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Logo footer — subtle centered brand element on control-dense screens
+  logoFooter: {
+    alignItems: "center",
+    paddingVertical: 5,
+    backgroundColor: C.casing,
+    borderTopWidth: 1,
+    borderColor: C.casingBorder,
+  },
+
   // Sound cues (#227)
   cueBtn: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    width: ICON_BTN_SIZE,
+    height: ICON_BTN_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
   },
   cueBtnText: { color: C.casingMuted, fontSize: 16, fontWeight: "900" },
   cuePanel: {
