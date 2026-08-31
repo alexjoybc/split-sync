@@ -117,6 +117,41 @@ export default function HelpPage() {
 
         <section>
           <div className="race-section-heading">
+            <p className="race-kicker--muted">For spectators</p>
+            <h2 className="mt-1 text-xl font-black uppercase">
+              Color indicators
+            </h2>
+          </div>
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
+            <li>
+              <strong className="text-race-red">Red</strong> means something
+              critical: a race is <strong>LIVE</strong> (actively running), a
+              rider has been <strong>disqualified</strong> (DSQ), or a{" "}
+              <strong>penalty</strong> has been applied. These indicators always
+              include a text label — color is never the only signal.
+            </li>
+            <li>
+              <strong className="text-race-yellow bg-race-ink px-0.5">Yellow</strong>{" "}
+              highlights the current <strong>leader</strong>. The leader row is
+              shown in yellow with the rank numeral &ldquo;1&rdquo; and the word
+              &ldquo;Leader&rdquo; in the gap column.
+            </li>
+            <li>
+              <strong className="text-race-blue-primary">Blue</strong> labels
+              indicate context or section headers (for example, &ldquo;Unofficial
+              live standings&rdquo; or &ldquo;Live ranking by time&rdquo;) and
+              marks interactive controls such as buttons and links.
+            </li>
+            <li>
+              Muted grey text is used for secondary information: timestamps,
+              team names, and metadata that are less important than the primary
+              standings.
+            </li>
+          </ul>
+        </section>
+
+        <section>
+          <div className="race-section-heading">
             <p className="race-kicker--muted">For organizers</p>
             <h2 className="mt-1 text-xl font-black uppercase">
               Setting up an event

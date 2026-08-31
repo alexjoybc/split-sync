@@ -252,3 +252,48 @@ The canonical values defined in this ADR are encoded in a dedicated workspace pa
 | `red-tint` | `#FDECEA` | 253, 236, 234 |
 | `success` | `#166534` | 22, 101, 52 |
 | `warning` | `#92400E` | 146, 64, 14 |
+
+---
+
+## Status — shipped (issues #261–#268)
+
+The canonical palette defined in this ADR shipped across a series of issues:
+
+- **#261** — `packages/palette/src/index.ts` created as the single source of truth; `globals.css` updated with all canonical tokens.
+- **#262** — Spectator live board recolored (blue-primary kicker labels, red LIVE-only badge, yellow leader row, blue focus on search input).
+- **#263** — Organizer admin surfaces recolored; `apps/web/src/lib/statusColors.ts` shared status pill map introduced.
+- **#264** — Results and announce surfaces recolored.
+- **#265** — Mobile tracker (`apps/mobile`) palette aligned to canonical tokens.
+- **#266** — Web stopwatch recolored.
+- **#267** — Native stopwatch (`apps/stopwatch`) palette aligned.
+- **#268** — Accessibility hardening: focus-visible ring added to all interactive elements (`.race-action`, `.race-input`, `.race-chip`, `a`, `.sw-pusher`, etc.); WCAG 1.4.1 non-color-cue audit confirmed all status indicators carry text labels (DSQ/DNS/DNF/Penalty/Leader); final contrast sweep below; docs updated.
+
+### Key implementation details
+
+- **`--race-pulse-color: white`** — the live-badge pulse dot is white (not red) so it is visible against the red badge background.
+- **`--sw-digit-color: var(--race-blue-accent)`** — the web stopwatch LCD uses light-blue (`#5BC8F5`) matching the native Android stopwatch.
+- **`apps/web/src/lib/statusColors.ts`** — shared status pill token map (upcoming/active/finished) consumed by the organizer event page and the results page.
+- **Focus ring** — `2px solid var(--race-blue-primary)` with `outline-offset: 2px` applied via `:focus-visible` to all interactive CSS classes (no ring on mouse click). Contrast of the ring color (`#0B6FB3`) against paper (`#f4f1ea`) is 4.73:1 ✓ AA for UI components.
+
+### WCAG 1.4.1 non-color-cue audit (as of #268)
+
+| State | Non-color cue present | Result |
+|-------|----------------------|--------|
+| LIVE badge | "Live" text + animated pulse dot shape | ✓ |
+| DSQ badge | "DSQ" text label | ✓ |
+| DNS / DNF badges | "DNS" / "DNF" text labels | ✓ |
+| Penalty badge | "Penalty" text label | ✓ |
+| Leader row | Rank numeral "1" + angled cell shape + "Leader" text in gap column | ✓ |
+| Rank-change flash | Rank number itself changes (sufficient non-color cue per WCAG 1.4.1 note on transient animations) | ✓ |
+| Race status pills (upcoming/active/finished) | Text label inside pill | ✓ |
+
+### Final contrast sweep (as of #268)
+
+| Pair | Ratio | Result |
+|------|-------|--------|
+| `text-race-muted` (#636369) on `bg-race-paper` (#f4f1ea) | 5.29:1 | ✓ AA normal text |
+| white on `bg-race-blue-primary` (#0B6FB3) | 5.33:1 | ✓ AA normal text |
+| white on `bg-race-red` (#CC1A22) | 5.62:1 | ✓ AA normal text |
+| `text-race-ink` on `bg-race-yellow` (#FFD700) | 12.63:1 | ✓ AA normal text |
+| `race-blue-accent` (#5BC8F5) on stopwatch bezel inner (#111113) | ~11.7:1 | ✓ AA (large display digits) |
+| Focus ring `#0B6FB3` against `#f4f1ea` (paper) | 4.73:1 | ✓ AA UI component |

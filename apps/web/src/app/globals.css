@@ -117,7 +117,7 @@ body {
 }
 
 .race-input {
-  @apply w-full border-2 border-race-ink bg-race-panel px-3 py-2 text-sm font-bold text-race-ink outline-none placeholder:text-race-muted focus:border-race-red;
+  @apply w-full border-2 border-race-ink bg-race-panel px-3 py-2 text-sm font-bold text-race-ink outline-none placeholder:text-race-muted focus:border-race-blue-primary;
 }
 
 .race-panel {
@@ -265,6 +265,52 @@ body {
   .no-print {
     display: none !important;
   }
+}
+
+/* ── Focus visibility (WCAG 2.4.7 / 1.4.11) ─────────────────────────── */
+/* All interactive elements get a visible blue-primary focus ring when
+   navigated by keyboard. :focus-visible avoids the ring on mouse click.
+   2px solid blue-primary (#0B6FB3) provides ≥3:1 contrast against both
+   the paper (#f4f1ea) and panel (#ffffff) backgrounds.                  */
+
+a:focus-visible {
+  outline: 2px solid var(--race-blue-primary);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+.race-action:focus-visible,
+.race-action--primary:focus-visible,
+.race-action--muted:focus-visible,
+.race-action--yellow:focus-visible,
+.race-action--outline:focus-visible,
+.race-inline-action:focus-visible {
+  outline: 2px solid var(--race-blue-primary);
+  outline-offset: 2px;
+}
+
+/* Inset outline so it aligns with the existing 2px border */
+.race-input:focus-visible,
+.race-input--muted:focus-visible {
+  outline: 2px solid var(--race-blue-primary);
+  outline-offset: -2px;
+}
+
+.race-chip:focus-visible {
+  outline: 2px solid var(--race-blue-primary);
+  outline-offset: 2px;
+}
+
+/* Stopwatch pushers are circular — offset slightly more so the ring clears the border */
+.sw-pusher:focus-visible {
+  outline: 2px solid var(--race-blue-primary);
+  outline-offset: 4px;
+}
+
+.sw-delay-option:focus-visible,
+.sw-lock-btn:focus-visible {
+  outline: 2px solid var(--race-blue-primary);
+  outline-offset: 2px;
 }
 
 /* ── Stopwatch tokens ────────────────────────────────────────────────────── */
