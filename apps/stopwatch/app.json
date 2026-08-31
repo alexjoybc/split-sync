@@ -45,6 +45,6 @@
       }
     },
     "platforms": ["android"],
-    "plugins": ["expo-font", "expo-audio"]
+    "plugins": ["expo-font", "expo-audio", "./plugins/withStoragePermissions"]
   }
 }
