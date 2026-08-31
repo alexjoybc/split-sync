@@ -45,7 +45,7 @@ export default function NewEvent() {
       <header className="race-masthead"><div className="mx-auto max-w-lg"><p className="race-kicker--muted">Race calendar</p><h1 className="race-title">New event</h1></div></header>
       <div className="mx-auto max-w-lg px-4 py-8 sm:px-6">
 
-       {!loading && !user ? <div className="race-panel p-5"><p className="text-sm text-race-muted">Sign in before creating an event.</p><button onClick={() => router.push("/login?next=/new")} className="race-action--muted mt-4">Sign in</button></div> : <>
+       {!loading && !user ? <div className="race-panel p-5"><p className="text-sm text-race-muted">Sign in before creating an event.</p><button onClick={() => router.push("/login?next=/new")} className="race-action--primary mt-4">Sign in</button></div> : <>
 
       <div className="mt-6 space-y-4">
         <div>
@@ -71,7 +71,7 @@ export default function NewEvent() {
         <button
           onClick={createEvent}
           disabled={saving || loading}
-          className="race-action--muted w-full disabled:opacity-50"
+          className="race-action--primary w-full disabled:opacity-50"
         >
           {saving ? "Creating…" : "Create event and add racers"}
         </button>

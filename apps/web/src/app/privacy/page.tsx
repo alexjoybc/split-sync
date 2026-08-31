@@ -23,11 +23,11 @@ export default function PrivacyPage() {
       </header>
 
       <div className="mx-auto max-w-3xl space-y-10 px-4 pt-8 pb-16 sm:px-6">
-        <p className="text-sm font-bold text-zinc-600">
+        <p className="text-sm font-bold text-race-muted">
           Last updated: 2026-08-30
         </p>
 
-        <p className="text-sm font-semibold text-zinc-700">
+        <p className="text-sm font-semibold text-race-ink">
           SplitSync (&quot;we&quot;, &quot;us&quot;) provides live, unofficial
           race classification software for grassroots velodrome and
           cyclocross racing, at{" "}
@@ -46,7 +46,7 @@ export default function PrivacyPage() {
               Live, results, and announce pages
             </h2>
           </div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>No account, sign-in, or personal information is required or collected.</li>
             <li>
               These pages read published event data only: rider bib numbers,
@@ -63,7 +63,7 @@ export default function PrivacyPage() {
               Account and race data
             </h2>
           </div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>
               Signing in requires an email address and password, or a Google
               account, handled by our database provider, Supabase. We do not
@@ -96,7 +96,7 @@ export default function PrivacyPage() {
               Anonymous sessions
             </h2>
           </div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>No sign-in, account, or roster is required.</li>
             <li>
               A stopwatch session is identified only by a short code you
@@ -113,7 +113,7 @@ export default function PrivacyPage() {
               Data retention and questions
             </h2>
           </div>
-          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-zinc-700">
+          <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>
               Event and race data is retained until the organizer who created
               it deletes it or requests removal.

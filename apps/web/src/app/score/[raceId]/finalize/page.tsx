@@ -161,10 +161,10 @@ export default function FinalizeRace({ params }: { params: Promise<{ raceId: str
             ok={noCrossingRiders.length === 0}
             emptyText="Every entered rider has at least one recorded crossing."
           >
-            <ul className="divide-y divide-zinc-200">
+            <ul className="divide-y divide-race-line">
               {noCrossingRiders.map((r) => (
                 <li key={r.bib} className="flex items-center gap-3 py-2 text-sm font-bold uppercase">
-                  <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black text-white">{r.bib}</span>
+                  <span className="inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-xs font-black text-white">{r.bib}</span>
                   {r.name}
                 </li>
               ))}
@@ -177,10 +177,10 @@ export default function FinalizeRace({ params }: { params: Promise<{ raceId: str
               ok={suspiciousGapRiders.length === 0}
               emptyText="No rider's last lap looks unusually slow relative to the field."
             >
-              <ul className="divide-y divide-zinc-200">
+              <ul className="divide-y divide-race-line">
                 {suspiciousGapRiders.map((r) => (
                   <li key={r.bib} className="flex items-center gap-3 py-2 text-sm font-bold uppercase">
-                    <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black text-white">{r.bib}</span>
+                    <span className="inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-xs font-black text-white">{r.bib}</span>
                     {r.name}
                     <span className="ml-auto text-xs text-race-muted">Last lap flagged as unusually slow</span>
                   </li>
@@ -195,10 +195,10 @@ export default function FinalizeRace({ params }: { params: Promise<{ raceId: str
               ok={needsReviewRiders.length === 0}
               emptyText="No rider has an ambiguous (3+) crossing count."
             >
-              <ul className="divide-y divide-zinc-200">
+              <ul className="divide-y divide-race-line">
                 {needsReviewRiders.map((r) => (
                   <li key={r.bib} className="flex items-center gap-3 py-2 text-sm font-bold uppercase">
-                    <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black text-white">{r.bib}</span>
+                    <span className="inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-xs font-black text-white">{r.bib}</span>
                     {r.name}
                   </li>
                 ))}
@@ -212,10 +212,10 @@ export default function FinalizeRace({ params }: { params: Promise<{ raceId: str
               ok={stillOnCourseRiders.length === 0}
               emptyText="Every rider has either finished or been marked DNS/DNF/DSQ."
             >
-              <ul className="divide-y divide-zinc-200">
+              <ul className="divide-y divide-race-line">
                 {stillOnCourseRiders.map((r) => (
                   <li key={r.bib} className="flex items-center gap-3 py-2 text-sm font-bold uppercase">
-                    <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black text-white">{r.bib}</span>
+                    <span className="inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-xs font-black text-white">{r.bib}</span>
                     {r.name}
                     <span className="ml-auto text-xs text-race-muted">{r.phase}</span>
                   </li>
@@ -229,10 +229,10 @@ export default function FinalizeRace({ params }: { params: Promise<{ raceId: str
             ok={unresolvedStatusEntries.length === 0}
             emptyText="Every DNS/DNF/DSQ rider has a recorded reason."
           >
-            <ul className="divide-y divide-zinc-200">
+            <ul className="divide-y divide-race-line">
               {unresolvedStatusEntries.map((e) => (
                 <li key={e.id} className="flex items-center gap-3 py-2 text-sm font-bold uppercase">
-                  <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black text-white">{e.bib}</span>
+                  <span className="inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-xs font-black text-white">{e.bib}</span>
                   {e.name}
                   <span className="ml-auto text-xs text-race-muted">{e.status.toUpperCase()} — no reason recorded</span>
                 </li>
@@ -251,10 +251,10 @@ export default function FinalizeRace({ params }: { params: Promise<{ raceId: str
                   #72&apos;s follow-up). Review these manually before publishing.
                 </p>
               )}
-              <ul className="mt-2 divide-y divide-zinc-200">
+              <ul className="mt-2 divide-y divide-race-line">
                 {penalizedEntries.map((e) => (
                   <li key={e.id} className="flex items-center gap-3 py-2 text-sm font-bold uppercase">
-                    <span className="inline-flex min-w-8 justify-center bg-zinc-950 px-1.5 py-1 text-xs font-black text-white">{e.bib}</span>
+                    <span className="inline-flex min-w-8 justify-center bg-race-ink px-1.5 py-1 text-xs font-black text-white">{e.bib}</span>
                     {e.name}
                   </li>
                 ))}
@@ -272,7 +272,7 @@ export default function FinalizeRace({ params }: { params: Promise<{ raceId: str
                     {rows.length === 0 ? (
                       <p className="px-2 py-2 text-xs text-race-muted">No finishers yet</p>
                     ) : (
-                      <ol className="divide-y divide-zinc-200">
+                      <ol className="divide-y divide-race-line">
                         {rows.map((r) => (
                           <li key={r.bib} className="flex items-center gap-2 px-2 py-1 text-xs font-bold uppercase">
                             <span>{r.position}.</span>
@@ -328,7 +328,7 @@ function ChecklistSection({
     <div className="race-panel p-4">
       <div className="flex items-center gap-2">
         <span
-          className={`inline-flex px-1.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-white ${ok ? "bg-zinc-500" : "bg-[#ec1c24]"}`}
+          className={`inline-flex px-1.5 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-white ${ok ? "bg-race-muted" : "bg-[#ec1c24]"}`}
         >
           {ok ? "Clear" : "Review"}
         </span>

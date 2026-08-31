@@ -113,7 +113,7 @@ export default function StartList({ params }: { params: Promise<{ raceId: string
           <div className="mt-4 overflow-hidden border-t-2 border-race-ink">
             <table className="w-full table-fixed border-collapse text-sm">
               <thead>
-                <tr className="border-b border-zinc-300 text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
+                <tr className="border-b border-race-line text-left text-[10px] font-black uppercase tracking-wide text-race-muted">
                   <th className="w-14 py-2">Bib</th>
                   <th className="py-2">Name</th>
                   <th className="w-28 py-2">Team</th>
@@ -123,7 +123,7 @@ export default function StartList({ params }: { params: Promise<{ raceId: string
               </thead>
               <tbody>
                 {rows.map((entry) => (
-                  <tr key={entry.id} className="border-b border-zinc-200 even:bg-race-panel-alt">
+                  <tr key={entry.id} className="border-b border-race-line even:bg-race-panel-alt">
                     <td className="py-2 font-black tabular-nums">#{entry.bib}</td>
                     <td className="truncate py-2 font-bold">{entry.name}</td>
                     <td className="truncate py-2 text-race-muted">{entry.team ?? "—"}</td>
