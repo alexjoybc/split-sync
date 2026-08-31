@@ -48,7 +48,8 @@
       "expo-audio",
       "./plugins/withStoragePermissions",
       "./plugins/withStripRecordAudio",
-      "expo-web-browser"
+      "expo-web-browser",
+      "./plugins/withRemoveSystemAlertWindow"
     ]
   }
 }
