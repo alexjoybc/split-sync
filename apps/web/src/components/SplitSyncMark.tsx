@@ -43,7 +43,7 @@ export function SplitSyncMark({
       <text
         x="21"
         y="13.5"
-        fill="white"
+        fill={palette.panel}
         fontSize="7.5"
         fontWeight="900"
         letterSpacing="0.8"
