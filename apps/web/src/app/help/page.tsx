@@ -532,10 +532,11 @@ export default function HelpPage() {
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>
               <strong>Creating a session</strong> requires a SplitSync account.
-              Sign in, then click <strong>Time together</strong> on the stopwatch
-              page (web) or tap <strong>NEW SESSION</strong> in the app. Name the
-              session, enter a display name for yourself, and share the link —
-              joiners do <em>not</em> need an account.
+              Sign in with email/password or Google, then click{" "}
+              <strong>Time together</strong> on the stopwatch page (web) or tap{" "}
+              <strong>NEW SESSION</strong> in the app. Name the session, enter a
+              display name for yourself, and share the link — joiners do{" "}
+              <em>not</em> need an account.
             </li>
             <li>
               The share link looks like{" "}

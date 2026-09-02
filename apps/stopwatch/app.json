@@ -43,6 +43,12 @@
       }
     },
     "platforms": ["android"],
-    "plugins": ["expo-font", "expo-audio", "./plugins/withStoragePermissions", "./plugins/withStripRecordAudio"]
+    "plugins": [
+      "expo-font",
+      "expo-audio",
+      "./plugins/withStoragePermissions",
+      "./plugins/withStripRecordAudio",
+      "expo-web-browser"
+    ]
   }
 }

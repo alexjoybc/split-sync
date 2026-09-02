@@ -4,7 +4,7 @@
  * Screens (state-machine navigation):
  *   solo     → standalone stopwatch (no auth required) — always the landing screen
  *   loading  → transient, shown only while a deep link is being resolved
- *   login    → email/password sign-in, reached via "Time together" (no signup; accounts via web)
+ *   login    → email/password or Google sign-in, reached via "Time together" (no signup; accounts via web)
  *   home     → My Sessions + New Session + Solo option
  *   create   → name session + display name → creates session → session
  *   join     → display name prompt after deep-link lands
@@ -37,6 +37,7 @@ import type { AppStateStatus } from "react-native";
 import * as Crypto from "expo-crypto";
 import { VolumeManager, addVolumeListener } from "react-native-volume-manager";
 import * as ExpoLinking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
@@ -56,6 +57,10 @@ import {
 } from "./src/cues";
 import type { CueSettings } from "./src/cues";
 import { palette } from "../../packages/palette/src/index";
+
+// Required so the in-app browser session used for Google sign-in resolves
+// its promise when redirected back into the app.
+WebBrowser.maybeCompleteAuthSession();
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 // Canonical tokens from @splitsync/palette; instrument-specific values kept inline.
@@ -308,6 +313,29 @@ function extractCodeFromUrl(url: string): string | null {
 
 function isLiveViewUrl(url: string): boolean {
   return /\/s\/[A-Z2-9]{6}\/live(?:[/?#]|$)/i.test(url);
+}
+
+// Consumes an `org.splitsync.stopwatch://auth/callback` deep link produced by
+// Supabase's OAuth redirect, exchanging the PKCE `code` for a session. Mirrors
+// the pattern used by the mobile tracker app (apps/mobile/App.tsx).
+async function consumeAuthCallbackUrl(url: string): Promise<boolean> {
+  if (!url.includes("auth/callback")) return false;
+  const { queryParams } = ExpoLinking.parse(url);
+  const code = typeof queryParams?.code === "string" ? queryParams.code : undefined;
+  if (code) {
+    await supabase.auth.exchangeCodeForSession(code);
+    return true;
+  }
+  const fragment = url.split("#")[1];
+  if (!fragment) return false;
+  const params = new URLSearchParams(fragment);
+  const accessToken = params.get("access_token");
+  const refreshToken = params.get("refresh_token");
+  if (accessToken && refreshToken) {
+    await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    return true;
+  }
+  return false;
 }
 
 // ── Lap trend chart (native) ───────────────────────────────────────────────────
@@ -1095,6 +1123,7 @@ function LoginScreen({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleSignIn = useCallback(async () => {
@@ -1115,6 +1144,36 @@ function LoginScreen({
       onLogin();
     }
   }, [email, password, onLogin]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    setError(null);
+    setGoogleLoading(true);
+    const redirectTo = ExpoLinking.createURL("auth/callback");
+    const { data, error: authError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo, skipBrowserRedirect: true },
+    });
+    if (authError || !data.url) {
+      setGoogleLoading(false);
+      setError(authError?.message ?? "Could not start Google sign-in.");
+      return;
+    }
+    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+    if (result.type === "success") {
+      const ok = await consumeAuthCallbackUrl(result.url);
+      setGoogleLoading(false);
+      if (ok) {
+        onLogin();
+      } else {
+        setError("Google sign-in did not complete. Try again.");
+      }
+    } else {
+      setGoogleLoading(false);
+      if (result.type !== "cancel") {
+        setError("Google sign-in was interrupted. Try again.");
+      }
+    }
+  }, [onLogin]);
 
   // Shared timing sessions need Supabase credentials. Without them, there is
   // nothing useful a sign-in form can do — go straight to a solo-only prompt.
@@ -1151,6 +1210,27 @@ function LoginScreen({
           Sign in to create and manage shared timing sessions. Joining a session
           requires no account.
         </Text>
+
+        <Pressable
+          onPress={handleGoogleSignIn}
+          disabled={googleLoading || loading}
+          style={({ pressed }) => [
+            s.googleBtn,
+            { opacity: pressed || googleLoading || loading ? 0.7 : 1 },
+          ]}
+        >
+          {googleLoading ? (
+            <ActivityIndicator color={C.ink} />
+          ) : (
+            <Text style={s.googleBtnText}>Continue with Google</Text>
+          )}
+        </Pressable>
+
+        <View style={s.dividerRow}>
+          <View style={s.dividerLine} />
+          <Text style={s.dividerText}>OR</Text>
+          <View style={s.dividerLine} />
+        </View>
 
         <LabeledInput
           label="EMAIL"
@@ -4333,38 +4413,40 @@ function RootNavigator() {
   }, []);
 
   // ── Deep link handling ──────────────────────────────────────────────────────
+  // Handles both join links (…/s/<code>) and the Google OAuth callback
+  // (org.splitsync.stopwatch://auth/callback). The callback is normally
+  // consumed directly from the WebBrowser.openAuthSessionAsync() result in
+  // LoginScreen, but Android can also redeliver it here, so this stays as a
+  // safety net that no-ops once the session already exists.
+  const handleIncomingUrl = useCallback((url: string) => {
+    const code = extractCodeFromUrl(url);
+    if (code) {
+      if (isLiveViewUrl(url)) {
+        setLiveViewParams({ code });
+        setScreen("viewer");
+      } else {
+        setJoinParams({ code });
+        setScreen("join");
+      }
+      return;
+    }
+    if (url.includes("auth/callback")) {
+      consumeAuthCallbackUrl(url);
+    }
+  }, []);
+
   useEffect(() => {
     // Initial URL (app was opened from a link)
     ExpoLinking.getInitialURL().then((url) => {
-      if (url) {
-        const code = extractCodeFromUrl(url);
-        if (code) {
-          if (isLiveViewUrl(url)) {
-            setLiveViewParams({ code });
-            setScreen("viewer");
-          } else {
-            setJoinParams({ code });
-            setScreen("join");
-          }
-        }
-      }
+      if (url) handleIncomingUrl(url);
     });
 
     // Subsequent links while app is open
     const sub = ExpoLinking.addEventListener("url", ({ url }) => {
-      const code = extractCodeFromUrl(url);
-      if (code) {
-        if (isLiveViewUrl(url)) {
-          setLiveViewParams({ code });
-          setScreen("viewer");
-        } else {
-          setJoinParams({ code });
-          setScreen("join");
-        }
-      }
+      handleIncomingUrl(url);
     });
     return () => sub.remove();
-  }, []);
+  }, [handleIncomingUrl]);
 
   // ── Sign out ────────────────────────────────────────────────────────────────
   const handleSignOut = useCallback(async () => {
@@ -4818,6 +4900,35 @@ const s = StyleSheet.create({
   ghostBtnText: { color: C.red, fontSize: 13, fontWeight: "700", letterSpacing: 0.5 },
   backBtn: { paddingVertical: 4, paddingHorizontal: 2 },
   backBtnText: { color: C.faint, fontSize: 13, fontWeight: "700" },
+
+  googleBtn: {
+    backgroundColor: C.white,
+    borderWidth: 2,
+    borderColor: C.ink,
+    borderRadius: 3,
+    paddingVertical: 14,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  googleBtnText: {
+    color: C.ink,
+    fontSize: 14,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: C.line },
+  dividerText: {
+    color: C.muted,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
 
   // Lock hint toast — floating above the button bar
   lockHintToast: {

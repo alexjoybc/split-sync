@@ -90,6 +90,16 @@ Changing anything under `modules/stopwatch-notification` (or first pulling this 
 
 The stopwatch registers the scheme `org.splitsync.stopwatch://` and an Android App Links intent filter for `https://splitsync.org/stopwatch/s/`. Both open the Join screen. See `docs/runbooks/stopwatch-release.md` for how to configure `assetlinks.json` for verified App Links.
 
+### Google sign-in
+
+Before Google sign-in works in the stopwatch app, Supabase Auth Redirect URLs (Authentication → URL Configuration, or `PATCH /v1/projects/<ref>/config/auth` with `uri_allow_list`) must include:
+
+```text
+org.splitsync.stopwatch://**
+```
+
+Without this entry, Google's consent screen redirects back to the project's default Site URL (`https://splitsync.org`) instead of into the app, and the sign-in appears to silently fail. This mirrors the existing `org.splitsync.tracker://**` entry required by the mobile tracker.
+
 ### Previewing a PR on your phone (EAS Update)
 
 Every pull request that touches `apps/stopwatch/**` automatically publishes an EAS Update preview (see ADR 0018) and comments a QR code + link on the PR. This is the fastest way to check a change on a real device without running Metro locally:
