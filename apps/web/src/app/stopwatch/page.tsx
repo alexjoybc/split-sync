@@ -44,6 +44,43 @@ interface CasualSession {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// Mirrors the storage shape/key used by the shared-session page
+// (apps/web/src/app/stopwatch/s/[code]/page.tsx) so the creator's own
+// browser recognizes them as the existing owner participant instead of
+// falling through to JoinForm (#332). `client_id` is not returned by
+// create_casual_session (the owner row's client_id is generated
+// server-side and is not needed for local matching — isOwner is derived
+// from participant_id), so a fresh local UUID is stored as a placeholder.
+interface StoredParticipant {
+  session_id: string;
+  participant_id: string;
+  client_id: string;
+  display_name: string;
+}
+
+function storageKey(code: string): string {
+  return `splitsync_stopwatch_${code}`;
+}
+
+function saveStoredParticipant(code: string, data: StoredParticipant): void {
+  try {
+    localStorage.setItem(storageKey(code), JSON.stringify(data));
+  } catch {
+    // localStorage may be unavailable in some contexts
+  }
+}
+
 function timeAgo(isoString: string): string {
   const diff = Date.now() - new Date(isoString).getTime();
   const mins = Math.floor(diff / 60_000);
@@ -89,8 +126,21 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
         p_display_name: displayName.trim(),
       });
       if (rpcError) throw rpcError;
-      const code = (data as { code: string }).code;
-      setShareCode(code);
+      const result = data as {
+        session_id: string;
+        participant_id: string;
+        code: string;
+      };
+      // Persist the creator's own participant identity so /stopwatch/s/[code]
+      // recognizes them as the owner instead of routing them through
+      // JoinForm and creating a second, non-owner participant row (#332).
+      saveStoredParticipant(result.code, {
+        session_id: result.session_id,
+        participant_id: result.participant_id,
+        client_id: generateUUID(),
+        display_name: displayName.trim(),
+      });
+      setShareCode(result.code);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to create session.");
     } finally {
