@@ -20,35 +20,44 @@ jobs:
       pull-requests: write
     steps:
       - name: Check for EXPO_TOKEN
+        id: token_check
         run: |
           if [ -z "${{ secrets.EXPO_TOKEN }}" ]; then
-            echo "You must provide an EXPO_TOKEN secret linked to the split-sync Expo account in this repo's secrets. Learn more: https://docs.expo.dev/eas-update/github-actions"
-            exit 1
+            echo "EXPO_TOKEN not set — skipping EAS Update preview"
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Checkout repository
+        if: steps.token_check.outputs.has_token == 'true'
         uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
+        if: steps.token_check.outputs.has_token == 'true'
         with:
           version: 11.23.0
 
       - name: Setup Node
+        if: steps.token_check.outputs.has_token == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
 
       - name: Setup EAS
+        if: steps.token_check.outputs.has_token == 'true'
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
+        if: steps.token_check.outputs.has_token == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Create preview
+        if: steps.token_check.outputs.has_token == 'true'
         uses: expo/expo-github-action/preview@v8
         with:
           # GitHub Actions checks out a temporary merge branch for pull_request
