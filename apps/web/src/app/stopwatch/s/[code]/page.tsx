@@ -496,7 +496,31 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
         } else if (msg.includes("ALREADY_STOPPED")) {
           setActionError("Session already stopped.");
         } else {
-          setActionError(msg || "Action failed.");
+          // Unrecognized failure — log full details so a broken RPC (bad
+          // params, missing function, etc.) is loud in dev/CI rather than
+          // silently swallowed behind a vague message.
+          const code =
+            typeof err === "object" && err !== null && "code" in err
+              ? String((err as { code?: unknown }).code)
+              : undefined;
+          const details =
+            typeof err === "object" && err !== null && "details" in err
+              ? (err as { details?: unknown }).details
+              : undefined;
+          const hint =
+            typeof err === "object" && err !== null && "hint" in err
+              ? (err as { hint?: unknown }).hint
+              : undefined;
+          console.error("record_session_event failed", {
+            eventType,
+            code,
+            message: msg,
+            details,
+            hint,
+          });
+          setActionError(
+            `Action failed${code ? ` (${code})` : ""}. Please try again or refresh the page.`
+          );
         }
       }
     },
