@@ -10,7 +10,7 @@
  * Adding tools:node="remove" in the app manifest is the standard Android
  * manifest-merger mechanism to strip a permission that comes from a dependency.
  */
-const { withAndroidManifest } = require("expo/config-plugins");
+const { withAndroidManifest } = require("@expo/config-plugins");
 
 /**
  * @param {import('@expo/config-plugins').ExpoConfig} config
@@ -18,7 +18,7 @@ const { withAndroidManifest } = require("expo/config-plugins");
  */
 module.exports = function withRemoveSystemAlertWindow(config) {
   return withAndroidManifest(config, (mod) => {
-    const manifest = mod.modResults;
+    const manifest = mod.modResults.manifest;
 
     // Ensure the tools namespace is declared on the root <manifest> element.
     if (!manifest.$["xmlns:tools"]) {
