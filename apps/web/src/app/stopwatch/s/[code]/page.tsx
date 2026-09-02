@@ -475,7 +475,7 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
             p_participant_id: stored.participant_id,
             p_event_type: eventType,
             p_client_recorded_at: clientRecordedAt,
-            p_client_id: clientId,
+            p_client_event_id: clientId,
           }
         );
         if (rpcError) throw rpcError;
