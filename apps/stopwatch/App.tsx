@@ -117,6 +117,9 @@ const C = {
   toastBg:          'rgba(0,0,0,0.85)',       // lock-hint floating toast
   btnSubLabel:      'rgba(255,255,255,0.5)',   // device-button sub-label (normal state)
   overrunLabel:     'rgba(255,255,255,0.75)',  // target-overrun strip label
+  // Interactive / action color (blue family)
+  bluePrimary: palette.bluePrimary,  // #0B6FB3 — buttons, links, focus rings
+  blueTint:    "#EDF5FF",            // very light blue — active-row background tint
   // Status
   green:  palette.success,
   worse:  palette.red,
@@ -3577,7 +3580,7 @@ function SoloScreen({
           {/* Sessions switcher button */}
           <Pressable
             onPress={onOpenSessions}
-            hitSlop={8}
+            hitSlop={{ top: 16, bottom: 16, left: 8, right: 8 }}
             accessibilityRole="button"
             accessibilityLabel="Open sessions list"
             style={({ pressed }) => ({
@@ -3585,7 +3588,7 @@ function SoloScreen({
               alignItems: "center",
               gap: 3,
               paddingHorizontal: 7,
-              paddingVertical: 3,
+              paddingVertical: 10,
               borderRadius: 10,
               borderWidth: 1.5,
               borderColor: C.dark,
@@ -4348,7 +4351,7 @@ function TimerScreen({
           {/* Sessions switcher button */}
           <Pressable
             onPress={onOpenSessions}
-            hitSlop={8}
+            hitSlop={{ top: 16, bottom: 16, left: 8, right: 8 }}
             accessibilityRole="button"
             accessibilityLabel="Open sessions list"
             style={({ pressed }) => ({
@@ -4356,7 +4359,7 @@ function TimerScreen({
               alignItems: "center",
               gap: 3,
               paddingHorizontal: 7,
-              paddingVertical: 3,
+              paddingVertical: 10,
               borderRadius: 10,
               borderWidth: 1.5,
               borderColor: C.dark,
@@ -5089,9 +5092,9 @@ const ssm = StyleSheet.create({
     minHeight: 66,
   },
   rowActive: {
-    backgroundColor: "#EDF5FF",
+    backgroundColor: C.blueTint,
     borderLeftWidth: 4,
-    borderLeftColor: palette.bluePrimary,
+    borderLeftColor: C.bluePrimary,
   },
   rowMain: {
     flex: 1,
@@ -5114,13 +5117,13 @@ const ssm = StyleSheet.create({
     flex: 1,
   },
   rowNameActive: {
-    color: palette.bluePrimary,
+    color: C.bluePrimary,
   },
   activeDot: {
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1.5,
-    color: palette.bluePrimary,
+    color: C.bluePrimary,
   },
   rowMeta: {
     flexDirection: "row",
