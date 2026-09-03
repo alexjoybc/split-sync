@@ -345,7 +345,11 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
   };
 
   const handleCopy = async (id: string, url: string) => {
-    await navigator.clipboard.writeText(url);
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard access may be denied in some contexts; still show visual feedback.
+    }
     setCopiedId(id);
     setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 2000);
   };
