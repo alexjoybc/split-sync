@@ -16,9 +16,10 @@
     },
     "android": {
       "package": "org.splitsync.stopwatch",
-      "versionCode": 9,
       "allowBackup": false,
-      "permissions": ["android.permission.POST_NOTIFICATIONS"],
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -43,14 +44,17 @@
         "projectId": "3617f3ce-e97b-497f-90fe-af489ea86aac"
       }
     },
-    "platforms": ["android"],
+    "platforms": [
+      "android"
+    ],
     "plugins": [
       "expo-font",
       "expo-audio",
       "./plugins/withStoragePermissions",
       "./plugins/withStripRecordAudio",
       "expo-web-browser",
-      "./plugins/withRemoveSystemAlertWindow"
+      "./plugins/withRemoveSystemAlertWindow",
+      "./plugins/withGradleJvmMemory"
     ]
   }
 }

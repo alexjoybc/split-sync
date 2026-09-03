@@ -43,7 +43,9 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<Supabase publishable key>
 
 Run the **stopwatch Play Store release build** workflow from the Actions tab (`workflow_dispatch`, no inputs needed). It builds the signed `.aab` directly on a GitHub-hosted runner via `eas build --local` — this skips EAS's cloud build queue entirely (which can back up for hours on the free tier) while GitHub Actions minutes are unlimited for this public repo. EAS still supplies the signing keystore and Supabase environment variables remotely; nothing sensitive is stored in the repo.
 
-Download the `.aab` from the workflow run's **Artifacts** section once it completes (~5 minutes) and continue at "Submit to Play Store" below.
+Download the `.aab` from the workflow run's **Artifacts** section once it completes and continue at "Submit to Play Store" below.
+
+GitHub's standard `ubuntu-latest` runner (2 cores / 7GB RAM) does not have enough Metaspace by default for the Kotlin compiler daemon (KSP annotation processing for `expo-updates`) building this many native modules, and fails with `java.lang.OutOfMemoryError: Metaspace`. `apps/stopwatch/plugins/withGradleJvmMemory.js` raises `org.gradle.jvmargs` and `kotlin.daemon.jvmargs` in the generated `gradle.properties` on every prebuild to fix this — it applies regardless of which build option below you use.
 
 ### Option B — Local build
 
