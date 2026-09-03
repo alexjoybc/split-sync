@@ -28,25 +28,37 @@ const withStripRecordAudio = (config) => {
       manifest.manifest.$['xmlns:tools'] = 'http://schemas.android.com/tools';
     }
 
-    // Add the removal directive if it isn't already present.
-    const permissions = manifest.manifest['uses-permission'] ?? [];
+    // Drop any plain (non-removal) entry for this permission first. A
+    // `tools:node="remove"` sibling in the *same* manifest does not cancel
+    // a plain entry — the merger treats same-file duplicates as a union and
+    // only warns ("no other declaration present"), so the permission would
+    // still ship. The removal directive only has an effect on declarations
+    // coming from a lower-priority manifest (e.g. expo-audio's AAR).
+    const permissions = (manifest.manifest['uses-permission'] ?? []).filter(
+      (p) =>
+        !(
+          p.$['android:name'] === 'android.permission.RECORD_AUDIO' &&
+          p.$['tools:node'] !== 'remove'
+        ),
+    );
+
     const alreadyPresent = permissions.some(
       (p) =>
         p.$['android:name'] === 'android.permission.RECORD_AUDIO' &&
         p.$['tools:node'] === 'remove',
     );
 
-    if (!alreadyPresent) {
-      manifest.manifest['uses-permission'] = [
-        ...permissions,
-        {
-          $: {
-            'android:name': 'android.permission.RECORD_AUDIO',
-            'tools:node': 'remove',
+    manifest.manifest['uses-permission'] = alreadyPresent
+      ? permissions
+      : [
+          ...permissions,
+          {
+            $: {
+              'android:name': 'android.permission.RECORD_AUDIO',
+              'tools:node': 'remove',
+            },
           },
-        },
-      ];
-    }
+        ];
 
     return mod;
   });

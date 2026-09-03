@@ -25,23 +25,37 @@ module.exports = function withRemoveSystemAlertWindow(config) {
       manifest.$["xmlns:tools"] = "http://schemas.android.com/tools";
     }
 
-    // Locate or create the uses-permission removal entry.
-    const permissions = manifest["uses-permission"] ?? [];
+    // Drop any plain (non-removal) entry for this permission first. A
+    // `tools:node="remove"` sibling in the *same* manifest does not cancel
+    // a plain entry — the merger treats same-file duplicates as a union and
+    // only warns ("no other declaration present"), so the permission would
+    // still ship. The removal directive only has an effect on declarations
+    // coming from a lower-priority manifest (e.g. the dev-client tooling).
+    const permissions = (manifest["uses-permission"] ?? []).filter(
+      (p) =>
+        !(
+          p.$?.["android:name"] === "android.permission.SYSTEM_ALERT_WINDOW" &&
+          p.$?.["tools:node"] !== "remove"
+        )
+    );
+
     const alreadyPresent = permissions.some(
       (p) =>
         p.$?.["android:name"] === "android.permission.SYSTEM_ALERT_WINDOW" &&
         p.$?.["tools:node"] === "remove"
     );
 
-    if (!alreadyPresent) {
-      permissions.push({
-        $: {
-          "android:name": "android.permission.SYSTEM_ALERT_WINDOW",
-          "tools:node": "remove",
-        },
-      });
-      manifest["uses-permission"] = permissions;
-    }
+    manifest["uses-permission"] = alreadyPresent
+      ? permissions
+      : [
+          ...permissions,
+          {
+            $: {
+              "android:name": "android.permission.SYSTEM_ALERT_WINDOW",
+              "tools:node": "remove",
+            },
+          },
+        ];
 
     return mod;
   });
