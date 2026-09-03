@@ -185,36 +185,36 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/android/**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      # The generated build.gradle resolves expo CLI paths via node at Gradle
-      # configuration time. Probe each resolution from the android/ directory
-      # to surface any module-not-found errors before Gradle swallows them.
-      - name: Probe node module resolution from android/
-        working-directory: apps/mobile/android
-        run: |
-          echo "=== resolveAppEntry ==="
-          node -e "require('expo/scripts/resolveAppEntry')" \
-            "$(cd .. && pwd)" android absolute || true
-
-          echo "=== react-native location ==="
-          node --print "require.resolve('react-native/package.json')" || true
-
-          echo "=== @expo/cli location ==="
-          node --print \
-            "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })" \
-            || true
-
-          echo "=== hermes-compiler location ==="
-          node --print \
-            "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })" \
-            || true
-
-      - name: Build release .aab
-        working-directory: apps/mobile/android
-        # EXPO_PUBLIC_* vars are inlined by Metro at bundle time via export:embed.
+      # Run the JS bundle step directly via Expo CLI so Metro's output is visible.
+      # Gradle swallows the worker subprocess output; this step surfaces any Metro
+      # error before Gradle runs. If this step passes, the issue is native-only.
+      - name: Bundle JS (expo export:embed)
+        working-directory: apps/mobile
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-        run: ./gradlew bundleRelease --info
+        run: |
+          EXPO_CLI=$(node --print \
+            "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })")
+          mkdir -p android/app/build/intermediates/assets/release/mergeReleaseAssets
+          mkdir -p android/app/build/generated/res/react/release
+          node "$EXPO_CLI" export:embed \
+            --platform android \
+            --entry-file index.ts \
+            --bundle-output android/app/build/intermediates/assets/release/mergeReleaseAssets/index.android.bundle \
+            --assets-dest android/app/build/generated/res/react/release \
+            --dev false \
+            --minify true
+
+      - name: Build release .aab
+        working-directory: apps/mobile/android
+        # SKIP_BUNDLING reuses the pre-built bundle from the step above.
+        # EXPO_PUBLIC_* are still passed so Gradle env matches if needed.
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          SKIP_BUNDLING: true
+        run: ./gradlew bundleRelease
 
       - name: Upload to Play Store (internal track)
         uses: r0adkll/upload-google-play@v1
