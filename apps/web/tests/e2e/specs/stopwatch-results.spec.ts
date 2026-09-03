@@ -347,3 +347,4 @@ test.describe('solo stopwatch export', () => {
     expect(csv.split('\n').filter(Boolean)).toHaveLength(3); // header + 2 laps
   });
 });
+
