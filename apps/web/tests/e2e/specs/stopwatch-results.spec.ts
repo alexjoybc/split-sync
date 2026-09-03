@@ -163,6 +163,16 @@ test.describe('shared session results permalink', () => {
   });
 });
 
+// The supabase-js client derives its localStorage key as:
+//   `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`
+// e.g. for production (bsihlrzncucrglqltjrc.supabase.co) → sb-bsihlrzncucrglqltjrc-auth-token
+//      for local CI (127.0.0.1:54321)                    → sb-127-auth-token
+// We must compute the correct key at runtime from the env var.
+const SUPABASE_STORAGE_KEY = (() => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
+  return `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
+})();
+
 test.describe('SessionHistory stopped session links', () => {
   let code: string;
 
@@ -177,23 +187,19 @@ test.describe('SessionHistory stopped session links', () => {
     const password = 'stopwatch-e2e-hist-1';
     await client.auth.signUp({ email, password });
     const { data: signInData } = await client.auth.signInWithPassword({ email, password });
-    const accessToken = signInData.session?.access_token ?? '';
-    const refreshToken = signInData.session?.refresh_token ?? '';
+    // We need the full session object (not just tokens) because supabase-js
+    // _isValidSession() requires expires_at in addition to access/refresh tokens.
+    const session = signInData.session;
+    if (!session) throw new Error('signInWithPassword returned no session');
 
-    // Seed localStorage with the auth session so the page.tsx sees the signed-in owner
+    // Seed localStorage with the full session object at the correct key.
+    // The page's Supabase client reads this on reload to establish auth state.
     await page.goto('/stopwatch');
     await page.evaluate(
-      ({ at, rt }) => {
-        const key = Object.keys(localStorage).find((k) =>
-          k.includes('auth-token')
-        );
-        const storageKey = key ?? 'sb-bsihlrzncucrglqltjrc-auth-token';
-        localStorage.setItem(
-          storageKey,
-          JSON.stringify({ access_token: at, refresh_token: rt })
-        );
+      ({ key, sessionData }) => {
+        localStorage.setItem(key, JSON.stringify(sessionData));
       },
-      { at: accessToken, rt: refreshToken }
+      { key: SUPABASE_STORAGE_KEY, sessionData: session }
     );
 
     // Create a session owned by this new user
@@ -240,22 +246,16 @@ test.describe('SessionHistory stopped session links', () => {
     const password = 'stopwatch-e2e-share-1';
     await client.auth.signUp({ email, password });
     const { data: signInData } = await client.auth.signInWithPassword({ email, password });
-    const accessToken = signInData.session?.access_token ?? '';
-    const refreshToken = signInData.session?.refresh_token ?? '';
+    // Full session object required: supabase-js _isValidSession() checks expires_at.
+    const session = signInData.session;
+    if (!session) throw new Error('signInWithPassword returned no session');
 
     await page.goto('/stopwatch');
     await page.evaluate(
-      ({ at, rt }) => {
-        const key = Object.keys(localStorage).find((k) =>
-          k.includes('auth-token')
-        );
-        const storageKey = key ?? 'sb-bsihlrzncucrglqltjrc-auth-token';
-        localStorage.setItem(
-          storageKey,
-          JSON.stringify({ access_token: at, refresh_token: rt })
-        );
+      ({ key, sessionData }) => {
+        localStorage.setItem(key, JSON.stringify(sessionData));
       },
-      { at: accessToken, rt: refreshToken }
+      { key: SUPABASE_STORAGE_KEY, sessionData: session }
     );
 
     const { data: created } = await client.rpc('create_casual_session', {
