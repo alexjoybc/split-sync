@@ -22,13 +22,15 @@
     "react-native-volume-manager": "2.0.8"
   },
   "devDependencies": {
+    "@expo/config-plugins": "~54.0.5",
     "@types/react": "~19.1.17",
     "typescript": "~5.9.3"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "ios": "expo run:ios"
   },
   "private": true
 }
