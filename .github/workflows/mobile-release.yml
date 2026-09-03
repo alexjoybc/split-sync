@@ -185,28 +185,14 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/android/**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      # Run the exact command Gradle delegates to (ExpoAutolinkingPlugin.kt:53-69)
-      # with 2>&1 so both stdout and stderr appear in the Actions log.
-      # Gradle's providers.exec swallows stderr entirely.
-      - name: Test autolinking command (diagnostic)
-        working-directory: apps/mobile/android
-        run: |
-          EXPO_PKG=$(node --print "require.resolve('expo/package.json')")
-          EXPO_ANDROID="$(dirname "$EXPO_PKG")/android"
-          echo "Expo android dir: $EXPO_ANDROID"
-          node --no-warnings --eval "require('expo/bin/autolinking')" \
-            expo-modules-autolinking mirror-kotlin-inline-modules \
-            --kotlin-files-mirror-directory "$EXPO_ANDROID/src/main/java/inline/modules" \
-            --inline-modules-list-directory "$EXPO_ANDROID/build/inline/modules" \
-            --watched-directories-serialized "[]" 2>&1
-          echo "autolinking exit: $?"
-
       - name: Build release .aab
         working-directory: apps/mobile/android
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-        run: ./gradlew bundleRelease
+        # --debug logs every external process invocation including stderr.
+        # Filter to last 300 lines to keep output manageable.
+        run: ./gradlew bundleRelease --debug 2>&1 | tail -300; exit ${PIPESTATUS[0]}
 
       - name: Upload to Play Store (internal track)
         uses: r0adkll/upload-google-play@v1
