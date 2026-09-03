@@ -1342,6 +1342,14 @@ function HomeScreen({
 
   const handleRejoin = useCallback(
     async (session: CasualSession) => {
+      // Stopped sessions have no interactive controls — send directly to public results page.
+      if (session.status === "stopped") {
+        await ExpoLinking.openURL(
+          `https://splitsync.org/stopwatch/s/${session.code}/results`
+        );
+        return;
+      }
+
       // Load owner participant_id from storage
       const storedId = await AsyncStorage.getItem(
         `session_participant_${session.id}`
@@ -1452,6 +1460,19 @@ function HomeScreen({
                   <Text style={{ color: C.ink, fontWeight: "700" }}>
                     {session.code}
                   </Text>
+                </Text>
+                <Text
+                  style={[
+                    s.mutedText,
+                    {
+                      fontSize: 11,
+                      marginTop: 3,
+                      color: palette.bluePrimary,
+                      fontWeight: "600",
+                    },
+                  ]}
+                >
+                  {session.status === "stopped" ? "View results →" : "Rejoin →"}
                 </Text>
               </View>
               <View
