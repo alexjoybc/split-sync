@@ -9,6 +9,7 @@ import { formatTime, formatLapTime } from "@/lib/stopwatchFormat";
 import { useWakeLock } from "./useWakeLock";
 import { downloadCsv, lapsToCsv, lapsToText } from "@/lib/stopwatchExport";
 import CountdownTimer from "./CountdownTimer";
+import { TrashIcon } from "@heroicons/react/20/solid";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -278,6 +279,36 @@ interface SessionHistoryProps {
 }
 
 function SessionHistory({ sessions, loading }: SessionHistoryProps) {
+  // confirmingDeleteId: the session currently showing the inline confirmation prompt
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  // deletingId: the session currently being deleted (RPC in-flight)
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  // deleteError: per-session inline error message
+  const [deleteError, setDeleteError] = useState<Record<string, string>>({});
+
+  async function handleDelete(sessionId: string) {
+    setDeletingId(sessionId);
+    setConfirmingDeleteId(null);
+    setDeleteError((prev) => {
+      const next = { ...prev };
+      delete next[sessionId];
+      return next;
+    });
+    try {
+      const { error } = await supabase.rpc("delete_casual_session", {
+        p_session_id: sessionId,
+      });
+      if (error) throw error;
+      // Row disappears via the real-time subscription that re-renders the list.
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Could not delete session.";
+      setDeleteError((prev) => ({ ...prev, [sessionId]: msg }));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   if (loading) {
     return (
       <section className="mt-10 w-full">
@@ -314,43 +345,103 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
         {sessions.map((s) => (
           <div
             key={s.id}
-            className="flex items-center justify-between gap-4 py-3"
+            className="flex flex-col gap-1 py-3"
+            data-testid={`session-row-${s.id}`}
           >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-bold text-race-ink">
-                {s.name ?? "(unnamed)"}
-              </p>
-              <div className="mt-0.5 flex items-center gap-2">
-                {statusLabel(s.status)}
-                <span className="text-[10px] text-race-muted">
-                  {s.status === "running" ? "" : timeAgo(s.created_at)}
-                </span>
-                <span className="text-[10px] font-semibold text-race-muted">
-                  code: {s.code}
-                </span>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-race-ink">
+                  {s.name ?? "(unnamed)"}
+                </p>
+                <div className="mt-0.5 flex items-center gap-2">
+                  {statusLabel(s.status)}
+                  <span className="text-[10px] text-race-muted">
+                    {s.status === "running" ? "" : timeAgo(s.created_at)}
+                  </span>
+                  <span className="text-[10px] font-semibold text-race-muted">
+                    code: {s.code}
+                  </span>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Link
+                  href={`/stopwatch/s/${s.code}`}
+                  className="race-action text-xs px-2 py-1"
+                >
+                  {s.status === "stopped" ? "View" : "Join"}
+                </Link>
+                {s.status !== "stopped" && (
+                  <button
+                    type="button"
+                    className="race-action race-action--outline text-xs px-2 py-1"
+                    onClick={async () => {
+                      const url = `https://splitsync.org/stopwatch/s/${s.code}`;
+                      await navigator.clipboard.writeText(url);
+                    }}
+                    aria-label={`Copy share link for session ${s.name ?? s.code}`}
+                  >
+                    Share
+                  </button>
+                )}
+                {/* Delete button — shows inline confirmation before proceeding */}
+                {confirmingDeleteId === s.id ? (
+                  <span className="flex items-center gap-1">
+                    <span className="text-[10px] text-race-ink">Delete?</span>
+                    <button
+                      type="button"
+                      className="race-action text-xs px-2 py-1"
+                      disabled={deletingId === s.id}
+                      onClick={() => handleDelete(s.id)}
+                      aria-label={`Confirm delete session ${s.name ?? s.code}`}
+                      data-testid={`confirm-delete-${s.id}`}
+                    >
+                      {deletingId === s.id ? "…" : "Yes"}
+                    </button>
+                    <button
+                      type="button"
+                      className="race-action race-action--outline text-xs px-2 py-1"
+                      onClick={() => setConfirmingDeleteId(null)}
+                      aria-label="Cancel delete"
+                    >
+                      No
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="inline-flex items-center justify-center rounded border border-race-line p-1 text-race-muted transition-colors hover:border-race-red hover:text-race-red focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0B6FB3]"
+                    disabled={deletingId === s.id}
+                    onClick={() => {
+                      setDeleteError((prev) => {
+                        const next = { ...prev };
+                        delete next[s.id];
+                        return next;
+                      });
+                      setConfirmingDeleteId(s.id);
+                    }}
+                    aria-label={`Delete session ${s.name ?? s.code}`}
+                    data-testid={`delete-btn-${s.id}`}
+                  >
+                    {deletingId === s.id ? (
+                      <span className="size-4 animate-spin rounded-full border-2 border-race-muted border-t-transparent" aria-hidden="true" />
+                    ) : (
+                      <TrashIcon className="size-4" aria-hidden="true" />
+                    )}
+                    <span className="sr-only">Delete session</span>
+                  </button>
+                )}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <Link
-                href={`/stopwatch/s/${s.code}`}
-                className="race-action text-xs px-2 py-1"
+            {/* Inline error */}
+            {deleteError[s.id] && (
+              <p
+                role="alert"
+                className="text-[10px] text-race-red"
+                data-testid={`delete-error-${s.id}`}
               >
-                {s.status === "stopped" ? "View" : "Join"}
-              </Link>
-              {s.status !== "stopped" && (
-                <button
-                  type="button"
-                  className="race-action race-action--outline text-xs px-2 py-1"
-                  onClick={async () => {
-                    const url = `https://splitsync.org/stopwatch/s/${s.code}`;
-                    await navigator.clipboard.writeText(url);
-                  }}
-                  aria-label={`Copy share link for session ${s.name ?? s.code}`}
-                >
-                  Share
-                </button>
-              )}
-            </div>
+                {deleteError[s.id]}
+              </p>
+            )}
           </div>
         ))}
       </div>
