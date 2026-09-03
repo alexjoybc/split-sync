@@ -166,15 +166,18 @@ jobs:
           PYEOF
 
       # Write signing vars into gradle.properties (gitignored, never committed).
+      # The leading newline ensures we start on a fresh line even if the file
+      # has no trailing newline — without it, the first key would be appended
+      # directly to the last line and corrupt an existing property value.
       - name: Inject signing vars into gradle.properties
         working-directory: apps/mobile/android
         run: |
-          cat >> gradle.properties <<EOF
-          SPLITSYNC_STORE_FILE=$RUNNER_TEMP/splitsync-upload.keystore
-          SPLITSYNC_STORE_PASSWORD=${{ secrets.ANDROID_STORE_PASSWORD }}
-          SPLITSYNC_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}
-          SPLITSYNC_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}
-          EOF
+          printf '\nSPLITSYNC_STORE_FILE=%s\nSPLITSYNC_STORE_PASSWORD=%s\nSPLITSYNC_KEY_ALIAS=%s\nSPLITSYNC_KEY_PASSWORD=%s\n' \
+            "$RUNNER_TEMP/splitsync-upload.keystore" \
+            "${{ secrets.ANDROID_STORE_PASSWORD }}" \
+            "${{ secrets.ANDROID_KEY_ALIAS }}" \
+            "${{ secrets.ANDROID_KEY_PASSWORD }}" \
+            >> gradle.properties
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -190,9 +193,7 @@ jobs:
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-        # --debug logs every external process invocation including stderr.
-        # Filter to last 300 lines to keep output manageable.
-        run: ./gradlew bundleRelease --debug 2>&1 | tail -300; exit ${PIPESTATUS[0]}
+        run: ./gradlew bundleRelease
 
       - name: Upload to Play Store (internal track)
         uses: r0adkll/upload-google-play@v1
