@@ -82,71 +82,90 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d \
             > "$RUNNER_TEMP/splitsync-upload.keystore"
 
+      # Read versionName from package.json before patching so it's available for sed.
+      - name: Read version name
+        id: ver
+        run: |
+          echo "name=$(node -p "require('./apps/mobile/package.json').version")" \
+            >> "$GITHUB_OUTPUT"
+
       # The generated build.gradle uses the debug keystore for release builds.
       # Patch it to:
-      #   • add a release signingConfig driven by gradle.properties
-      #   • switch the release buildType to that signingConfig
-      #   • make versionCode / versionName injectable via -P flags
+      #   • inject versionCode / versionName directly (simpler than Gradle -P flags)
+      #   • add a release signingConfig block at the correct nesting level
+      #   • switch the release buildType to use that signingConfig
+      #
+      # The brace-counting helper avoids the non-greedy regex trap where .*? stops
+      # at the first } it finds (the inner debug {} closing brace) instead of the
+      # outer signingConfigs {} closing brace.
       - name: Patch build.gradle for release signing
         working-directory: apps/mobile/android
         run: |
-          python3 - <<'PYEOF'
-          import re
+          # 1. Stamp versionCode and versionName with real values via sed.
+          sed -i "s/versionCode [0-9]*/versionCode ${{ github.run_number }}/" app/build.gradle
+          sed -i 's/versionName "[^"]*"/versionName "${{ steps.ver.outputs.name }}"/' app/build.gradle
 
+          # 2+3. Add release signingConfig and rewire the release buildType via Python.
+          python3 - <<'PYEOF'
           path = "app/build.gradle"
           with open(path) as f:
               src = f.read()
 
-          # 1. Make versionCode / versionName Gradle-property-driven.
-          src = re.sub(
-              r"versionCode\s+\d+",
-              "versionCode (findProperty('versionCode') ?: 1).toInteger()",
-              src,
-          )
-          src = re.sub(
-              r'versionName\s+"[^"]+"',
-              "versionName (findProperty('versionName') ?: '1.0.0')",
-              src,
-          )
+          def find_block_end(text, start):
+              """Return index of the } that closes the { at position start."""
+              depth = 0
+              for i in range(start, len(text)):
+                  if text[i] == '{':
+                      depth += 1
+                  elif text[i] == '}':
+                      depth -= 1
+                      if depth == 0:
+                          return i
+              return -1
 
-          # 2. Inject release signingConfig block inside signingConfigs { }.
           release_cfg = """
-              release {
-                  storeFile file(findProperty('SPLITSYNC_STORE_FILE') ?: 'debug.keystore')
-                  storePassword findProperty('SPLITSYNC_STORE_PASSWORD') ?: ''
-                  keyAlias findProperty('SPLITSYNC_KEY_ALIAS') ?: ''
-                  keyPassword findProperty('SPLITSYNC_KEY_PASSWORD') ?: ''
-              }"""
+          release {
+              storeFile file(findProperty('SPLITSYNC_STORE_FILE') ?: 'debug.keystore')
+              storePassword findProperty('SPLITSYNC_STORE_PASSWORD') ?: ''
+              keyAlias findProperty('SPLITSYNC_KEY_ALIAS') ?: ''
+              keyPassword findProperty('SPLITSYNC_KEY_PASSWORD') ?: ''
+          }"""
 
-          def inject_signing_config(m):
-              inner = m.group(1)
-              if "release {" not in inner:
-                  inner = inner.rstrip() + release_cfg + "\n    "
-              return "signingConfigs {" + inner + "}"
+          # 2. Inject release signingConfig at the correct level inside signingConfigs {}.
+          sc_pos = src.find('signingConfigs {')
+          sc_brace = src.index('{', sc_pos)
+          sc_end = find_block_end(src, sc_brace)
+          sc_inner = src[sc_brace + 1:sc_end]
+          if 'release {' not in sc_inner:
+              new_sc_inner = sc_inner.rstrip() + release_cfg + '\n    '
+              src = src[:sc_brace + 1] + new_sc_inner + src[sc_end:]
 
-          src = re.sub(
-              r"signingConfigs \{(.*?)\}",
-              inject_signing_config,
-              src,
-              flags=re.DOTALL,
-          )
+          # 3. Switch buildTypes.release to use signingConfigs.release.
+          bt_pos = src.find('buildTypes {')
+          bt_brace = src.index('{', bt_pos)
+          bt_end = find_block_end(src, bt_brace)
+          bt_inner = src[bt_brace + 1:bt_end]
 
-          # 3. In the release buildType, switch from debug to release signingConfig.
-          # The debug buildType also references signingConfigs.debug, so we target
-          # only the LAST occurrence — which is always the release buildType.
-          marker = "signingConfig signingConfigs.debug"
-          replacement = "signingConfig signingConfigs.release"
-          last_idx = src.rfind(marker)
-          if last_idx != -1:
-              src = src[:last_idx] + replacement + src[last_idx + len(marker):]
+          rel_pos = bt_inner.find('release {')
+          if rel_pos != -1:
+              rel_brace = bt_inner.index('{', rel_pos)
+              rel_end = find_block_end(bt_inner, rel_brace)
+              rel_inner = bt_inner[rel_brace + 1:rel_end]
+              new_rel_inner = rel_inner.replace(
+                  'signingConfig signingConfigs.debug',
+                  'signingConfig signingConfigs.release',
+                  1,
+              )
+              new_bt = bt_inner[:rel_brace + 1] + new_rel_inner + bt_inner[rel_end:]
+              src = src[:bt_brace + 1] + new_bt + src[bt_end:]
 
-          with open(path, "w") as f:
+          with open(path, 'w') as f:
               f.write(src)
 
-          print("build.gradle patched OK")
+          print('build.gradle patched OK')
           PYEOF
 
-      # Write signing vars into gradle.properties (file is in .gitignore, never committed).
+      # Write signing vars into gradle.properties (gitignored, never committed).
       - name: Inject signing vars into gradle.properties
         working-directory: apps/mobile/android
         run: |
@@ -166,19 +185,9 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/android/**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      # Read versionName from package.json so it stays in sync with the JS package version.
-      - name: Read version name
-        id: ver
-        run: |
-          echo "name=$(node -p "require('./apps/mobile/package.json').version")" \
-            >> "$GITHUB_OUTPUT"
-
       - name: Build release .aab
         working-directory: apps/mobile/android
-        run: |
-          ./gradlew bundleRelease \
-            -PversionCode=${{ github.run_number }} \
-            -PversionName=${{ steps.ver.outputs.name }}
+        run: ./gradlew bundleRelease
 
       - name: Upload to Play Store (internal track)
         uses: r0adkll/upload-google-play@v1
