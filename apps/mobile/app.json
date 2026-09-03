@@ -30,7 +30,8 @@
     },
     "plugins": [
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      "./plugins/withProguardCleanup"
     ]
   }
 }
