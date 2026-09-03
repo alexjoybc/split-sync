@@ -1943,6 +1943,10 @@ function SessionScreen({
   const [isLocked, setIsLocked] = useState(false);
   const [showLockHint, setShowLockHint] = useState(false);
   const lockHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stop-while-locked confirmation: ms captured at the tap instant, or null.
+  const [pendingStopMs, setPendingStopMs] = useState<number | null>(null);
+  // ISO timestamp captured at the Stop tap — used as client_recorded_at on confirm.
+  const pendingStopAtRef = useRef<string | null>(null);
 
   // Sound cues (#227)
   const { cueSettings, cueRef, updateCueSettings } = useCueSettings();
@@ -2336,9 +2340,9 @@ function SessionScreen({
 
   // ── Send event to server ────────────────────────────────────────────────────
   const sendEvent = useCallback(
-    async (eventType: SessionEventType) => {
+    async (eventType: SessionEventType, recordedAt?: string) => {
       const clientEventId = generateUUID();
-      const clientRecordedAt = new Date().toISOString();
+      const clientRecordedAt = recordedAt ?? new Date().toISOString();
       const localSeq = ++localSeqRef.current;
 
       // 1. Persist to durable queue BEFORE the network attempt — survives app kill.
@@ -2427,11 +2431,45 @@ function SessionScreen({
   }, [sendEvent, cueRef]);
 
   const handleStop = useCallback(async () => {
-    if (isLocked) { showLockedHint(); return; }
+    if (isLocked) {
+      // Capture the exact moment the user tapped Stop, then ask for
+      // confirmation. If they confirm we send the event with the captured
+      // timestamp so the split is accurate regardless of dialog latency.
+      const capturedAt = new Date().toISOString();
+      pendingStopAtRef.current = capturedAt;
+      setPendingStopMs(elapsedMs);
+      Alert.alert(
+        "Stop timer?",
+        `Stop at ${fmtCompact(elapsedMs)}?\n\nThe split will be recorded at this exact time.`,
+        [
+          {
+            text: "Keep running",
+            style: "cancel",
+            onPress: () => {
+              pendingStopAtRef.current = null;
+              setPendingStopMs(null);
+            },
+          },
+          {
+            text: "Stop",
+            style: "destructive",
+            onPress: async () => {
+              const at = pendingStopAtRef.current;
+              pendingStopAtRef.current = null;
+              setPendingStopMs(null);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              if (cueRef.current.soundEnabled) playCue("stop");
+              await sendEvent("stop", at ?? undefined);
+            },
+          },
+        ],
+      );
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (cueRef.current.soundEnabled) playCue("stop");
     await sendEvent("stop");
-  }, [isLocked, showLockedHint, sendEvent, cueRef]);
+  }, [isLocked, elapsedMs, sendEvent, cueRef]);
 
   const handleLap = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -2537,16 +2575,17 @@ function SessionScreen({
           {pendingCount > 0 && (
             <ActivityIndicator size="small" color={C.yellow} />
           )}
-          {/* Lock toggle: tap to lock, double-tap to unlock */}
+          {/* Lock toggle: tap to lock, double-tap to unlock.
+              Red pill when locked — impossible to miss. */}
           <Pressable
             onPress={handleLockTap}
             hitSlop={8}
-            style={s.iconBtn}
+            style={[s.lockPill, isLocked && s.lockPillLocked]}
             accessibilityLabel={isLocked ? "Controls locked — double-tap to unlock" : "Tap to lock controls"}
             accessibilityRole="button"
           >
-            <Text style={{ fontSize: 16, color: isLocked ? C.red : C.dimGray }}>
-              {isLocked ? "🔒" : "🔓"}
+            <Text style={[s.lockPillText, isLocked && s.lockPillTextLocked]}>
+              {isLocked ? "🔒 LOCKED" : "🔓 LOCK"}
             </Text>
           </Pressable>
           <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
@@ -3252,7 +3291,37 @@ function SoloScreen({
   }, [clearCountdown]);
 
   const handleStop = useCallback(() => {
-    if (isLocked) { showLockedHint(); return; }
+    if (isLocked) {
+      // Capture the exact elapsed ms at the tap instant. If the user confirms
+      // we stop at that time, not at the dialog-dismiss time.
+      const capturedElapsed =
+        accum.current + (anchor.current !== null ? Date.now() - anchor.current : 0);
+      Alert.alert(
+        "Stop timer?",
+        `Stop at ${fmtCompact(capturedElapsed)}?\n\nThe split will be recorded at this exact time.`,
+        [
+          { text: "Keep running", style: "cancel" },
+          {
+            text: "Stop",
+            style: "destructive",
+            onPress: () => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              if (cueRef.current.soundEnabled) playCue("stop");
+              // Apply the captured elapsed, not Date.now() (dialog may have
+              // taken a second or two to dismiss).
+              accum.current = capturedElapsed;
+              anchor.current = null;
+              stopTick();
+              setSession(capturedElapsed);
+              setLapMs(capturedElapsed - lastLapCum.current);
+              setSw("paused");
+              persistSolo("paused");
+            },
+          },
+        ],
+      );
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (cueRef.current.soundEnabled) playCue("stop");
     if (anchor.current !== null) {
@@ -3264,7 +3333,7 @@ function SoloScreen({
     setLapMs(accum.current - lastLapCum.current);
     setSw("paused");
     persistSolo("paused");
-  }, [isLocked, showLockedHint, stopTick, persistSolo, cueRef]);
+  }, [isLocked, stopTick, persistSolo, cueRef]);
 
   const handleLap = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -3406,16 +3475,17 @@ function SoloScreen({
           <Text style={s.casingTitle}>STOPWATCH</Text>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-          {/* Lock toggle: tap to lock, double-tap to unlock */}
+          {/* Lock toggle: tap to lock, double-tap to unlock.
+              Red pill when locked — impossible to miss. */}
           <Pressable
             onPress={handleLockTap}
             hitSlop={8}
-            style={s.iconBtn}
+            style={[s.lockPill, isLocked && s.lockPillLocked]}
             accessibilityLabel={isLocked ? "Controls locked — double-tap to unlock" : "Tap to lock controls"}
             accessibilityRole="button"
           >
-            <Text style={{ fontSize: 16, color: isLocked ? C.red : C.dimGray }}>
-              {isLocked ? "🔒" : "🔓"}
+            <Text style={[s.lockPillText, isLocked && s.lockPillTextLocked]}>
+              {isLocked ? "🔒 LOCKED" : "🔓 LOCK"}
             </Text>
           </Pressable>
           <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
@@ -5020,6 +5090,30 @@ const s = StyleSheet.create({
     height: ICON_BTN_SIZE,
     alignItems: "center",
     justifyContent: "center",
+  },
+
+  // Lock pill — replaces the single-emoji iconBtn for better visibility (#340)
+  lockPill: {
+    height: ICON_BTN_SIZE,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: C.dimGray,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  lockPillLocked: {
+    borderColor: C.red,
+    backgroundColor: C.red,
+  },
+  lockPillText: {
+    fontSize: 12,
+    fontWeight: "700" as const,
+    letterSpacing: 0.8,
+    color: C.dimGray,
+  },
+  lockPillTextLocked: {
+    color: C.white,
   },
 
   // Logo footer — subtle centered brand element on control-dense screens

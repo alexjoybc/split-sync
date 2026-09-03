@@ -562,6 +562,10 @@ export default function StopwatchPage() {
   // Lock state (#235) — local to this device, never broadcast
   const [isLocked, setIsLocked] = useState(false);
   const [showLockHint, setShowLockHint] = useState(false);
+  // When the user taps Stop while locked we capture the elapsed ms at that
+  // instant and ask for confirmation. If they confirm we stop at that time
+  // (not at the dismiss time). null means no pending confirmation.
+  const [pendingStopMs, setPendingStopMs] = useState<number | null>(null);
 
   // Timing refs — not React state so they don't trigger re-renders in the RAF
   const startRef = useRef<number>(0);      // performance.now() at last resume
@@ -1000,6 +1004,24 @@ export default function StopwatchPage() {
     }
   }, []);
 
+  // Confirm the pending locked-stop using the time captured at click.
+  const handleConfirmLockedStop = useCallback(() => {
+    const ms = pendingStopMs;
+    setPendingStopMs(null);
+    if (ms === null || state !== "running") return;
+    if (cuesRef.current.soundEnabled) playCue("stop");
+    accRef.current = ms;
+    wallStartRef.current = null;
+    stopLoop();
+    setState("stopped");
+    setDisplayMs(ms);
+    persist("stopped");
+  }, [pendingStopMs, state, cuesRef, playCue, stopLoop, persist]);
+
+  const handleCancelLockedStop = useCallback(() => {
+    setPendingStopMs(null);
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Controls
   // ---------------------------------------------------------------------------
@@ -1018,9 +1040,10 @@ export default function StopwatchPage() {
         commitStart();
       }
     } else if (state === "running") {
-      // Stop / Pause — blocked when locked
+      // Stop / Pause — when locked, capture the time and ask for confirmation
+      // so the user doesn't lose the split they intended to record.
       if (isLocked) {
-        triggerLockHint();
+        setPendingStopMs(getElapsed());
         return;
       }
       if (cuesRef.current.soundEnabled) playCue("stop");
@@ -1032,7 +1055,7 @@ export default function StopwatchPage() {
       persist("stopped");
     }
     // During countdown: do nothing (cancel button handles it separately)
-  }, [state, delaySeconds, beginCountdown, commitStart, isLocked, triggerLockHint, getElapsed, stopLoop, persist, playCue, ensureAudioCtx]);
+  }, [state, delaySeconds, beginCountdown, commitStart, isLocked, getElapsed, stopLoop, persist, playCue, ensureAudioCtx]);
 
   const handleCancelCountdown = useCallback(() => {
     clearCountdown();
@@ -1523,7 +1546,7 @@ export default function StopwatchPage() {
               </p>
             )}
 
-            {/* Lock button */}
+            {/* Lock button — red pill when locked, muted outline when unlocked */}
             <button
               type="button"
               className={`sw-lock-btn${isLocked ? " sw-lock-btn--locked" : ""}`}
@@ -1548,7 +1571,7 @@ export default function StopwatchPage() {
               onPointerLeave={handleLockBtnPointerCancel}
               onPointerCancel={handleLockBtnPointerCancel}
             >
-              {isLocked ? "🔒" : "🔓"}
+              {isLocked ? "🔒 LOCKED" : "🔓 LOCK"}
             </button>
           </div>
 
@@ -1559,8 +1582,33 @@ export default function StopwatchPage() {
               role="alert"
               aria-live="assertive"
             >
-              Controls locked — hold 🔒 to unlock
+              Controls locked — hold LOCKED to unlock
             </p>
+          )}
+
+          {/* Stop-while-locked confirmation (#340) — shown when user taps Stop
+              while locked; uses the time captured at the tap, not the dismiss time */}
+          {pendingStopMs !== null && (
+            <div className="sw-stop-confirm" role="alertdialog" aria-label="Confirm stop">
+              <span className="sw-stop-confirm__label">
+                Stop at {formatLapTime(pendingStopMs)}?
+              </span>
+              <button
+                type="button"
+                className="sw-stop-confirm__btn sw-stop-confirm__btn--confirm"
+                onClick={handleConfirmLockedStop}
+                autoFocus
+              >
+                Stop
+              </button>
+              <button
+                type="button"
+                className="sw-stop-confirm__btn sw-stop-confirm__btn--cancel"
+                onClick={handleCancelLockedStop}
+              >
+                Keep running
+              </button>
+            </div>
           )}
 
           {/* Large-display / fullscreen toggle (#230) */}
