@@ -185,26 +185,26 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/android/**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      # Run the JS bundle step directly via Expo CLI so Metro's output is visible.
-      # Gradle swallows the worker subprocess output; this step surfaces any Metro
-      # error before Gradle runs. If this step passes, the issue is native-only.
-      - name: Bundle JS (expo export:embed)
+      # The stacktrace identified ExpoAutolinkingPlugin.kt:69 — the autolinking
+      # plugin runs a node command via ProcessOutputValueSource. Run the same
+      # commands directly to see their full error output before Gradle swallows it.
+      - name: Probe autolinking commands
         working-directory: apps/mobile
-        env:
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: |
-          EXPO_CLI=$(node --print \
-            "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })")
-          mkdir -p android/app/build/intermediates/assets/release/mergeReleaseAssets
-          mkdir -p android/app/build/generated/res/react/release
-          node "$EXPO_CLI" export:embed \
-            --platform android \
-            --entry-file index.ts \
-            --bundle-output android/app/build/intermediates/assets/release/mergeReleaseAssets/index.android.bundle \
-            --assets-dest android/app/build/generated/res/react/release \
-            --dev false \
-            --minify true
+          AUTOLINKING_PKG=$(node --print \
+            "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
+          AUTOLINKING_CLI="$(dirname "$AUTOLINKING_PKG")/build/index.js"
+          PROJECT_ROOT="$(pwd)"
+
+          echo "=== react-native-config ==="
+          node "$AUTOLINKING_CLI" react-native-config \
+            --project-root "$PROJECT_ROOT" 2>&1 || true
+
+          echo "=== generate-android-modules-provider ==="
+          node "$AUTOLINKING_CLI" generate-android-modules-provider \
+            --target ModulesProvider \
+            --project-root "$PROJECT_ROOT" \
+            --android-modules-provider /tmp/modules-provider-check.kt 2>&1 || true
 
       - name: Build release .aab
         working-directory: apps/mobile/android
@@ -212,9 +212,7 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           SKIP_BUNDLING: true
-        # --stacktrace names the failing Gradle task so we can identify which
-        # node process is crashing (Metro vs autolinking codegen vs other).
-        run: ./gradlew bundleRelease --stacktrace 2>&1
+        run: ./gradlew bundleRelease 2>&1
 
       - name: Upload to Play Store (internal track)
         uses: r0adkll/upload-google-play@v1
