@@ -1340,6 +1340,35 @@ function HomeScreen({
     };
   }, [fetchSessions]);
 
+  const handleDelete = useCallback(
+    (session: CasualSession) => {
+      Alert.alert(
+        "Delete session?",
+        "This cannot be undone.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              // Optimistically remove from local state
+              setSessions((prev) => prev.filter((s) => s.id !== session.id));
+              const { error } = await supabase.rpc("delete_casual_session", {
+                p_session_id: session.id,
+              });
+              if (error) {
+                // Rollback: re-fetch to restore the row
+                fetchSessions();
+                Alert.alert("Error", "Could not delete session.");
+              }
+            },
+          },
+        ]
+      );
+    },
+    [fetchSessions]
+  );
+
   const handleRejoin = useCallback(
     async (session: CasualSession) => {
       // Stopped sessions have no interactive controls — send directly to public results page.
@@ -1443,53 +1472,62 @@ function HomeScreen({
           </Text>
         ) : (
           sessions.map((session) => (
-            <Pressable
-              key={session.id}
-              onPress={() => handleRejoin(session)}
-              style={({ pressed }) => [
-                s.sessionRow,
-                { opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={s.sessionName} numberOfLines={1}>
-                  {session.name || "Untitled Session"}
-                </Text>
-                <Text style={[s.mutedText, { fontSize: 11, marginTop: 2 }]}>
-                  {fmtAge(session.created_at)} · Code{" "}
-                  <Text style={{ color: C.ink, fontWeight: "700" }}>
-                    {session.code}
+            <View key={session.id} style={s.sessionRow}>
+              <Pressable
+                onPress={() => handleRejoin(session)}
+                style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={s.sessionName} numberOfLines={1}>
+                    {session.name || "Untitled Session"}
                   </Text>
-                </Text>
-                <Text
+                  <Text style={[s.mutedText, { fontSize: 11, marginTop: 2 }]}>
+                    {fmtAge(session.created_at)} · Code{" "}
+                    <Text style={{ color: C.ink, fontWeight: "700" }}>
+                      {session.code}
+                    </Text>
+                  </Text>
+                  <Text
+                    style={[
+                      s.mutedText,
+                      {
+                        fontSize: 11,
+                        marginTop: 3,
+                        color: palette.bluePrimary,
+                        fontWeight: "600",
+                      },
+                    ]}
+                  >
+                    {session.status === "stopped" ? "View results →" : "Rejoin →"}
+                  </Text>
+                </View>
+                <View
                   style={[
-                    s.mutedText,
-                    {
-                      fontSize: 11,
-                      marginTop: 3,
-                      color: palette.bluePrimary,
-                      fontWeight: "600",
+                    s.statusBadge,
+                    session.status === "running" && { backgroundColor: C.red },
+                    session.status === "stopped" && { backgroundColor: C.ink },
+                    session.status === "waiting" && {
+                      backgroundColor: C.dimGray,
                     },
                   ]}
                 >
-                  {session.status === "stopped" ? "View results →" : "Rejoin →"}
-                </Text>
-              </View>
-              <View
-                style={[
-                  s.statusBadge,
-                  session.status === "running" && { backgroundColor: C.red },
-                  session.status === "stopped" && { backgroundColor: C.ink },
-                  session.status === "waiting" && {
-                    backgroundColor: C.dimGray,
-                  },
+                  <Text style={s.statusBadgeText}>
+                    {session.status.toUpperCase()}
+                  </Text>
+                </View>
+              </Pressable>
+              <Pressable
+                onPress={() => handleDelete(session)}
+                style={({ pressed }) => [
+                  s.deleteBtn,
+                  { opacity: pressed ? 0.6 : 1 },
                 ]}
+                accessibilityLabel="Delete session"
+                accessibilityRole="button"
               >
-                <Text style={s.statusBadgeText}>
-                  {session.status.toUpperCase()}
-                </Text>
-              </View>
-            </Pressable>
+                <Text style={s.deleteBtnText}>🗑</Text>
+              </Pressable>
+            </View>
           ))
         )}
 
@@ -5271,4 +5309,15 @@ const s = StyleSheet.create({
     marginLeft: 10,
   },
   statusBadgeText: { color: C.white, fontSize: 9, fontWeight: "900", letterSpacing: 1 },
+  deleteBtn: {
+    marginLeft: 10,
+    padding: 8,
+    borderRadius: 4,
+    backgroundColor: C.red,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  deleteBtnText: {
+    fontSize: 16,
+  },
 });
