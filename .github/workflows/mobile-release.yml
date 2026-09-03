@@ -185,6 +185,22 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/android/**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
+      # Run the exact command Gradle delegates to (ExpoAutolinkingPlugin.kt:53-69)
+      # with 2>&1 so both stdout and stderr appear in the Actions log.
+      # Gradle's providers.exec swallows stderr entirely.
+      - name: Test autolinking command (diagnostic)
+        working-directory: apps/mobile/android
+        run: |
+          EXPO_PKG=$(node --print "require.resolve('expo/package.json')")
+          EXPO_ANDROID="$(dirname "$EXPO_PKG")/android"
+          echo "Expo android dir: $EXPO_ANDROID"
+          node --no-warnings --eval "require('expo/bin/autolinking')" \
+            expo-modules-autolinking mirror-kotlin-inline-modules \
+            --kotlin-files-mirror-directory "$EXPO_ANDROID/src/main/java/inline/modules" \
+            --inline-modules-list-directory "$EXPO_ANDROID/build/inline/modules" \
+            --watched-directories-serialized "[]" 2>&1
+          echo "autolinking exit: $?"
+
       - name: Build release .aab
         working-directory: apps/mobile/android
         env:
