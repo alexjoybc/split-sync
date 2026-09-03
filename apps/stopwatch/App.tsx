@@ -5184,7 +5184,7 @@ const ssm = StyleSheet.create({
     padding: 16,
   },
   createBtn: {
-    backgroundColor: palette.bluePrimary,
+    backgroundColor: C.bluePrimary,
     borderRadius: 3,
     paddingVertical: 15,
     alignItems: "center",
