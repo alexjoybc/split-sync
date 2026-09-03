@@ -41,3 +41,11 @@ The single repeating countdown from #232 is the extent of countdown investment f
 - Issue #232 (single repeating countdown) **proceeds unblocked** as the sole countdown investment.
 - If post-launch user feedback provides a clear demand signal for multiple simultaneous timers, a future ADR should revisit this decision — with usage data as the primary input.
 - The casual stopwatch surface contract in AGENTS.md remains: shared sessions, event-log as truth, single stopwatch + single countdown.
+
+## Amendment — ADR 0024
+
+**ADR 0024 (`0024-stopwatch-multiple-local-solo-sessions.md`) narrowly
+supersedes this ADR for one specific capability:** a device-local list of
+named, switchable solo sessions (one active at a time, capped at 10). All
+other rejections in this ADR — simultaneous on-screen timers, floating
+picture-in-picture, home-screen widgets — remain in force.
