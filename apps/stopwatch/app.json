@@ -54,7 +54,8 @@
       "./plugins/withStripRecordAudio",
       "expo-web-browser",
       "./plugins/withRemoveSystemAlertWindow",
-      "./plugins/withGradleJvmMemory"
+      "./plugins/withGradleJvmMemory",
+      "./plugins/withProguardCleanup"
     ]
   }
 }
