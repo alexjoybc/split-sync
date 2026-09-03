@@ -57,6 +57,15 @@ import {
 } from "./src/cues";
 import type { CueSettings } from "./src/cues";
 import { palette } from "../../packages/palette/src/index";
+import {
+  resolveActiveSession,
+  getSession,
+  updateSession,
+  updateSessionMeta,
+  loadIndex,
+  setActiveSessionId,
+} from "./src/storage/sessionStorage";
+import type { PersistedStopwatchState, PersistedTimerState } from "./src/storage/sessionStorage";
 
 // Required so the in-app browser session used for Google sign-in resolves
 // its promise when redirected back into the app.
@@ -3013,11 +3022,13 @@ function SoloScreen({
   onBack,
   onSelectMode,
   onGoShared,
+  activeSessionId,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
   onSelectMode: (m: SoloMode) => void;
   onGoShared: () => void;
+  activeSessionId: string | null;
 }) {
   useKeepAwake();
   const { width, height } = useWindowDimensions();
@@ -3068,21 +3079,39 @@ function SoloScreen({
 
   // ── Persistence: save on state transitions, restore on mount ────────────────
   const persistSolo = useCallback((state: "running" | "paused") => {
-    const data: PersistedSolo = {
+    const data: PersistedStopwatchState = {
       state,
       accumMs: accum.current,
       anchorWall: state === "running" ? anchor.current : null,
       lastLapCumMs: lastLapCum.current,
       laps: lapsRef.current,
     };
-    AsyncStorage.setItem(SOLO_STORAGE_KEY, JSON.stringify(data)).catch(
-      () => {}
-    );
-  }, []);
+    if (activeSessionId) {
+      // Multi-session path: read current payload then patch stopwatchState
+      getSession(activeSessionId)
+        .then((current) =>
+          updateSession(activeSessionId, { ...current, stopwatchState: data })
+        )
+        .catch(() => {});
+    } else {
+      // Fallback (pre-migration or race condition) — write to legacy key
+      AsyncStorage.setItem(SOLO_STORAGE_KEY, JSON.stringify(data)).catch(() => {});
+    }
+  }, [activeSessionId]);
 
   const clearPersistedSolo = useCallback(() => {
-    AsyncStorage.removeItem(SOLO_STORAGE_KEY).catch(() => {});
-  }, []);
+    if (activeSessionId) {
+      getSession(activeSessionId)
+        .then((current) => {
+          const next = { ...(current ?? {}) };
+          delete next.stopwatchState;
+          return updateSession(activeSessionId, next);
+        })
+        .catch(() => {});
+    } else {
+      AsyncStorage.removeItem(SOLO_STORAGE_KEY).catch(() => {});
+    }
+  }, [activeSessionId]);
 
   // Sound cues (#227)
   const { cueSettings, cueRef, updateCueSettings } = useCueSettings();
@@ -3186,7 +3215,13 @@ function SoloScreen({
   // Restore persisted solo state on mount (survives app kill / reboot).
   useEffect(() => {
     let cancelled = false;
-    AsyncStorage.getItem(SOLO_STORAGE_KEY)
+    const loadRaw = activeSessionId
+      ? getSession(activeSessionId).then((payload) => {
+          const s = payload?.stopwatchState;
+          return s ? JSON.stringify(s) : null;
+        })
+      : AsyncStorage.getItem(SOLO_STORAGE_KEY);
+    loadRaw
       .then((raw) => {
         if (cancelled) return;
         const saved = parsePersistedSolo(raw);
@@ -3920,10 +3955,12 @@ function TimerScreen({
   fontsLoaded,
   onBack,
   onSelectMode,
+  activeSessionId,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
   onSelectMode: (m: SoloMode) => void;
+  activeSessionId: string | null;
 }) {
   useKeepAwake();
   const { width, height } = useWindowDimensions();
@@ -3967,20 +4004,36 @@ function TimerScreen({
   }, []);
 
   const persistTimer = useCallback((state: "running" | "paused") => {
-    const data: PersistedTimer = {
+    const data: PersistedTimerState = {
       state,
       durationMs: durationRef.current,
       endAtWall: state === "running" ? endAtWallRef.current : null,
       remainingMs: state === "paused" ? remainingRef.current : null,
     };
-    AsyncStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(data)).catch(
-      () => undefined
-    );
-  }, []);
+    if (activeSessionId) {
+      getSession(activeSessionId)
+        .then((current) =>
+          updateSession(activeSessionId, { ...current, timerState: data })
+        )
+        .catch(() => undefined);
+    } else {
+      AsyncStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(data)).catch(() => undefined);
+    }
+  }, [activeSessionId]);
 
   const clearPersistedTimer = useCallback(() => {
-    AsyncStorage.removeItem(TIMER_STORAGE_KEY).catch(() => undefined);
-  }, []);
+    if (activeSessionId) {
+      getSession(activeSessionId)
+        .then((current) => {
+          const next = { ...(current ?? {}) };
+          delete next.timerState;
+          return updateSession(activeSessionId, next);
+        })
+        .catch(() => undefined);
+    } else {
+      AsyncStorage.removeItem(TIMER_STORAGE_KEY).catch(() => undefined);
+    }
+  }, [activeSessionId]);
 
   // ── Alarm — finite repeats, single tap dismisses ────────────────────────────
   const stopAlarm = useCallback(() => {
@@ -4069,9 +4122,15 @@ function TimerScreen({
   // ── Restore persisted state on mount (#224 pattern) ─────────────────────────
   useEffect(() => {
     let cancelled = false;
+    const loadTimerRaw = activeSessionId
+      ? getSession(activeSessionId).then((payload) => {
+          const t = payload?.timerState;
+          return t ? JSON.stringify(t) : null;
+        })
+      : AsyncStorage.getItem(TIMER_STORAGE_KEY);
     Promise.all([
       AsyncStorage.getItem(TIMER_DURATION_STORAGE_KEY),
-      AsyncStorage.getItem(TIMER_STORAGE_KEY),
+      loadTimerRaw,
     ])
       .then(([rawDuration, rawTimer]) => {
         if (cancelled) return;
@@ -4406,6 +4465,7 @@ function TimerScreen({
 }
 
 // ── Solo container: routes between stopwatch and timer modes (#232) ───────────
+// Also manages the multi-session active session pointer (ADR 0024 / issue #364).
 function SoloContainer({
   fontsLoaded,
   onBack,
@@ -4417,11 +4477,19 @@ function SoloContainer({
 }) {
   const [mode, setMode] = useState<SoloMode>("stopwatch");
   const [modeLoaded, setModeLoaded] = useState(false);
+  const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem(SOLO_MODE_STORAGE_KEY)
-      .then((v) => {
-        if (v === "timer" || v === "stopwatch") setMode(v);
+    // Resolve (or create) the active session, migrating legacy data if needed.
+    resolveActiveSession(generateUUID)
+      .then(async (id) => {
+        setActiveSessionIdState(id);
+        // Load the mode from the session meta in the index
+        const index = await loadIndex();
+        const meta = index.find((m) => m.id === id);
+        if (meta && (meta.mode === "timer" || meta.mode === "stopwatch")) {
+          setMode(meta.mode);
+        }
         setModeLoaded(true);
       })
       .catch(() => setModeLoaded(true));
@@ -4429,8 +4497,10 @@ function SoloContainer({
 
   const handleSelectMode = useCallback((m: SoloMode) => {
     setMode(m);
-    AsyncStorage.setItem(SOLO_MODE_STORAGE_KEY, m).catch(() => undefined);
-  }, []);
+    if (activeSessionId) {
+      updateSessionMeta(activeSessionId, { mode: m }).catch(() => undefined);
+    }
+  }, [activeSessionId]);
 
   if (!modeLoaded) return <LoadingScreen />;
 
@@ -4439,6 +4509,7 @@ function SoloContainer({
       fontsLoaded={fontsLoaded}
       onBack={onBack}
       onSelectMode={handleSelectMode}
+      activeSessionId={activeSessionId}
     />
   ) : (
     <SoloScreen
@@ -4446,6 +4517,7 @@ function SoloContainer({
       onBack={onBack}
       onSelectMode={handleSelectMode}
       onGoShared={onGoShared}
+      activeSessionId={activeSessionId}
     />
   );
 }
