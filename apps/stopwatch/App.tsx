@@ -23,6 +23,7 @@ import {
   Alert,
   AppState,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   Share,
@@ -64,8 +65,12 @@ import {
   updateSessionMeta,
   loadIndex,
   setActiveSessionId,
+  listSessions,
+  createSession,
+  deleteSession,
+  SESSION_CAP,
 } from "./src/storage/sessionStorage";
-import type { PersistedStopwatchState, PersistedTimerState } from "./src/storage/sessionStorage";
+import type { PersistedStopwatchState, PersistedTimerState, SoloSessionMeta, SoloSessionPayload } from "./src/storage/sessionStorage";
 
 // Required so the in-app browser session used for Google sign-in resolves
 // its promise when redirected back into the app.
@@ -3082,12 +3087,14 @@ function SoloScreen({
   onSelectMode,
   onGoShared,
   activeSessionId,
+  onOpenSessions,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
   onSelectMode: (m: SoloMode) => void;
   onGoShared: () => void;
   activeSessionId: string | null;
+  onOpenSessions: () => void;
 }) {
   useKeepAwake();
   const { width, height } = useWindowDimensions();
@@ -3567,6 +3574,28 @@ function SoloScreen({
             <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
           </Pressable>
           <Text style={s.casingTitle}>STOPWATCH</Text>
+          {/* Sessions switcher button */}
+          <Pressable
+            onPress={onOpenSessions}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Open sessions list"
+            style={({ pressed }) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 3,
+              paddingHorizontal: 7,
+              paddingVertical: 3,
+              borderRadius: 10,
+              borderWidth: 1.5,
+              borderColor: C.dark,
+              opacity: pressed ? 0.6 : 1,
+            })}
+          >
+            <Text style={{ color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 1.5 }}>
+              ≡ SESSIONS
+            </Text>
+          </Pressable>
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
           {/* Lock toggle: tap to lock, double-tap to unlock.
@@ -4015,11 +4044,13 @@ function TimerScreen({
   onBack,
   onSelectMode,
   activeSessionId,
+  onOpenSessions,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
   onSelectMode: (m: SoloMode) => void;
   activeSessionId: string | null;
+  onOpenSessions: () => void;
 }) {
   useKeepAwake();
   const { width, height } = useWindowDimensions();
@@ -4314,6 +4345,28 @@ function TimerScreen({
             <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
           </Pressable>
           <Text style={s.casingTitle}>TIMER</Text>
+          {/* Sessions switcher button */}
+          <Pressable
+            onPress={onOpenSessions}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Open sessions list"
+            style={({ pressed }) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 3,
+              paddingHorizontal: 7,
+              paddingVertical: 3,
+              borderRadius: 10,
+              borderWidth: 1.5,
+              borderColor: C.dark,
+              opacity: pressed ? 0.6 : 1,
+            })}
+          >
+            <Text style={{ color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 1.5 }}>
+              ≡ SESSIONS
+            </Text>
+          </Pressable>
         </View>
         <View
           style={[
@@ -4523,6 +4576,632 @@ function TimerScreen({
   );
 }
 
+// ── Name input modal (cross-platform) — used for session create/rename ────────
+/**
+ * Simple modal with a TextInput for entering a session name.
+ * Uses React Native Modal so it works on both iOS and Android without
+ * relying on Alert.prompt (iOS-only).
+ */
+function NameInputModal({
+  visible,
+  title,
+  initialValue,
+  placeholder,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  title: string;
+  initialValue: string;
+  placeholder: string;
+  onConfirm: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initialValue);
+
+  // Reset the input value whenever the modal opens with a new initialValue
+  useEffect(() => {
+    if (visible) setValue(initialValue);
+  }, [visible, initialValue]);
+
+  const handleConfirm = useCallback(() => {
+    const trimmed = value.trim();
+    if (trimmed) onConfirm(trimmed);
+  }, [value, onConfirm]);
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <View style={nm.overlay}>
+        <View style={nm.dialog}>
+          <Text style={nm.title}>{title}</Text>
+          <TextInput
+            value={value}
+            onChangeText={setValue}
+            placeholder={placeholder}
+            placeholderTextColor={C.muted}
+            autoCapitalize="words"
+            autoFocus
+            style={nm.input}
+            onSubmitEditing={handleConfirm}
+            returnKeyType="done"
+            maxLength={50}
+          />
+          <View style={nm.actions}>
+            <Pressable
+              onPress={onCancel}
+              style={({ pressed }) => [nm.actionBtn, nm.cancelBtn, { opacity: pressed ? 0.7 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel"
+            >
+              <Text style={nm.cancelText}>Cancel</Text>
+            </Pressable>
+            <Pressable
+              onPress={handleConfirm}
+              style={({ pressed }) => [nm.actionBtn, nm.confirmBtn, { opacity: pressed ? 0.7 : 1 }]}
+              accessibilityRole="button"
+              accessibilityLabel="Confirm"
+            >
+              <Text style={nm.confirmText}>OK</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const nm = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  dialog: {
+    backgroundColor: C.paper,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: C.rule,
+    padding: 20,
+    width: "100%",
+    maxWidth: 400,
+  },
+  title: {
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    color: C.ink,
+    marginBottom: 14,
+    textTransform: "uppercase",
+  },
+  input: {
+    backgroundColor: C.white,
+    borderWidth: 2,
+    borderColor: C.line,
+    borderRadius: 3,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: C.ink,
+    fontWeight: "600",
+    marginBottom: 16,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  actionBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 3,
+  },
+  cancelBtn: {
+    borderWidth: 2,
+    borderColor: C.line,
+    backgroundColor: C.white,
+  },
+  cancelText: {
+    color: C.ink,
+    fontSize: 13,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  confirmBtn: {
+    backgroundColor: C.ink,
+  },
+  confirmText: {
+    color: C.white,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+});
+
+// ── Session switcher modal (ADR 0024 / issue #366) ─────────────────────────────
+/**
+ * Full-screen modal listing all local solo sessions.
+ * Provides create, rename, delete (with confirmation), and switch actions.
+ * Enforces the SESSION_CAP (10) from ADR 0024.
+ */
+function SessionSwitcherModal({
+  visible,
+  activeSessionId,
+  onClose,
+  onSwitch,
+}: {
+  visible: boolean;
+  activeSessionId: string | null;
+  onClose: () => void;
+  onSwitch: (id: string, mode: SoloMode) => void;
+}) {
+  const [sessions, setSessions] = useState<SoloSessionMeta[]>([]);
+  const [payloads, setPayloads] = useState<Record<string, SoloSessionPayload>>({});
+  const [loading, setLoading] = useState(false);
+  const [nameModal, setNameModal] = useState<{
+    mode: "create" | "rename";
+    initialValue: string;
+    sessionId?: string;
+  } | null>(null);
+
+  // Load sessions + payloads (for running/paused indicator) when modal opens
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const index = await listSessions();
+      setSessions(index);
+      const pMap: Record<string, SoloSessionPayload> = {};
+      await Promise.all(
+        index.map(async (meta) => {
+          const p = await getSession(meta.id);
+          if (p) pMap[meta.id] = p;
+        })
+      );
+      setPayloads(pMap);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (visible) loadAll();
+  }, [visible, loadAll]);
+
+  // Derive running/paused state from persisted payload
+  function sessionRunState(
+    meta: SoloSessionMeta
+  ): "running" | "paused" | null {
+    const p = payloads[meta.id];
+    if (!p) return null;
+    if (meta.mode === "stopwatch") {
+      const st = p.stopwatchState?.state;
+      return st ?? null;
+    }
+    const st = p.timerState?.state;
+    return st ?? null;
+  }
+
+  // Create new session
+  const handleOpenCreate = useCallback(() => {
+    const nextNum = sessions.length + 1;
+    setNameModal({
+      mode: "create",
+      initialValue: `Session ${nextNum}`,
+    });
+  }, [sessions.length]);
+
+  const handleCreateConfirm = useCallback(
+    async (name: string) => {
+      setNameModal(null);
+      const id = generateUUID();
+      try {
+        await createSession(id, name, "stopwatch");
+        await loadAll();
+      } catch (err) {
+        Alert.alert(
+          "Cannot create session",
+          (err as Error).message ?? "Session cap reached."
+        );
+      }
+    },
+    [loadAll]
+  );
+
+  // Rename session
+  const handleOpenRename = useCallback((meta: SoloSessionMeta) => {
+    setNameModal({
+      mode: "rename",
+      initialValue: meta.name,
+      sessionId: meta.id,
+    });
+  }, []);
+
+  const handleRenameConfirm = useCallback(
+    async (name: string) => {
+      const id = nameModal?.sessionId;
+      setNameModal(null);
+      if (!id) return;
+      await updateSessionMeta(id, { name });
+      await loadAll();
+    },
+    [nameModal, loadAll]
+  );
+
+  // Delete session
+  const handleDelete = useCallback(
+    (meta: SoloSessionMeta) => {
+      const runState = sessionRunState(meta);
+      const isActive = meta.id === activeSessionId;
+      const detail = isActive
+        ? "This is your current session. Its lap data will be lost."
+        : runState
+        ? "This session has a timer in progress. Its lap data will be lost."
+        : "This cannot be undone.";
+
+      Alert.alert(
+        `Delete "${meta.name}"?`,
+        detail,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              await deleteSession(meta.id);
+              await loadAll();
+            },
+          },
+        ]
+      );
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeSessionId, payloads, loadAll]
+  );
+
+  // Switch to a session
+  const handleSwitch = useCallback(
+    async (meta: SoloSessionMeta) => {
+      if (meta.id === activeSessionId) {
+        onClose();
+        return;
+      }
+      await setActiveSessionId(meta.id);
+      onSwitch(meta.id, meta.mode as SoloMode);
+    },
+    [activeSessionId, onClose, onSwitch]
+  );
+
+  const atCap = sessions.length >= SESSION_CAP;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <SafeAreaView style={ssm.screen}>
+        <StatusBar barStyle="light-content" backgroundColor={C.casing} />
+
+        {/* Header */}
+        <View style={ssm.header}>
+          <Text style={ssm.headerTitle}>SESSIONS</Text>
+          <Pressable
+            onPress={onClose}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Close sessions panel"
+            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+          >
+            <Text style={ssm.closeBtn}>✕ CLOSE</Text>
+          </Pressable>
+        </View>
+
+        {/* Cap notice */}
+        {atCap && (
+          <View style={ssm.capNotice}>
+            <Text style={ssm.capNoticeText}>
+              ⚠ Session limit ({SESSION_CAP}) reached — delete a session to create a new one.
+            </Text>
+          </View>
+        )}
+
+        {/* Session list */}
+        {loading ? (
+          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+            <ActivityIndicator color={C.ink} />
+          </View>
+        ) : sessions.length === 0 ? (
+          <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
+            <Text style={{ color: C.muted, fontSize: 14, textAlign: "center" }}>
+              No sessions yet. Create one below.
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={sessions}
+            keyExtractor={(m) => m.id}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingVertical: 4 }}
+            renderItem={({ item }) => {
+              const isActive = item.id === activeSessionId;
+              const runState = sessionRunState(item);
+              const modeLabel = item.mode === "timer" ? "⏲ TIMER" : "⏱ SW";
+
+              return (
+                <View style={[ssm.row, isActive && ssm.rowActive]}>
+                  {/* Main tap area — switches session */}
+                  <Pressable
+                    onPress={() => handleSwitch(item)}
+                    style={ssm.rowMain}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Switch to ${item.name}`}
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <View style={ssm.rowTop}>
+                      <Text style={[ssm.rowName, isActive && ssm.rowNameActive]} numberOfLines={1}>
+                        {item.name}
+                      </Text>
+                      {isActive && (
+                        <Text style={ssm.activeDot} accessibilityLabel="Active">● ACTIVE</Text>
+                      )}
+                    </View>
+                    <View style={ssm.rowMeta}>
+                      <Text style={ssm.modeBadge}>{modeLabel}</Text>
+                      {runState && (
+                        <View
+                          style={[
+                            ssm.stateBadge,
+                            runState === "running" && { backgroundColor: C.red },
+                            runState === "paused" && { backgroundColor: C.yellow },
+                          ]}
+                          accessible
+                          accessibilityLabel={runState === "running" ? "Running" : "Paused"}
+                        >
+                          <Text
+                            style={[
+                              ssm.stateBadgeText,
+                              runState === "running" && { color: C.white },
+                              runState === "paused" && { color: C.ink },
+                            ]}
+                          >
+                            {runState === "running" ? "● RUN" : "‖ PAUSED"}
+                          </Text>
+                        </View>
+                      )}
+                      <Text style={ssm.lastUsed}>{fmtAge(item.lastUsedAt)}</Text>
+                    </View>
+                  </Pressable>
+
+                  {/* Action buttons */}
+                  <View style={ssm.rowActions}>
+                    <Pressable
+                      onPress={() => handleOpenRename(item)}
+                      hitSlop={4}
+                      style={({ pressed }) => [ssm.actionIcon, { opacity: pressed ? 0.6 : 1 }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Rename ${item.name}`}
+                    >
+                      <Text style={ssm.actionIconText}>✎</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => handleDelete(item)}
+                      hitSlop={4}
+                      style={({ pressed }) => [ssm.actionIcon, ssm.deleteIcon, { opacity: pressed ? 0.6 : 1 }]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete ${item.name}`}
+                    >
+                      <Text style={[ssm.actionIconText, { color: C.white }]}>🗑</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            }}
+          />
+        )}
+
+        {/* Create button */}
+        <View style={ssm.footer}>
+          <Pressable
+            onPress={atCap ? undefined : handleOpenCreate}
+            style={({ pressed }) => [
+              ssm.createBtn,
+              atCap && ssm.createBtnDisabled,
+              { opacity: pressed && !atCap ? 0.8 : 1 },
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Create new session"
+            accessibilityState={{ disabled: atCap }}
+          >
+            <Text style={[ssm.createBtnText, atCap && ssm.createBtnTextDisabled]}>
+              + NEW SESSION
+            </Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+
+      {/* Name input modal (create / rename) */}
+      <NameInputModal
+        visible={nameModal !== null}
+        title={nameModal?.mode === "create" ? "New Session" : "Rename Session"}
+        initialValue={nameModal?.initialValue ?? ""}
+        placeholder="Session name"
+        onConfirm={
+          nameModal?.mode === "create" ? handleCreateConfirm : handleRenameConfirm
+        }
+        onCancel={() => setNameModal(null)}
+      />
+    </Modal>
+  );
+}
+
+const ssm = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: C.paper,
+  },
+  header: {
+    backgroundColor: C.casing,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 3,
+    borderColor: C.casingBorder,
+  },
+  headerTitle: {
+    color: C.casingMuted,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 3,
+  },
+  closeBtn: {
+    color: C.faint,
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
+  capNotice: {
+    backgroundColor: C.yellowBg,
+    borderBottomWidth: 2,
+    borderColor: C.rule,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  capNoticeText: {
+    color: C.ink,
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.white,
+    borderBottomWidth: 1,
+    borderColor: C.line,
+    minHeight: 66,
+  },
+  rowActive: {
+    backgroundColor: "#EDF5FF",
+    borderLeftWidth: 4,
+    borderLeftColor: palette.bluePrimary,
+  },
+  rowMain: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    justifyContent: "center",
+    minHeight: 66,
+  },
+  rowTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 4,
+  },
+  rowName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: C.ink,
+    letterSpacing: 0.2,
+    flex: 1,
+  },
+  rowNameActive: {
+    color: palette.bluePrimary,
+  },
+  activeDot: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    color: palette.bluePrimary,
+  },
+  rowMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  modeBadge: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: C.muted,
+    letterSpacing: 0.5,
+  },
+  stateBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: C.dark,
+  },
+  stateBadgeText: {
+    color: C.white,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+  lastUsed: {
+    fontSize: 10,
+    color: C.muted,
+    fontWeight: "600",
+  },
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingRight: 12,
+    gap: 6,
+  },
+  actionIcon: {
+    width: ICON_BTN_SIZE,
+    height: ICON_BTN_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 4,
+    backgroundColor: C.panelBg,
+    borderWidth: 1,
+    borderColor: C.line,
+  },
+  deleteIcon: {
+    backgroundColor: C.red,
+    borderColor: C.red,
+  },
+  actionIconText: {
+    fontSize: 16,
+    color: C.ink,
+  },
+  footer: {
+    backgroundColor: C.paper,
+    borderTopWidth: 2,
+    borderColor: C.rule,
+    padding: 16,
+  },
+  createBtn: {
+    backgroundColor: palette.bluePrimary,
+    borderRadius: 3,
+    paddingVertical: 15,
+    alignItems: "center",
+  },
+  createBtnDisabled: {
+    backgroundColor: C.panelBg,
+    borderWidth: 2,
+    borderColor: C.line,
+  },
+  createBtnText: {
+    color: C.white,
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+  createBtnTextDisabled: {
+    color: C.muted,
+  },
+});
+
 // ── Solo container: routes between stopwatch and timer modes (#232) ───────────
 // Also manages the multi-session active session pointer (ADR 0024 / issue #364).
 function SoloContainer({
@@ -4537,6 +5216,7 @@ function SoloContainer({
   const [mode, setMode] = useState<SoloMode>("stopwatch");
   const [modeLoaded, setModeLoaded] = useState(false);
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
+  const [showSwitcher, setShowSwitcher] = useState(false);
 
   useEffect(() => {
     // Resolve (or create) the active session, migrating legacy data if needed.
@@ -4561,23 +5241,52 @@ function SoloContainer({
     }
   }, [activeSessionId]);
 
+  /**
+   * Called by SessionSwitcherModal when the user picks a different session.
+   * Updating `activeSessionId` changes the `key` prop of the child screen,
+   * which triggers a remount and re-reads the new session's persisted state.
+   */
+  const handleSessionSwitch = useCallback((id: string, newMode: SoloMode) => {
+    setMode(newMode);
+    setActiveSessionIdState(id);
+    setShowSwitcher(false);
+  }, []);
+
+  const handleOpenSwitcher = useCallback(() => {
+    setShowSwitcher(true);
+  }, []);
+
   if (!modeLoaded) return <LoadingScreen />;
 
-  return mode === "timer" ? (
-    <TimerScreen
-      fontsLoaded={fontsLoaded}
-      onBack={onBack}
-      onSelectMode={handleSelectMode}
-      activeSessionId={activeSessionId}
-    />
-  ) : (
-    <SoloScreen
-      fontsLoaded={fontsLoaded}
-      onBack={onBack}
-      onSelectMode={handleSelectMode}
-      onGoShared={onGoShared}
-      activeSessionId={activeSessionId}
-    />
+  return (
+    <>
+      {mode === "timer" ? (
+        <TimerScreen
+          key={activeSessionId ?? "timer"}
+          fontsLoaded={fontsLoaded}
+          onBack={onBack}
+          onSelectMode={handleSelectMode}
+          activeSessionId={activeSessionId}
+          onOpenSessions={handleOpenSwitcher}
+        />
+      ) : (
+        <SoloScreen
+          key={activeSessionId ?? "sw"}
+          fontsLoaded={fontsLoaded}
+          onBack={onBack}
+          onSelectMode={handleSelectMode}
+          onGoShared={onGoShared}
+          activeSessionId={activeSessionId}
+          onOpenSessions={handleOpenSwitcher}
+        />
+      )}
+      <SessionSwitcherModal
+        visible={showSwitcher}
+        activeSessionId={activeSessionId}
+        onClose={() => setShowSwitcher(false)}
+        onSwitch={handleSessionSwitch}
+      />
+    </>
   );
 }
 
