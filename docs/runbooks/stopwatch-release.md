@@ -43,7 +43,7 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<Supabase publishable key>
 
 Run the **stopwatch Play Store release build** workflow from the Actions tab (`workflow_dispatch`, no inputs needed). It builds the signed `.aab` directly on a GitHub-hosted runner via `eas build --local` — this skips EAS's cloud build queue entirely (which can back up for hours on the free tier) while GitHub Actions minutes are unlimited for this public repo. EAS still supplies the signing keystore and Supabase environment variables remotely; nothing sensitive is stored in the repo.
 
-Download the `.aab` from the workflow run's **Artifacts** section once it completes and continue at "Submit to Play Store" below.
+This also automatically submits the `.aab` to Play Console's **Internal testing** track via `eas submit` (using the `PLAY_STORE_JSON_KEY` service account, shared with the tracker app's pipeline — see "Submit to Play Store" below for one-time setup). No manual upload needed once that's configured. The `.aab` is still uploaded as a workflow artifact regardless, for audit or manual sideloading.
 
 GitHub's standard `ubuntu-latest` runner (2 cores / 7GB RAM) does not have enough Metaspace by default for the Kotlin compiler daemon (KSP annotation processing for `expo-updates`) building this many native modules, and fails with `java.lang.OutOfMemoryError: Metaspace`. `apps/stopwatch/plugins/withGradleJvmMemory.js` raises `org.gradle.jvmargs` and `kotlin.daemon.jvmargs` in the generated `gradle.properties` on every prebuild to fix this — it applies regardless of which build option below you use.
 
@@ -71,15 +71,26 @@ All three options produce an equivalent signed `.aab` (Android App Bundle) — t
 
 ## Submit to Play Store
 
-### Via EAS Submit (recommended)
+The GitHub Actions workflow (Option A above) submits automatically. This section covers one-time setup and the manual fallback.
+
+### One-time setup for automatic submission
+
+Play's API refuses the very first upload for a new app — it must be done once through the Play Console UI (already done for `org.splitsync.stopwatch`). After that:
+
+1. Reuse the same Google Play service account already set up for the tracker app's pipeline (`.github/workflows/mobile-release.yml`) — same Play Console developer account, one service account can manage multiple apps.
+2. In Play Console → **Setup → API access**, confirm that service account has **Release Manager** (or equivalent release permissions) granted specifically for **SplitSync Stopwatch**, not just the tracker app. Grants are commonly per-app, not automatic across every app in the account.
+3. Its JSON key is already stored as the `PLAY_STORE_JSON_KEY` GitHub secret — `apps/stopwatch/eas.json`'s `submit.production.android.serviceAccountKeyPath` and the workflow write that value to a gitignored `play-service-account.json` file at build time.
+
+### Via EAS Submit manually
 
 ```bash
-eas submit --platform android --latest
+cd apps/stopwatch
+eas submit --platform android --profile production --path stopwatch.aab
 ```
 
-This picks up the most recent successful build and submits it directly. EAS Submit needs a Google Play service-account JSON key configured in the project's EAS Submit settings (one-time setup in the Expo dashboard).
+Requires a local `play-service-account.json` at the path configured in `eas.json` (get its contents from the `PLAY_STORE_JSON_KEY` secret, or from whoever manages Play Console API access — never commit this file).
 
-### Via manual upload
+### Via manual upload (no EAS Submit)
 
 1. Get the `.aab` — from the GitHub Actions workflow run's Artifacts, your local build output, or expo.dev, depending on which build option you used above.
 2. In Google Play Console → SplitSync Stopwatch → Release → select track → Create new release → Upload the `.aab`.

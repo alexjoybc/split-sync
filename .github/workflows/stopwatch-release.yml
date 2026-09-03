@@ -8,8 +8,11 @@ name: stopwatch Play Store release build
 # credentials (signing keystore) and environment variables (Supabase keys)
 # via `eas build --local`, so nothing sensitive is stored in this repo.
 #
-# Output: the signed .aab is uploaded as a workflow artifact. Submitting to
-# Play Console is a manual step — see docs/runbooks/stopwatch-release.md.
+# The signed .aab is also submitted to Play Console's internal testing track
+# automatically via `eas submit`, using the same Google Play service account
+# (PLAY_STORE_JSON_KEY) already granted access for org.splitsync.stopwatch —
+# see docs/runbooks/stopwatch-release.md. The .aab is still uploaded as a
+# workflow artifact regardless, for audit/manual-sideload purposes.
 
 on:
   workflow_dispatch: {}
@@ -70,3 +73,16 @@ jobs:
           name: splitsync-stopwatch-aab
           path: apps/stopwatch/stopwatch.aab
           retention-days: 30
+
+      - name: Write Play service account key
+        working-directory: apps/stopwatch
+        run: echo '${{ secrets.PLAY_STORE_JSON_KEY }}' > play-service-account.json
+
+      - name: Submit to Play Store (internal track)
+        working-directory: apps/stopwatch
+        run: |
+          eas submit \
+            --platform android \
+            --profile production \
+            --path stopwatch.aab \
+            --non-interactive
