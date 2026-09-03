@@ -512,6 +512,43 @@ export default function HelpPage() {
               same applies in the SplitSync Stopwatch app: the solo timer is
               restored even if the app is killed or the phone reboots.
             </li>
+            <li>
+              <strong>Multiple sessions (web only):</strong> tap the session
+              name in the top-right corner of the stopwatch header to open the{" "}
+              <strong>Sessions</strong> panel. You can keep up to{" "}
+              <strong>10</strong> independent solo sessions on this device — each
+              with its own name, mode (stopwatch or timer), and saved state.
+              Switching sessions immediately loads the other session exactly as
+              you left it; a running session is preserved in the background and
+              picks up from the correct wall-clock time when you switch back.
+              <ul className="mt-2 list-[circle] space-y-1 pl-4">
+                <li>
+                  <strong>Create:</strong> click{" "}
+                  <strong>&ldquo;+ New session&rdquo;</strong> in the panel,
+                  give it a name, and tap <strong>Create</strong>.
+                </li>
+                <li>
+                  <strong>Rename:</strong> click the pencil icon next to a
+                  session name, type a new name, and press{" "}
+                  <strong>Enter</strong> (or click ✓).
+                </li>
+                <li>
+                  <strong>Delete:</strong> click the trash icon, then confirm
+                  with <strong>Yes</strong>. A confirmation is always required.
+                  Deleting the active session automatically switches to the
+                  next available one (or creates a fresh session if none
+                  remain).
+                </li>
+                <li>
+                  <strong>Switch:</strong> click any session row to make it
+                  active and close the panel.
+                </li>
+                <li>
+                  Sessions are stored on this device only (no cloud sync).
+                  Clearing your browser&apos;s site data will remove them.
+                </li>
+              </ul>
+            </li>
           </ul>
         </section>
 

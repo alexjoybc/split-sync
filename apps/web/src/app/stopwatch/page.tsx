@@ -18,9 +18,12 @@ import {
   clearActiveStopwatchState,
   readActiveMode,
   writeActiveMode,
+  setActiveSessionId,
+  getSession,
   type SoloMode,
   type Lap as SessionLap,
 } from "./soloSessionStorage";
+import { SoloSessionSwitcher } from "./SoloSessionSwitcher";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -623,6 +626,11 @@ export default function StopwatchPage() {
   // Create-session modal (#182)
   const [showModal, setShowModal] = useState(false);
 
+  // Solo session switcher (#367)
+  const [showSessionPanel, setShowSessionPanel] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentSessionName, setCurrentSessionName] = useState("Session 1");
+
   const router = useRouter();
 
   // Delayed start
@@ -672,7 +680,9 @@ export default function StopwatchPage() {
 
   useEffect(() => {
     runMigrationIfNeeded();
-    getOrCreateActiveSession(); // ensure there is always a valid active session
+    const session = getOrCreateActiveSession(); // ensure there is always a valid active session
+    setCurrentSessionId(session.id);
+    setCurrentSessionName(session.name);
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -1327,6 +1337,114 @@ export default function StopwatchPage() {
   }, [authLoading, user, router]);
 
   // ---------------------------------------------------------------------------
+  // Solo session switcher (#367) — switch between local sessions
+  // ---------------------------------------------------------------------------
+
+  const handleSwitchSession = useCallback(
+    (newSessionId: string) => {
+      // 1. Cancel any active countdown first.
+      clearCountdown();
+      setCountdownSec(0);
+      setPendingStopMs(null);
+
+      // 2. Persist the current session's state before leaving it.
+      //    If running: write a fresh wall-clock anchor so switching back picks
+      //    up from the correct elapsed time (same pattern as handleVisibility).
+      //    If stopped/idle: already persisted by the existing persist() calls.
+      if (state === "running") {
+        const elapsed = getElapsed();
+        accRef.current = elapsed;
+        wallStartRef.current = Date.now();
+        writePersisted({
+          state: "running",
+          accMs: elapsed,
+          startedAtWall: wallStartRef.current,
+          laps: lapsRef.current,
+        });
+        stopLoop();
+      }
+
+      // 3. Atomically update the active-session pointer in storage.
+      setActiveSessionId(newSessionId);
+
+      // 4. Reset transient refs for the incoming session.
+      targetFiredRef.current = false;
+
+      // 5. Load the incoming session's stopwatch state.
+      const saved = readPersisted(); // now reads from newSessionId
+      if (saved) {
+        accRef.current = saved.accMs;
+        lapsRef.current = saved.laps;
+        setLaps(saved.laps);
+
+        if (saved.state === "running" && saved.startedAtWall !== null) {
+          // Compute elapsed from wall-clock anchor (drift-free across switches).
+          accRef.current =
+            saved.accMs + Math.max(0, Date.now() - saved.startedAtWall);
+          wallStartRef.current = Date.now();
+          startRef.current = performance.now();
+          setState("running");
+          setDisplayMs(accRef.current);
+          startLoop();
+          // Re-persist with fresh anchor so a second switch stays accurate.
+          writePersisted({
+            state: "running",
+            accMs: accRef.current,
+            startedAtWall: wallStartRef.current,
+            laps: saved.laps,
+          });
+        } else {
+          wallStartRef.current = null;
+          setState("stopped");
+          setDisplayMs(saved.accMs);
+        }
+        // Don't fire the target cue retroactively if already past the target.
+        if (accRef.current >= cuesRef.current.targetMs) {
+          targetFiredRef.current = true;
+        }
+      } else {
+        // Incoming session is idle (no persisted stopwatch state).
+        accRef.current = 0;
+        startRef.current = 0;
+        wallStartRef.current = null;
+        lapsRef.current = [];
+        setState("idle");
+        setDisplayMs(0);
+        setLaps([]);
+      }
+
+      // 6. Restore mode for the incoming session.
+      const newMode = readActiveMode();
+      setMode(newMode);
+      if (newMode === "stopwatch") {
+        const loaded = loadCueSettings();
+        cuesRef.current = loaded;
+        setCues(loaded);
+        setTargetInput(formatTargetInput(loaded.targetMs));
+      }
+
+      // 7. Update React display state.
+      setCurrentSessionId(newSessionId);
+      const newSession = getSession(newSessionId);
+      if (newSession) setCurrentSessionName(newSession.name);
+
+      setShowSessionPanel(false);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state, clearCountdown, getElapsed, stopLoop, startLoop]
+  );
+
+  // Refresh the displayed session name after the panel closes (covers renames).
+  const handleCloseSessionPanel = useCallback(() => {
+    setShowSessionPanel(false);
+    // Re-read the name in case the user renamed the active session.
+    if (currentSessionId) {
+      const s = getSession(currentSessionId);
+      if (s) setCurrentSessionName(s.name);
+    }
+  }, [currentSessionId]);
+
+  // ---------------------------------------------------------------------------
   // Derived display values
   // ---------------------------------------------------------------------------
 
@@ -1384,6 +1502,15 @@ export default function StopwatchPage() {
         />
       )}
 
+      {/* Solo session switcher panel (#367) */}
+      {showSessionPanel && (
+        <SoloSessionSwitcher
+          activeSessionId={currentSessionId}
+          onSwitch={handleSwitchSession}
+          onClose={handleCloseSessionPanel}
+        />
+      )}
+
       <main
         className="race-page flex min-h-dvh flex-col"
         data-wake-lock-active={state === "running" ? "true" : undefined}
@@ -1394,9 +1521,42 @@ export default function StopwatchPage() {
         {/* Masthead — hidden in large-display mode to maximise the timer */}
         {!largeMode && (
           <header className="race-masthead no-print">
-            <div className="mx-auto max-w-lg">
-              <p className="race-kicker">Solo timer</p>
-              <h1 className="race-title">Stopwatch</h1>
+            <div className="mx-auto flex max-w-lg items-end justify-between gap-4">
+              <div>
+                <p className="race-kicker">Solo timer</p>
+                <h1 className="race-title">Stopwatch</h1>
+              </div>
+              {/* Session switcher trigger (#367) */}
+              <button
+                type="button"
+                onClick={() => setShowSessionPanel(true)}
+                className="flex flex-col items-end rounded pb-0.5 text-right focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
+                aria-label="Manage sessions"
+                aria-haspopup="dialog"
+                data-testid="open-session-panel"
+              >
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-race-muted">
+                  Session
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="max-w-[120px] truncate text-sm font-bold text-race-ink">
+                    {currentSessionName}
+                  </span>
+                  {/* chevron down */}
+                  <svg
+                    className="size-3 shrink-0 text-race-muted"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </span>
+              </button>
             </div>
           </header>
         )}
@@ -1451,7 +1611,7 @@ export default function StopwatchPage() {
           )}
 
           {mode === "timer" ? (
-            <CountdownTimer />
+            <CountdownTimer key={currentSessionId ?? undefined} />
           ) : (
           <>
           {/* ── Dial ───────────────────────────────────────────────────────── */}
