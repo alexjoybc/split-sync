@@ -185,34 +185,12 @@ jobs:
           key: gradle-${{ runner.os }}-${{ hashFiles('apps/mobile/android/**/*.gradle*') }}
           restore-keys: gradle-${{ runner.os }}-
 
-      # The stacktrace identified ExpoAutolinkingPlugin.kt:69 — the autolinking
-      # plugin runs a node command via ProcessOutputValueSource. Run the same
-      # commands directly to see their full error output before Gradle swallows it.
-      - name: Probe autolinking commands
-        working-directory: apps/mobile
-        run: |
-          AUTOLINKING_PKG=$(node --print \
-            "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
-          AUTOLINKING_CLI="$(dirname "$AUTOLINKING_PKG")/build/index.js"
-          PROJECT_ROOT="$(pwd)"
-
-          echo "=== react-native-config ==="
-          node "$AUTOLINKING_CLI" react-native-config \
-            --project-root "$PROJECT_ROOT" 2>&1 || true
-
-          echo "=== generate-android-modules-provider ==="
-          node "$AUTOLINKING_CLI" generate-android-modules-provider \
-            --target ModulesProvider \
-            --project-root "$PROJECT_ROOT" \
-            --android-modules-provider /tmp/modules-provider-check.kt 2>&1 || true
-
       - name: Build release .aab
         working-directory: apps/mobile/android
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-          SKIP_BUNDLING: true
-        run: ./gradlew bundleRelease 2>&1
+        run: ./gradlew bundleRelease
 
       - name: Upload to Play Store (internal track)
         uses: r0adkll/upload-google-play@v1
