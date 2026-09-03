@@ -2091,8 +2091,15 @@ function SessionScreen({
         lastSequenceRef.current = ev.sequence;
       }
 
-      if (ev.event_type === "start" && ev.t0_server) {
-        setT0Server(ev.t0_server);
+      if (ev.event_type === "start") {
+        // `record_session_event` returns a row from `casual_session_events`,
+        // which has no `t0_server` column (that lives on `casual_sessions`
+        // only) — so `ev.t0_server` is always absent here. Only refine the
+        // clock-sync timestamp when present; never gate the status
+        // transition on it, or Start silently does nothing (#339).
+        if (ev.t0_server) {
+          setT0Server(ev.t0_server);
+        }
         clientT0Ref.current = Date.now();
         targetFiredRef.current = false;
         setStatus("running");
