@@ -210,7 +210,7 @@ Three tables support this surface (migration `20260830000001_casual_stopwatch_se
 
 | Table | Purpose |
 | --- | --- |
-| `casual_sessions` | A timed session: owner, human-readable name, unique 6-char join code, status, expiry, participant cap, and server-anchored T0 |
+| `casual_sessions` | A timed session: owner, human-readable name, unique 6-char join code, status (`waiting` / `running` / `stopped` / `closed`), expiry, participant cap, and server-anchored T0 |
 | `casual_session_participants` | Everyone in a session — owner plus joiners. `client_id` UUID is the idempotency key for re-join |
 | `casual_session_events` | The event log (`start` / `lap` / `stop` / `reset`). Client-generated `id` is the idempotency key. Elapsed time and lap splits are **always derived** from this log — never persisted |
 
@@ -218,22 +218,24 @@ Three tables support this surface (migration `20260830000001_casual_stopwatch_se
 
 - **Creator must be authenticated.** `create_casual_session(p_name, p_display_name)` validates `auth.uid() IS NOT NULL` inside the security-definer RPC and stores `auth.uid()::text` as `casual_sessions.owner_id` — the same pattern as `events.owner_id`.
 - **Joiners are anonymous.** `join_casual_session(code, display_name, client_id)` is callable by the anon role; no account required.
-- **No direct table grants.** RLS is enabled on all three tables as defense in depth, but the anon role has zero direct SELECT/INSERT/UPDATE grants. All anon access flows through five security-definer RPCs:
+- **No direct table grants for writes.** RLS is enabled on all three tables as defense in depth. `casual_sessions` grants `select` to `authenticated` (scoped by RLS to `owner_id = auth.uid()::text`) so a creator's own "My Sessions" list can query it directly; all writes and all anon access flow through security-definer RPCs:
 
 | RPC | Caller | Description |
 | --- | --- | --- |
 | `create_casual_session(name, display_name)` | Authenticated | Creates session + owner participant; generates unique 6-char code |
-| `join_casual_session(code, display_name, client_id)` | Anon | Validates code, checks expiry/cap, creates participant row (idempotent) |
+| `join_casual_session(code, display_name, client_id)` | Anon | Validates code, checks expiry/cap/status, creates participant row (idempotent) |
 | `record_session_event(session_id, participant_id, event_type, client_recorded_at, client_event_id)` | Anon | Validates membership, enforces concurrency rules, upserts event (idempotent on client id) |
 | `get_session_state(session_id, participant_id)` | Anon | Returns full session + participants + events for catch-up on reconnect |
-| `get_casual_session_results(code)` | Anon | Read-only results for **terminal** sessions (stopped or expired) — session header, participant display names, and the ordered event log. Serves the `/stopwatch/s/<code>/results` permalink (migration `20260830000003`, ADR 0022) |
+| `get_casual_session_results(code)` | Anon | Read-only results for **terminal** sessions (stopped, closed, or expired) — session header, participant display names, and the ordered event log. Serves the `/stopwatch/s/<code>/results` permalink (migration `20260830000003`, ADR 0022) |
 | `get_casual_session_live_view(code)` | Anon | Read-only sanitized state for non-expired sessions. Serves `/stopwatch/s/<code>/live` and returns no bearer identifiers (migration `20260831000001`, ADR 0023) |
+| `close_casual_session(session_id)` | Authenticated (owner only) | Sets status to `closed`, a terminal state that rejects new joins/events but keeps results readable (migration `20260901000001`, ADR 0024) |
+| `delete_casual_session(session_id)` | Authenticated (owner only) | Hard-deletes the session; cascades to participants and events (migration `20260901000001`, ADR 0024) |
 
 The `participant_id` UUID returned on join acts as a bearer token: calls without a valid `(session_id, participant_id)` pair are rejected. The owner RLS policy (`owner_id = auth.uid()::text`) allows authenticated creators to list their own sessions directly.
 
 ### Results permalink and event-log retention
 
-Once a session is stopped (or its 4-hour join expiry passes), its results are readable by anyone holding the code at `/stopwatch/s/<code>/results` — no sign-in, read-only. `get_casual_session_results` ignores `expires_at` for reading (expiry gates joining, not remembering), never returns participant ids (they are the write bearer tokens — actor names are resolved server-side onto each event), and raises the same generic error for unknown codes and still-live sessions so the code space cannot be probed. Retention of `casual_session_events` beyond expiry is a contract: any future cleanup job must keep stopped sessions and their events readable (see ADR 0022). Lap splits, totals, and best laps remain derived client-side from the event log; CSV/copy export happens entirely in the client.
+Once a session is stopped, closed, or its 4-hour join expiry passes, its results are readable by anyone holding the code at `/stopwatch/s/<code>/results` — no sign-in, read-only. `get_casual_session_results` ignores `expires_at` for reading (expiry gates joining, not remembering), never returns participant ids (they are the write bearer tokens — actor names are resolved server-side onto each event), and raises the same generic error for unknown codes and still-live sessions so the code space cannot be probed. Retention of `casual_session_events` beyond expiry is a contract: any future cleanup job must keep stopped sessions and their events readable (see ADR 0022). Lap splits, totals, and best laps remain derived client-side from the event log; CSV/copy export happens entirely in the client.
 
 ### Event log is source of truth
 
@@ -248,7 +250,7 @@ split_ms   = client_recorded_at[lap_N] - client_recorded_at[lap_N-1]
 
 ### Realtime
 
-Both `casual_session_events` and `casual_session_participants` are added to the `supabase_realtime` publication. The Broadcast channel key is `stopwatch:<code>` (e.g., `stopwatch:AB3K9X`). All participants in the same session subscribe to the same channel. The anon role can use Broadcast channels without table SELECT grants, which is why Broadcast is preferred over `postgres_changes` for this surface.
+`casual_session_events`, `casual_session_participants`, and `casual_sessions` are added to the `supabase_realtime` publication (the latter added in migration `20260901000001`, so an owner's "My Sessions" list reflects a close/delete without a manual refresh). The Broadcast channel key is `stopwatch:<code>` (e.g., `stopwatch:AB3K9X`). All participants in the same session subscribe to the same channel. The anon role can use Broadcast channels without table SELECT grants, which is why Broadcast is preferred over `postgres_changes` for in-session state (session_event, participant_joined/left, sync_request/response, and — per ADR 0024 — session_closed/session_deleted).
 
 The public live-view clients treat Broadcast only as an invalidation signal and re-fetch the sanitized live-view RPC; Broadcast payloads are not an authorization boundary. Viewers have no participant record and do not count toward `participant_cap`.
 

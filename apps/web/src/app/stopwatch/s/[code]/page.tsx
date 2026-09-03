@@ -13,7 +13,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-type SessionStatus = "waiting" | "running" | "stopped";
+type SessionStatus = "waiting" | "running" | "stopped" | "closed";
 
 interface Participant {
   id: string;
@@ -86,6 +86,14 @@ function loadStoredParticipant(code: string): StoredParticipant | null {
 function saveStoredParticipant(code: string, data: StoredParticipant): void {
   try {
     localStorage.setItem(storageKey(code), JSON.stringify(data));
+  } catch {
+    // localStorage may be unavailable in some contexts
+  }
+}
+
+function clearStoredParticipant(code: string): void {
+  try {
+    localStorage.removeItem(storageKey(code));
   } catch {
     // localStorage may be unavailable in some contexts
   }
@@ -190,12 +198,13 @@ function JoinForm({ code, sessionName, onJoined }: JoinFormProps) {
       onJoined(stored);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("expired") || msg.includes("not found")) {
-        setError("This session has expired or does not exist.");
-      } else if (msg.includes("full") || msg.includes("cap")) {
+      // join_casual_session raises one generic SESSION_NOT_JOINABLE for
+      // not-found, expired, stopped, and closed sessions (to avoid letting
+      // the error message probe the code space for in-progress sessions).
+      if (msg.includes("SESSION_NOT_JOINABLE")) {
+        setError("This session has ended, expired, or does not exist.");
+      } else if (msg.includes("SESSION_FULL")) {
         setError("This session is full.");
-      } else if (msg.includes("stopped")) {
-        setError("This session has already ended.");
       } else {
         setError(msg || "Failed to join session.");
       }
@@ -495,6 +504,9 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
           setActionError("Session is not running.");
         } else if (msg.includes("ALREADY_STOPPED")) {
           setActionError("Session already stopped.");
+        } else if (msg.includes("SESSION_CLOSED")) {
+          setActionError("This session was closed by the host.");
+          await refreshState();
         } else {
           // Unrecognized failure — log full details so a broken RPC (bad
           // params, missing function, etc.) is loud in dev/CI rather than
@@ -556,9 +568,47 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
       <span className="race-kicker text-race-red">● Live</span>
     ) : sessionStatus === "waiting" ? (
       <span className="race-kicker text-race-muted">Waiting</span>
+    ) : sessionStatus === "closed" ? (
+      <span className="race-kicker text-race-muted">Closed</span>
     ) : (
       <span className="race-kicker text-race-ink">Stopped</span>
     );
+
+  const handleCloseSession = useCallback(async () => {
+    if (!window.confirm("Close this session? No one will be able to join or record new laps.")) {
+      return;
+    }
+    setActionError(null);
+    const { error: rpcError } = await supabase.rpc("close_casual_session", {
+      p_session_id: stored.session_id,
+    });
+    if (rpcError) {
+      setActionError("Failed to close session. Please try again.");
+      return;
+    }
+    setSessionStatus("closed");
+    stopDisplayLoop();
+  }, [stored.session_id, stopDisplayLoop]);
+
+  const handleDeleteSession = useCallback(async () => {
+    if (
+      !window.confirm(
+        "Delete this session? This permanently removes it and all its laps. This cannot be undone."
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    const { error: rpcError } = await supabase.rpc("delete_casual_session", {
+      p_session_id: stored.session_id,
+    });
+    if (rpcError) {
+      setActionError("Failed to delete session. Please try again.");
+      return;
+    }
+    clearStoredParticipant(code);
+    window.location.href = "/stopwatch";
+  }, [stored.session_id, code]);
 
   return (
     <main className="race-page flex min-h-dvh flex-col">
@@ -619,8 +669,15 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
           </div>
         </div>
 
+        {/* ── Closed banner ─────────────────────────────────────────────── */}
+        {sessionStatus === "closed" && (
+          <p className="mt-6 text-sm font-bold text-race-muted">
+            This session was closed by the host.
+          </p>
+        )}
+
         {/* ── Pushers ───────────────────────────────────────────────────── */}
-        {sessionStatus !== "stopped" && (
+        {sessionStatus !== "stopped" && sessionStatus !== "closed" && (
           <div
             className="mt-10 flex items-center justify-center"
             style={{ gap: "var(--sw-pusher-gap)" }}
@@ -764,6 +821,28 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
               onClick={() => recordEvent("reset")}
             >
               Reset &amp; start again
+            </button>
+          </div>
+        )}
+
+        {/* ── Session management (owner only) ──────────────────────────── */}
+        {isOwner && (
+          <div className="mt-8 flex w-full justify-center gap-3 border-t-2 border-race-ink pt-4">
+            {sessionStatus !== "closed" && (
+              <button
+                type="button"
+                className="race-action race-action--outline text-xs px-3 py-1"
+                onClick={handleCloseSession}
+              >
+                Close session
+              </button>
+            )}
+            <button
+              type="button"
+              className="race-action race-action--outline text-xs px-3 py-1 text-race-red"
+              onClick={handleDeleteSession}
+            >
+              Delete session
             </button>
           </div>
         )}
