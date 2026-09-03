@@ -163,10 +163,10 @@ export default function PrivacyPage() {
             To request deletion of your account and all associated data, email
             us at{" "}
             <a
-              href="mailto:hello@splitsync.org"
+              href="mailto:support@splitsync.org"
               className="underline decoration-2 underline-offset-2"
             >
-              hello@splitsync.org
+              support@splitsync.org
             </a>{" "}
             with the subject line <strong>&quot;Data deletion request&quot;</strong> and
             include the email address associated with your account.
@@ -218,10 +218,10 @@ export default function PrivacyPage() {
             collect personal information from children under 13. If you believe
             a child&apos;s data has been collected, contact us at{" "}
             <a
-              href="mailto:hello@splitsync.org"
+              href="mailto:support@splitsync.org"
               className="underline decoration-2 underline-offset-2"
             >
-              hello@splitsync.org
+              support@splitsync.org
             </a>{" "}
             and we will delete it promptly.
           </p>
@@ -251,10 +251,10 @@ export default function PrivacyPage() {
           </p>
           <p className="mt-2 text-sm font-semibold text-race-ink">
             <a
-              href="mailto:hello@splitsync.org"
+              href="mailto:support@splitsync.org"
               className="underline decoration-2 underline-offset-2"
             >
-              hello@splitsync.org
+              support@splitsync.org
             </a>
           </p>
         </section>
