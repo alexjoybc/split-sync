@@ -163,6 +163,141 @@ test.describe('shared session results permalink', () => {
   });
 });
 
+test.describe('SessionHistory stopped session links', () => {
+  let code: string;
+
+  test.beforeAll(async () => {
+    code = await createStoppedSession();
+  });
+
+  test('stopped session shows Results link pointing to /results route', async ({ page, context }) => {
+    // Sign in via supabase client so the session appears in the owner's history
+    const client = createTestSupabaseClient();
+    const email = uniqueTestEmail('sw-hist-results');
+    const password = 'stopwatch-e2e-hist-1';
+    await client.auth.signUp({ email, password });
+    const { data: signInData } = await client.auth.signInWithPassword({ email, password });
+    const accessToken = signInData.session?.access_token ?? '';
+    const refreshToken = signInData.session?.refresh_token ?? '';
+
+    // Seed localStorage with the auth session so the page.tsx sees the signed-in owner
+    await page.goto('/stopwatch');
+    await page.evaluate(
+      ({ at, rt }) => {
+        const key = Object.keys(localStorage).find((k) =>
+          k.includes('auth-token')
+        );
+        const storageKey = key ?? 'sb-bsihlrzncucrglqltjrc-auth-token';
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({ access_token: at, refresh_token: rt })
+        );
+      },
+      { at: accessToken, rt: refreshToken }
+    );
+
+    // Create a session owned by this new user
+    const { data: created } = await client.rpc('create_casual_session', {
+      p_name: 'Hist Test Session',
+      p_display_name: 'Hist Owner',
+    });
+    if (!created) throw new Error('create_casual_session returned null');
+    const { session_id, participant_id, code: histCode } = created as {
+      session_id: string;
+      participant_id: string;
+      code: string;
+    };
+    const t0 = Date.now() - 5 * 60 * 1000;
+    const rec = async (ev: string, atMs: number) => {
+      await client.rpc('record_session_event', {
+        p_session_id: session_id,
+        p_participant_id: participant_id,
+        p_event_type: ev,
+        p_client_recorded_at: new Date(atMs).toISOString(),
+        p_client_event_id: randomUUID(),
+      });
+    };
+    await rec('start', t0);
+    await rec('lap', t0 + 30_000);
+    await rec('stop', t0 + 60_000);
+
+    await page.reload();
+
+    // The stopped session should show a "Results" link to /results route
+    const resultsLink = page.getByRole('link', { name: 'Results' }).filter({
+      has: page.locator(`[href*="${histCode}/results"]`),
+    });
+    await expect(resultsLink).toBeVisible({ timeout: 10_000 });
+    const href = await resultsLink.getAttribute('href');
+    expect(href).toContain(`/stopwatch/s/${histCode}/results`);
+  });
+
+  test('stopped session shows Share results button that copies /results URL', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+
+    const client = createTestSupabaseClient();
+    const email = uniqueTestEmail('sw-hist-share');
+    const password = 'stopwatch-e2e-share-1';
+    await client.auth.signUp({ email, password });
+    const { data: signInData } = await client.auth.signInWithPassword({ email, password });
+    const accessToken = signInData.session?.access_token ?? '';
+    const refreshToken = signInData.session?.refresh_token ?? '';
+
+    await page.goto('/stopwatch');
+    await page.evaluate(
+      ({ at, rt }) => {
+        const key = Object.keys(localStorage).find((k) =>
+          k.includes('auth-token')
+        );
+        const storageKey = key ?? 'sb-bsihlrzncucrglqltjrc-auth-token';
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify({ access_token: at, refresh_token: rt })
+        );
+      },
+      { at: accessToken, rt: refreshToken }
+    );
+
+    const { data: created } = await client.rpc('create_casual_session', {
+      p_name: 'Share Hist Session',
+      p_display_name: 'Share Owner',
+    });
+    if (!created) throw new Error('create_casual_session returned null');
+    const { session_id, participant_id, code: shareCode } = created as {
+      session_id: string;
+      participant_id: string;
+      code: string;
+    };
+    const t0 = Date.now() - 5 * 60 * 1000;
+    const rec = async (ev: string, atMs: number) => {
+      await client.rpc('record_session_event', {
+        p_session_id: session_id,
+        p_participant_id: participant_id,
+        p_event_type: ev,
+        p_client_recorded_at: new Date(atMs).toISOString(),
+        p_client_event_id: randomUUID(),
+      });
+    };
+    await rec('start', t0);
+    await rec('lap', t0 + 30_000);
+    await rec('stop', t0 + 60_000);
+
+    await page.reload();
+
+    // The "Share results" button should be visible for stopped sessions
+    const shareBtn = page.getByRole('button', { name: /share results/i }).first();
+    await expect(shareBtn).toBeVisible({ timeout: 10_000 });
+    await shareBtn.click();
+
+    // After clicking, it should show "Copied!"
+    await expect(page.getByRole('button', { name: /copied/i }).first()).toBeVisible();
+
+    // The clipboard should contain the /results URL
+    const clipText = await readClipboard(page);
+    expect(clipText).toContain(`/stopwatch/s/${shareCode}/results`);
+  });
+});
+
 test.describe('solo stopwatch export', () => {
   async function recordTwoLaps(page: Page) {
     await page.goto('/stopwatch');
