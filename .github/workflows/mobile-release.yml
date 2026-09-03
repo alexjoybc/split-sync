@@ -187,7 +187,14 @@ jobs:
 
       - name: Build release .aab
         working-directory: apps/mobile/android
-        run: ./gradlew bundleRelease
+        # EXPO_PUBLIC_* vars are inlined by Metro at bundle time via export:embed.
+        # They must be present here so the Supabase client initialises correctly
+        # when the bundle is evaluated on first launch.
+        # --info surfaces Metro's stderr output if the node process fails.
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: ./gradlew bundleRelease --info
 
       - name: Upload to Play Store (internal track)
         uses: r0adkll/upload-google-play@v1
