@@ -2,7 +2,7 @@
   "expo": {
     "name": "SplitSync Tracker",
     "slug": "split-sync-tracker",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "scheme": "org.splitsync.tracker",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
