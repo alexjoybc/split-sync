@@ -1,0 +1,72 @@
+name: stopwatch Play Store release build
+
+# Builds a signed production .aab for the SplitSync Stopwatch Android app.
+#
+# This runs the actual Gradle build on the GitHub-hosted runner instead of
+# `eas build` (cloud), which avoids the EAS free-tier build queue entirely —
+# GitHub Actions minutes are unlimited for this public repo. EAS still owns
+# credentials (signing keystore) and environment variables (Supabase keys)
+# via `eas build --local`, so nothing sensitive is stored in this repo.
+#
+# Output: the signed .aab is uploaded as a workflow artifact. Submitting to
+# Play Console is a manual step — see docs/runbooks/stopwatch-release.md.
+
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: stopwatch-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build signed .aab (local Gradle build via EAS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.23.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production .aab locally
+        working-directory: apps/stopwatch
+        run: |
+          eas build \
+            --platform android \
+            --profile production \
+            --local \
+            --non-interactive \
+            --output stopwatch.aab
+
+      - name: Upload .aab artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: splitsync-stopwatch-aab
+          path: apps/stopwatch/stopwatch.aab
+          retention-days: 30

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "org.splitsync.stopwatch",
+      "sha256_cert_fingerprints": [
+        "B4:4B:5C:89:69:D7:36:B4:B3:81:74:D4:48:DA:93:E1:4A:F9:1F:F1:A7:E0:BA:D2:72:9B:4D:E1:F2:53:64:D0"
+      ]
+    }
+  }
+]
