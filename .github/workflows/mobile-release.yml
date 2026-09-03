@@ -208,13 +208,13 @@ jobs:
 
       - name: Build release .aab
         working-directory: apps/mobile/android
-        # SKIP_BUNDLING reuses the pre-built bundle from the step above.
-        # EXPO_PUBLIC_* are still passed so Gradle env matches if needed.
         env:
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           SKIP_BUNDLING: true
-        run: ./gradlew bundleRelease
+        # --stacktrace names the failing Gradle task so we can identify which
+        # node process is crashing (Metro vs autolinking codegen vs other).
+        run: ./gradlew bundleRelease --stacktrace 2>&1
 
       - name: Upload to Play Store (internal track)
         uses: r0adkll/upload-google-play@v1
