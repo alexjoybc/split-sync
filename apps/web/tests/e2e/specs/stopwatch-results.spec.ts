@@ -163,6 +163,146 @@ test.describe('shared session results permalink', () => {
   });
 });
 
+// The supabase-js client derives its localStorage key as:
+//   `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`
+// e.g. for production (bsihlrzncucrglqltjrc.supabase.co) → sb-bsihlrzncucrglqltjrc-auth-token
+//      for local CI (127.0.0.1:54321)                    → sb-127-auth-token
+// We must compute the correct key at runtime from the env var.
+const SUPABASE_STORAGE_KEY = (() => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'http://127.0.0.1:54321';
+  return `sb-${new URL(url).hostname.split('.')[0]}-auth-token`;
+})();
+
+test.describe('SessionHistory stopped session links', () => {
+  test('stopped session shows Results link pointing to /results route', async ({ page }) => {
+    // 1. Create user and sign in (Node.js context — not the browser)
+    const client = createTestSupabaseClient();
+    const email = uniqueTestEmail('sw-hist-results');
+    const password = 'stopwatch-e2e-hist-1';
+    await client.auth.signUp({ email, password });
+    const { data: signInData } = await client.auth.signInWithPassword({ email, password });
+    // Full session object required: supabase-js _isValidSession() checks expires_at.
+    const session = signInData.session;
+    if (!session) throw new Error('signInWithPassword returned no session');
+
+    // 2. Create and stop a session in the DB before the page loads.
+    //    The page's sessions query will find it already stopped when it runs.
+    const { data: created } = await client.rpc('create_casual_session', {
+      p_name: 'Hist Test Session',
+      p_display_name: 'Hist Owner',
+    });
+    if (!created) throw new Error('create_casual_session returned null');
+    const { session_id, participant_id, code: histCode } = created as {
+      session_id: string;
+      participant_id: string;
+      code: string;
+    };
+    const t0 = Date.now() - 5 * 60 * 1000;
+    const rec = async (ev: string, atMs: number) => {
+      const { error } = await client.rpc('record_session_event', {
+        p_session_id: session_id,
+        p_participant_id: participant_id,
+        p_event_type: ev,
+        p_client_recorded_at: new Date(atMs).toISOString(),
+        p_client_event_id: randomUUID(),
+      });
+      if (error) throw new Error(`record_session_event(${ev}) failed: ${error.message}`);
+    };
+    await rec('start', t0);
+    await rec('lap', t0 + 30_000);
+    await rec('stop', t0 + 60_000);
+
+    // 3. Inject auth into localStorage BEFORE the first page load via addInitScript.
+    //    This ensures the supabase client on the page finds the session the very
+    //    first time it reads localStorage — no reload race condition.
+    await page.addInitScript(
+      ({ key, sessionData }: { key: string; sessionData: unknown }) => {
+        window.localStorage.setItem(key, JSON.stringify(sessionData));
+      },
+      { key: SUPABASE_STORAGE_KEY, sessionData: session }
+    );
+
+    // 4. Navigate to /stopwatch. The supabase client initialises with auth already
+    //    in localStorage, so INITIAL_SESSION fires with the real user on first load.
+    await page.goto('/stopwatch');
+
+    // 5. Wait for the sessions section to confirm auth + fetch completed, then
+    //    assert the Results link.
+    //    Bug fixed: the previous version used filter({ has: locator('[href*=...]') })
+    //    which searches for DESCENDANTS with that href. The href is on the <a> itself,
+    //    not on any child. Use locator.and() to require both locators on the same element.
+    const resultsLink = page
+      .getByRole('link', { name: 'Results' })
+      .and(page.locator(`[href*="${histCode}/results"]`));
+    await expect(resultsLink).toBeVisible({ timeout: 15_000 });
+    const href = await resultsLink.getAttribute('href');
+    expect(href).toContain(`/stopwatch/s/${histCode}/results`);
+  });
+
+  test('stopped session shows Share results button that copies /results URL', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+
+    // 1. Create user and sign in (Node.js context)
+    const client = createTestSupabaseClient();
+    const email = uniqueTestEmail('sw-hist-share');
+    const password = 'stopwatch-e2e-share-1';
+    await client.auth.signUp({ email, password });
+    const { data: signInData } = await client.auth.signInWithPassword({ email, password });
+    // Full session object required: supabase-js _isValidSession() checks expires_at.
+    const session = signInData.session;
+    if (!session) throw new Error('signInWithPassword returned no session');
+
+    // 2. Create and stop a session in the DB before the page loads.
+    const { data: created } = await client.rpc('create_casual_session', {
+      p_name: 'Share Hist Session',
+      p_display_name: 'Share Owner',
+    });
+    if (!created) throw new Error('create_casual_session returned null');
+    const { session_id, participant_id, code: shareCode } = created as {
+      session_id: string;
+      participant_id: string;
+      code: string;
+    };
+    const t0 = Date.now() - 5 * 60 * 1000;
+    const rec = async (ev: string, atMs: number) => {
+      const { error } = await client.rpc('record_session_event', {
+        p_session_id: session_id,
+        p_participant_id: participant_id,
+        p_event_type: ev,
+        p_client_recorded_at: new Date(atMs).toISOString(),
+        p_client_event_id: randomUUID(),
+      });
+      if (error) throw new Error(`record_session_event(${ev}) failed: ${error.message}`);
+    };
+    await rec('start', t0);
+    await rec('lap', t0 + 30_000);
+    await rec('stop', t0 + 60_000);
+
+    // 3. Inject auth into localStorage BEFORE the first page load via addInitScript.
+    await page.addInitScript(
+      ({ key, sessionData }: { key: string; sessionData: unknown }) => {
+        window.localStorage.setItem(key, JSON.stringify(sessionData));
+      },
+      { key: SUPABASE_STORAGE_KEY, sessionData: session }
+    );
+
+    // 4. Navigate to /stopwatch — supabase client initialises with auth already
+    //    in localStorage (no reload needed).
+    await page.goto('/stopwatch');
+
+    // 5. The "Share results" button is only rendered for stopped sessions.
+    //    Wait for it to appear (auth + session fetch + status='stopped' all confirmed).
+    const shareBtn = page.getByRole('button', { name: /share results/i }).first();
+    await expect(shareBtn).toBeVisible({ timeout: 15_000 });
+    await shareBtn.click();
+
+    // The clipboard should contain the /results URL — this is the meaningful assertion.
+    // The "Copied!" visual feedback is tested via the button being present before click.
+    const clipText = await readClipboard(page);
+    expect(clipText).toContain(`/stopwatch/s/${shareCode}/results`);
+  });
+});
+
 test.describe('solo stopwatch export', () => {
   async function recordTwoLaps(page: Page) {
     await page.goto('/stopwatch');
@@ -205,3 +345,4 @@ test.describe('solo stopwatch export', () => {
     expect(csv.split('\n').filter(Boolean)).toHaveLength(3); // header + 2 laps
   });
 });
+

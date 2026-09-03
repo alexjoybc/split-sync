@@ -295,6 +295,8 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   // deleteError: per-session inline error message
   const [deleteError, setDeleteError] = useState<Record<string, string>>({});
+  // copiedId: tracks which session's share link was just copied
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   async function handleDelete(sessionId: string) {
     setDeletingId(sessionId);
@@ -345,6 +347,16 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
     return <span className="font-black uppercase text-race-ink text-[10px] tracking-widest">Stopped</span>;
   };
 
+  const handleCopy = async (id: string, url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard access may be denied in some contexts; still show visual feedback.
+    }
+    setCopiedId(id);
+    setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 2000);
+  };
+
   return (
     <section
       className="mt-10 w-full border-t-2 border-race-ink pt-4"
@@ -374,23 +386,45 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Link
-                  href={`/stopwatch/s/${s.code}`}
-                  className="race-action text-xs px-2 py-1"
-                >
-                  {s.status === "stopped" ? "View" : "Join"}
-                </Link>
-                {s.status !== "stopped" && (
+                {s.status === "stopped" ? (
+                  <Link
+                    href={`/stopwatch/s/${s.code}/results`}
+                    className="race-action text-xs px-2 py-1"
+                  >
+                    Results
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/stopwatch/s/${s.code}`}
+                    className="race-action text-xs px-2 py-1"
+                  >
+                    Join
+                  </Link>
+                )}
+                {s.status === "stopped" ? (
                   <button
                     type="button"
                     className="race-action race-action--outline text-xs px-2 py-1"
-                    onClick={async () => {
-                      const url = `https://splitsync.org/stopwatch/s/${s.code}`;
-                      await navigator.clipboard.writeText(url);
-                    }}
+                    onClick={() =>
+                      handleCopy(
+                        s.id,
+                        `https://splitsync.org/stopwatch/s/${s.code}/results`
+                      )
+                    }
+                    aria-label={`Copy share results link for session ${s.name ?? s.code}`}
+                  >
+                    {copiedId === s.id ? "Copied!" : "Share results"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="race-action race-action--outline text-xs px-2 py-1"
+                    onClick={() =>
+                      handleCopy(s.id, `https://splitsync.org/stopwatch/s/${s.code}`)
+                    }
                     aria-label={`Copy share link for session ${s.name ?? s.code}`}
                   >
-                    Share
+                    {copiedId === s.id ? "Copied!" : "Share"}
                   </button>
                 )}
                 {/* Delete button — shows inline confirmation before proceeding */}

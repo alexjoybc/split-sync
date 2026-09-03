@@ -1,9 +1,9 @@
 /**
- * E2E spec: /stopwatch lock controls (#235)
+ * E2E spec: /stopwatch lock controls (#235, #340)
  *
  * Covers:
  *   - Lock button visible and toggles locked state
- *   - While locked: Stop tap does nothing (timer still running)
+ *   - While locked: Stop tap opens a confirm dialog, timer keeps running until confirmed
  *   - While locked: Reset tap does nothing (timer stays stopped)
  *   - Lap still records while locked
  *   - Press-and-hold the lock icon for 1.5 s unlocks controls
@@ -67,17 +67,44 @@ test.describe('/stopwatch lock controls', () => {
     await page.getByRole('button', { name: /lock controls/i }).click();
     await expect(page.getByRole('button', { name: /controls locked/i })).toBeVisible();
 
-    // The Stop pusher should still be present but clicking it should do nothing
+    // Tapping Stop while locked (#340) captures the elapsed time and opens a
+    // confirm dialog — it does NOT stop immediately or show the lock hint.
     await page.getByRole('button', { name: /stop stopwatch/i }).click();
 
     // After the click, Stop should still be the button label (timer is still running)
     await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible();
 
-    // Lock hint should appear (scope to the hint — Next.js adds its own
-    // route-announcer element with role="alert")
-    const lockHint = page.locator('.sw-lock-hint');
-    await expect(lockHint).toBeVisible();
-    await expect(lockHint).toContainText(/locked/i);
+    // The stop-while-locked confirmation dialog should appear
+    const confirmDialog = page.getByRole('alertdialog', { name: /confirm stop/i });
+    await expect(confirmDialog).toBeVisible();
+    await expect(confirmDialog).toContainText(/stop at/i);
+
+    // Dismissing via "Keep running" leaves the timer running, unaffected
+    await confirmDialog.getByRole('button', { name: /keep running/i }).click();
+    await expect(confirmDialog).not.toBeVisible();
+    await expect(page.getByRole('button', { name: /stop stopwatch/i })).toBeVisible();
+  });
+
+  test('Confirming Stop while locked stops the timer at the captured time', async ({ page }) => {
+    await page.goto('/stopwatch');
+
+    // Start the timer
+    await page.getByRole('button', { name: /start stopwatch/i }).click();
+    await page.waitForTimeout(300);
+
+    // Lock controls
+    await page.getByRole('button', { name: /lock controls/i }).click();
+    await expect(page.getByRole('button', { name: /controls locked/i })).toBeVisible();
+
+    // Tap Stop — opens the confirm dialog instead of stopping immediately
+    await page.getByRole('button', { name: /stop stopwatch/i }).click();
+    const confirmDialog = page.getByRole('alertdialog', { name: /confirm stop/i });
+    await expect(confirmDialog).toBeVisible();
+
+    // Confirming stops the timer
+    await confirmDialog.getByRole('button', { name: /^stop$/i }).click();
+    await expect(confirmDialog).not.toBeVisible();
+    await expect(page.getByRole('button', { name: /start stopwatch/i })).toBeVisible();
   });
 
   test('Lap still records while locked', async ({ page }) => {
