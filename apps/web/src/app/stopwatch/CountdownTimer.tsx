@@ -20,63 +20,40 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWakeLock } from "./useWakeLock";
+import {
+  readActiveTimerState,
+  writeActiveTimerState,
+  clearActiveTimerState,
+  readActiveTimerDurationMs,
+  writeActiveTimerDurationMs,
+  DEFAULT_TIMER_DURATION_MS,
+} from "./soloSessionStorage";
 
 // ---------------------------------------------------------------------------
 // Persistence (#224 pattern — wall-clock anchor survives refresh/close)
 // ---------------------------------------------------------------------------
+//
+// Storage is delegated to the multi-session layer (soloSessionStorage.ts).
+// These thin wrappers keep the rest of the file unchanged.
 
-const TIMER_STORAGE_KEY = "splitsync_timer_solo_v1";
+function readPersistedTimer() {
+  return readActiveTimerState();
+}
 
-interface PersistedTimer {
-  /** Only running/paused are persisted; idle clears storage. */
+function writePersistedTimer(data: {
   state: "running" | "paused";
-  /** The originally set duration — completion resets back to this. */
   durationMs: number;
-  /** Wall-clock (Date.now()) when the countdown reaches zero; null when paused. */
   endAtWall: number | null;
-  /** Remaining ms when paused; null when running. */
   remainingMs: number | null;
-}
-
-function readPersistedTimer(): PersistedTimer | null {
-  try {
-    const raw = window.localStorage.getItem(TIMER_STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw) as PersistedTimer;
-    if (
-      (data.state !== "running" && data.state !== "paused") ||
-      typeof data.durationMs !== "number" ||
-      data.durationMs <= 0
-    ) {
-      return null;
-    }
-    if (data.state === "running" && typeof data.endAtWall !== "number") return null;
-    if (data.state === "paused" && typeof data.remainingMs !== "number") return null;
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-function writePersistedTimer(data: PersistedTimer) {
-  try {
-    window.localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // Storage unavailable — timer still works in-memory.
-  }
+}) {
+  writeActiveTimerState(data);
 }
 
 function clearPersistedTimer() {
-  try {
-    window.localStorage.removeItem(TIMER_STORAGE_KEY);
-  } catch {
-    // Ignore.
-  }
+  clearActiveTimerState();
 }
 
-/** Last-used duration so the timer comes back pre-set. */
-const DURATION_STORAGE_KEY = "splitsync_timer_duration_v1";
-const DEFAULT_DURATION_MS = 5 * 60_000;
+const DEFAULT_DURATION_MS = DEFAULT_TIMER_DURATION_MS;
 
 // ---------------------------------------------------------------------------
 // Sound (#227) — completion alarm respects the shared cue settings.
@@ -438,15 +415,8 @@ export default function CountdownTimer() {
   useEffect(() => {
     setSoundOn(isSoundEnabled());
 
-    // Last-used duration
-    let restoredDuration = DEFAULT_DURATION_MS;
-    try {
-      const rawDuration = window.localStorage.getItem(DURATION_STORAGE_KEY);
-      const parsed = rawDuration !== null ? Number(rawDuration) : NaN;
-      if (Number.isFinite(parsed) && parsed > 0) restoredDuration = parsed;
-    } catch {
-      // Ignore.
-    }
+    // Last-used duration — read from the active session (falls back to default).
+    const restoredDuration = readActiveTimerDurationMs();
     durationRef.current = restoredDuration;
     remainingRef.current = restoredDuration;
     setDurationMs(restoredDuration);
@@ -564,11 +534,7 @@ export default function CountdownTimer() {
       remainingRef.current = ms;
       setDurationMs(ms);
       setRemainingMs(ms);
-      try {
-        window.localStorage.setItem(DURATION_STORAGE_KEY, String(ms));
-      } catch {
-        // Ignore.
-      }
+      writeActiveTimerDurationMs(ms);
     } else {
       setInputError(true);
     }

@@ -10,6 +10,17 @@ import { useWakeLock } from "./useWakeLock";
 import { downloadCsv, lapsToCsv, lapsToText } from "@/lib/stopwatchExport";
 import CountdownTimer from "./CountdownTimer";
 import { TrashIcon } from "@heroicons/react/20/solid";
+import {
+  runMigrationIfNeeded,
+  getOrCreateActiveSession,
+  readActiveStopwatchState,
+  writeActiveStopwatchState,
+  clearActiveStopwatchState,
+  readActiveMode,
+  writeActiveMode,
+  type SoloMode,
+  type Lap as SessionLap,
+} from "./soloSessionStorage";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -19,19 +30,15 @@ type StopwatchState = "idle" | "countdown" | "running" | "stopped";
 
 // Solo mode: stopwatch (count up) or a single countdown timer (#232).
 // One timer only — multi-timer boards are a deliberate no-go (ADR 0018).
-type SoloMode = "stopwatch" | "timer";
-const MODE_STORAGE_KEY = "splitsync_stopwatch_mode_v1";
+// SoloMode is imported from soloSessionStorage (shared with the storage layer).
 
 type DelayOption = 0 | 3 | 5 | 10;
 const DELAY_OPTIONS: DelayOption[] = [0, 3, 5, 10];
 const DELAY_LABELS: Record<DelayOption, string> = { 0: "OFF", 3: "3s", 5: "5s", 10: "10s" };
 const DELAY_STORAGE_KEY = "sw_delay_seconds";
 
-interface Lap {
-  n: number;
-  lapMs: number;      // this lap's duration
-  totalMs: number;    // cumulative time at end of this lap
-}
+// Lap type is re-exported from soloSessionStorage.
+type Lap = SessionLap;
 
 interface CasualSession {
   id: string;
@@ -452,54 +459,31 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
 // ---------------------------------------------------------------------------
 // Persistence (solo state survives page refresh)
 // ---------------------------------------------------------------------------
+//
+// The persistence helpers below delegate to the multi-session storage layer
+// (soloSessionStorage.ts) which manages up to SESSION_CAP local sessions.
+// readPersisted / writePersisted / clearPersisted are thin wrappers kept so
+// the rest of this file does not need to know the session id.
+//
+// The one-time migration from the legacy single-blob keys
+// (splitsync_stopwatch_solo_v1 / splitsync_stopwatch_mode_v1) runs in the
+// first useEffect below (runMigrationIfNeeded) before any read occurs.
 
-const STORAGE_KEY = "splitsync_stopwatch_solo_v1";
+function readPersisted() {
+  return readActiveStopwatchState();
+}
 
-interface PersistedSolo {
-  /** Only running/stopped are persisted; idle clears storage. */
+function writePersisted(data: {
   state: "running" | "stopped";
-  /** Milliseconds accumulated before the last resume (or total, if stopped). */
   accMs: number;
-  /** Wall-clock (Date.now()) at last resume; null when stopped. */
   startedAtWall: number | null;
   laps: Lap[];
-}
-
-function readPersisted(): PersistedSolo | null {
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw) as PersistedSolo;
-    if (
-      (data.state !== "running" && data.state !== "stopped") ||
-      typeof data.accMs !== "number" ||
-      !Array.isArray(data.laps)
-    ) {
-      return null;
-    }
-    if (data.state === "running" && typeof data.startedAtWall !== "number") {
-      return null;
-    }
-    return data;
-  } catch {
-    return null;
-  }
-}
-
-function writePersisted(data: PersistedSolo) {
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // Storage unavailable (private mode / quota) — timer still works in-memory.
-  }
+}) {
+  writeActiveStopwatchState(data);
 }
 
 function clearPersisted() {
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    // Ignore.
-  }
+  clearActiveStopwatchState();
 }
 
 // ---------------------------------------------------------------------------
@@ -678,6 +662,20 @@ export default function StopwatchPage() {
   const justUnlockedRef = useRef(false);
 
   // ---------------------------------------------------------------------------
+  // Multi-session storage: migration + active-session bootstrap
+  // ---------------------------------------------------------------------------
+  //
+  // This MUST be the first useEffect in the component so it runs before any
+  // other effect that reads from the session storage (mode restore, state
+  // restore, etc.).  runMigrationIfNeeded() is idempotent — it checks for the
+  // index key and is a no-op after the first run.
+
+  useEffect(() => {
+    runMigrationIfNeeded();
+    getOrCreateActiveSession(); // ensure there is always a valid active session
+  }, []);
+
+  // ---------------------------------------------------------------------------
   // Persist delay preference
   // ---------------------------------------------------------------------------
 
@@ -744,23 +742,18 @@ export default function StopwatchPage() {
   // Mode toggle (#232) — stopwatch vs single countdown timer
   // ---------------------------------------------------------------------------
 
-  // Restore the last-used mode
+  // Restore the last-used mode from the active session.
+  // This runs after the migration effect (React effects run in definition order),
+  // so by the time this executes, readActiveMode() already reflects any migrated
+  // legacy data.
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(MODE_STORAGE_KEY);
-      if (stored === "timer" || stored === "stopwatch") setMode(stored);
-    } catch {
-      // localStorage unavailable — ignore
-    }
+    const stored = readActiveMode();
+    setMode(stored);
   }, []);
 
   const handleSelectMode = useCallback((next: SoloMode) => {
     setMode(next);
-    try {
-      localStorage.setItem(MODE_STORAGE_KEY, next);
-    } catch {
-      // ignore
-    }
+    writeActiveMode(next);
     if (next === "stopwatch") {
       // The timer view can toggle the shared soundEnabled flag (#227) —
       // reload so the stopwatch Sound section reflects it.
