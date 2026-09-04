@@ -54,6 +54,17 @@
  * `instrumentBezel`, `instrumentInner`, and the DSEG7 LCD digit font. Those
  * remain hand-styled skeuomorphic tokens consumed directly from
  * `packages/palette/src/index.ts` — never routed through this MD3 theme.
+ *
+ * ── Material 3 Expressive (M3E) additions ───────────────────────────────
+ *
+ * This file also exports standalone Material 3 Expressive tokens —
+ * `stopwatchFixedColors`, `stopwatchEmphasizedFonts`, `stopwatchShape`, and
+ * `stopwatchSpring` — layered on top of the standard-MD3 `stopwatchTheme`
+ * above. `react-native-paper` v5 has no first-class M3E support, so these
+ * live alongside `stopwatchTheme` rather than inside its `MD3Theme` shape.
+ * See ADR 0026's "Material 3 Expressive" section for the full contrast
+ * table and rationale. Foundation only (issue #460) — no screen consumes
+ * these yet; that's the follow-up polish issue (#461).
  */
 
 import { MD3LightTheme } from "react-native-paper";
@@ -158,6 +169,146 @@ const primaryContainer = withLightness(palette.bluePrimary, 0.92);
 const onPrimaryContainer = withLightness(palette.bluePrimary, 0.2);
 const secondaryContainer = withLightness(palette.blueAccent, 0.9);
 const onSecondaryContainer = withLightness(palette.blueAccent, 0.18);
+
+// ── Material 3 Expressive (M3E) additions ───────────────────────────────────
+// See ADR 0026's "Material 3 Expressive" section for full rationale and the
+// WCAG contrast table. `react-native-paper` v5 does not model M3E as a first
+// -class theme (no `MD3Theme.colors.*Fixed*` keys, no expressive shape/motion
+// config), so these are exported as standalone constants alongside
+// `stopwatchTheme` rather than merged into its `colors`/`fonts`/`roundness`
+// shape. Consumers (the #461 polish issue) import them directly.
+//
+// ── M3E "fixed" color roles ─────────────────────────────────────────────
+// M3E's fixed roles are tone-locked regardless of light/dark theme (unlike
+// `*Container`, which inverts in a dark theme). They use the same
+// HSL-lightness-only derivation rule as the container roles above:
+//   Fixed        → withLightness(source, 0.90)  (~MD3 tone 90)
+//   FixedDim     → withLightness(source, 0.80)  (~MD3 tone 80)
+//   onFixed      → withLightness(source, 0.10)  (~MD3 tone 10)
+//   onFixedVariant → withLightness(source, 0.20 primary / 0.18 secondary)
+//                    (~MD3 tone 30; reuses the exact onPrimaryContainer /
+//                    onSecondaryContainer derivation above so the same hex
+//                    value serves both roles)
+// For `tertiary` (palette.yellow), the derived onFixedVariant tone fails AA
+// against `tertiaryFixedDim` (3.29:1 — below the 4.5:1 normal-text
+// threshold), so — consistent with `onTertiary`/`onTertiaryContainer`
+// already resolving to `palette.ink` above rather than a derived tone —
+// both `onTertiaryFixed` and `onTertiaryFixedVariant` use `palette.ink`
+// directly instead of a derived value.
+const primaryFixed = withLightness(palette.bluePrimary, 0.9); // #cfeafc
+const primaryFixedDim = withLightness(palette.bluePrimary, 0.8); // #9fd5f9
+const onPrimaryFixed = withLightness(palette.bluePrimary, 0.1); // #031e30
+const onPrimaryFixedVariant = onPrimaryContainer; // #063c60 (reused, see above)
+
+const secondaryFixed = withLightness(palette.blueAccent, 0.9); // #cfeffc
+const secondaryFixedDim = withLightness(palette.blueAccent, 0.8); // #9fdff9
+const onSecondaryFixed = withLightness(palette.blueAccent, 0.1); // #032330
+const onSecondaryFixedVariant = onSecondaryContainer; // #053f57 (reused, see above)
+
+const tertiaryFixed = withLightness(palette.yellow, 0.9); // #fff7cc
+const tertiaryFixedDim = withLightness(palette.yellow, 0.8); // #ffef99
+const onTertiaryFixed = palette.ink; // derived tone fails AA — use ink (see above)
+const onTertiaryFixedVariant = palette.ink; // derived tone fails AA — use ink (see above)
+
+/**
+ * M3E "fixed" color role pairs, keyed exactly like MD3's `*Container` roles
+ * but tone-locked across light/dark themes. See ADR 0026's "Material 3
+ * Expressive" section for the full WCAG AA contrast table (every pairing
+ * below is ≥4.5:1, computed with ADR 0021's relative-luminance formula).
+ *
+ * Not part of `stopwatchTheme.colors` — `MD3Theme` (react-native-paper v5)
+ * has no fixed-role keys. Import this object directly wherever an M3E fixed
+ * surface is needed (e.g. a "fixed" chip or CTA that must not flip color in
+ * a future dark theme).
+ */
+export const stopwatchFixedColors = {
+  primaryFixed,
+  primaryFixedDim,
+  onPrimaryFixed,
+  onPrimaryFixedVariant,
+
+  secondaryFixed,
+  secondaryFixedDim,
+  onSecondaryFixed,
+  onSecondaryFixedVariant,
+
+  tertiaryFixed,
+  tertiaryFixedDim,
+  onTertiaryFixed,
+  onTertiaryFixedVariant,
+} as const;
+
+// ── M3E emphasized type scale ────────────────────────────────────────────
+// M3E adds bolder, tighter-tracked "Emphasized" variants of select M3
+// typescale roles for high-attention UI (primary headlines, selected
+// segmented-button labels, CTA text). These reuse the exact same
+// `fontFamily`/`fontSize`/`lineHeight` as their standard MD3 counterpart in
+// `MD3LightTheme.fonts` — only `fontWeight` (bumped to bold) and
+// `letterSpacing` (tightened) change. No new font family is introduced.
+const standardFonts = MD3LightTheme.fonts;
+
+export const stopwatchEmphasizedFonts = {
+  headlineSmallEmphasized: {
+    ...standardFonts.headlineSmall,
+    fontWeight: "700" as const,
+    letterSpacing: -0.25, // standard headlineSmall: 0
+  },
+  titleMediumEmphasized: {
+    ...standardFonts.titleMedium,
+    fontWeight: "700" as const,
+    letterSpacing: 0.05, // standard titleMedium: 0.15
+  },
+  labelLargeEmphasized: {
+    ...standardFonts.labelLarge,
+    fontWeight: "700" as const,
+    letterSpacing: 0.05, // standard labelLarge: 0.1
+  },
+} as const;
+
+// ── M3E expressive shape system ──────────────────────────────────────────
+// Standard MD3's corner-radius scale (extraSmall…extraLarge) tops out at a
+// fixed 28dp. M3E adds a fully-rounded `pill`/`stadium` token for primary
+// CTAs and the instrument's physical control buttons (the `DeviceBtn`
+// equivalent), plus a documented "pressed" delta that shaves a few dp off
+// a shape's corner radius on press/active state — a subtle morph that reads
+// as tactile feedback. `stopwatchTheme.roundness` (8) is unchanged; these
+// are additive tokens for components that opt into expressive shape.
+export const stopwatchShape = {
+  extraSmall: 4,
+  small: 8,
+  medium: 12,
+  large: 16,
+  extraLarge: 28,
+  /** Fully rounded — for primary CTAs and instrument control buttons. */
+  pill: 999,
+  /**
+   * Subtracted from a shape's resting corner radius on press/active state
+   * to produce the M3E "morph" effect. Clamp the result at 0 — see
+   * `pressedCornerRadius()`.
+   */
+  pressedDelta: -8,
+} as const;
+
+/** Applies `stopwatchShape.pressedDelta` to `radius`, clamped at 0. */
+export function pressedCornerRadius(radius: number): number {
+  return Math.max(0, radius + stopwatchShape.pressedDelta);
+}
+
+// ── M3E spring motion ─────────────────────────────────────────────────────
+// M3E replaces MD3's default ease-based transitions with spring physics for
+// primary interactive feedback. These constants are shaped for direct use
+// with `Animated.spring` (RN's newer stiffness/damping/mass config style) or
+// `react-native-reanimated`'s `withSpring()`, which share the same key
+// names. Three presets cover this issue's named use cases; screens choose
+// the preset matching their interaction, they don't invent new constants.
+export const stopwatchSpring = {
+  /** Button press / one-tap feedback — snappy, minimal overshoot. */
+  standard: { damping: 20, mass: 1, stiffness: 300 },
+  /** Segmented-button selection — bouncier, more expressive. */
+  expressive: { damping: 12, mass: 1, stiffness: 250 },
+  /** Dialog open/close — slightly slower, settled. */
+  dialog: { damping: 24, mass: 1, stiffness: 200 },
+} as const;
 
 // Standard MD3 tonal-elevation overlay ratios (0%, 5%, 8%, 11%, 12%, 14%),
 // tinted with the brand primary rather than MD3's default purple.

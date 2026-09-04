@@ -170,6 +170,209 @@ reference this ADR for their color-role mapping instead of re-deriving it.
 
 ---
 
+## Material 3 Expressive
+
+**Status:** Accepted (amendment)
+**Date:** 2026-09-04
+**Issue:** #460
+
+### Context
+
+Google published **Material 3 Expressive (M3E)** in 2025 as an evolution of
+standard MD3: an expanded color-role set (tone-locked "fixed" roles), a
+bolder/morphing shape system, spring-physics motion, and an "emphasized"
+type scale for high-attention text. Neither `react-native-paper` (native)
+nor `@material/web` (web) expose M3E as a first-class theme option yet —
+there is no `MD3ExpressiveTheme` to swap in. Adopting M3E therefore means
+layering these additions on top of the standard-MD3 foundation this ADR
+already defined, using the exact same palette-derivation discipline.
+
+This amendment is **foundation only**, mirroring the original ADR's
+foundation-only rollout: it extends `apps/stopwatch/src/theme.ts` and
+`apps/web/src/app/stopwatch/md3-theme.css` with new exported
+tokens/constants. **No screen's JSX changes in this issue.** Applying these
+tokens to actual components is tracked in the dependent follow-up, issue
+#461.
+
+The instrument face (LCD display, casing, bezel) remains completely
+out of scope, unchanged from the original ADR's carve-out — none of this
+section's shape/motion/color additions apply to it.
+
+### Fixed color roles
+
+M3E's "fixed" roles are tone-locked color pairs that do not invert between
+light/dark themes (unlike `primaryContainer`, which is `role`-inverted in a
+dark theme). SplitSync's stopwatch has no dark theme today, but these roles
+are exported now so components requiring a color that must never darken
+(e.g. a persistent "fixed" chip) have one, and so the follow-up issue isn't
+blocked on deriving them later.
+
+They reuse the **exact same HSL-lightness-only derivation rule** as this
+ADR's original container roles (hue and saturation preserved, only
+lightness changes), computed in `apps/stopwatch/src/theme.ts` via the same
+`withLightness()` helper — no new derivation mechanism:
+
+| M3E role | Source | Derivation | Value |
+|---|---|---|---|
+| `primaryFixed` | `palette.bluePrimary` | `withLightness(bluePrimary, 0.90)` | `#cfeafc` |
+| `primaryFixedDim` | `palette.bluePrimary` | `withLightness(bluePrimary, 0.80)` | `#9fd5f9` |
+| `onPrimaryFixed` | `palette.bluePrimary` | `withLightness(bluePrimary, 0.10)` | `#031e30` |
+| `onPrimaryFixedVariant` | `palette.bluePrimary` | `withLightness(bluePrimary, 0.20)` (= `onPrimaryContainer`, reused) | `#063c60` |
+| `secondaryFixed` | `palette.blueAccent` | `withLightness(blueAccent, 0.90)` | `#cfeffc` |
+| `secondaryFixedDim` | `palette.blueAccent` | `withLightness(blueAccent, 0.80)` | `#9fdff9` |
+| `onSecondaryFixed` | `palette.blueAccent` | `withLightness(blueAccent, 0.10)` | `#032330` |
+| `onSecondaryFixedVariant` | `palette.blueAccent` | `withLightness(blueAccent, 0.18)` (= `onSecondaryContainer`, reused) | `#053f57` |
+| `tertiaryFixed` | `palette.yellow` | `withLightness(yellow, 0.90)` | `#fff7cc` |
+| `tertiaryFixedDim` | `palette.yellow` | `withLightness(yellow, 0.80)` | `#ffef99` |
+| `onTertiaryFixed` | `palette.ink` | direct (see note below) | `#18181b` |
+| `onTertiaryFixedVariant` | `palette.ink` | direct (see note below) | `#18181b` |
+
+> **Tertiary note:** the mathematically-derived `onFixedVariant` tone for
+> `yellow` (`withLightness(yellow, 0.30)` → `#998100`) yields only **3.29:1**
+> against `tertiaryFixedDim` — below the 4.5:1 AA threshold for normal text
+> (it does clear 3:1 for large text/UI, but not normal text). Consistent
+> with this ADR's original table, where `onTertiary` and
+> `onTertiaryContainer` already resolve to `palette.ink` rather than a
+> derived tone (because white is forbidden on `yellow` per ADR 0021), both
+> `onTertiaryFixed` and `onTertiaryFixedVariant` use `palette.ink` directly.
+
+#### WCAG AA contrast — fixed color roles
+
+All ratios computed with ADR 0021's relative-luminance formula, rounded to
+two decimals.
+
+| # | Foreground | Background | Pair | Ratio | AA Normal ≥4.5 | AA Large/UI ≥3.0 |
+|---|---|---|---|---|---|---|
+| 1 | `onPrimaryFixed` `#031e30` | `primaryFixed` `#cfeafc` | Text on primary-fixed | **13.66:1** | ✓ | ✓ |
+| 2 | `onPrimaryFixed` `#031e30` | `primaryFixedDim` `#9fd5f9` | Text on primary-fixed-dim | **10.84:1** | ✓ | ✓ |
+| 3 | `onPrimaryFixedVariant` `#063c60` | `primaryFixed` `#cfeafc` | Variant text on primary-fixed | **9.23:1** | ✓ | ✓ |
+| 4 | `onPrimaryFixedVariant` `#063c60` | `primaryFixedDim` `#9fd5f9` | Variant text on primary-fixed-dim | **7.33:1** | ✓ | ✓ |
+| 5 | `onSecondaryFixed` `#032330` | `secondaryFixed` `#cfeffc` | Text on secondary-fixed | **13.52:1** | ✓ | ✓ |
+| 6 | `onSecondaryFixed` `#032330` | `secondaryFixedDim` `#9fdff9` | Text on secondary-fixed-dim | **11.19:1** | ✓ | ✓ |
+| 7 | `onSecondaryFixedVariant` `#053f57` | `secondaryFixed` `#cfeffc` | Variant text on secondary-fixed | **9.38:1** | ✓ | ✓ |
+| 8 | `onSecondaryFixedVariant` `#053f57` | `secondaryFixedDim` `#9fdff9` | Variant text on secondary-fixed-dim | **7.76:1** | ✓ | ✓ |
+| 9 | `onTertiaryFixed` (`ink`) `#18181b` | `tertiaryFixed` `#fff7cc` | Text on tertiary-fixed | **16.39:1** | ✓ | ✓ |
+| 10 | `onTertiaryFixed` (`ink`) `#18181b` | `tertiaryFixedDim` `#ffef99` | Text on tertiary-fixed-dim | **15.24:1** | ✓ | ✓ |
+| 11 | `onTertiaryFixedVariant` (`ink`) `#18181b` | `tertiaryFixed` `#fff7cc` | Variant text on tertiary-fixed | **16.39:1** | ✓ | ✓ |
+| 12 | `onTertiaryFixedVariant` (`ink`) `#18181b` | `tertiaryFixedDim` `#ffef99` | Variant text on tertiary-fixed-dim | **15.24:1** | ✓ | ✓ |
+
+Every new pairing clears 4.5:1 (normal text) with margin. No forbidden
+pairing is introduced — the tertiary (yellow) family again correctly
+resolves its "on" roles to `ink`, never white or a derived tone that fails.
+
+### Emphasized type scale
+
+M3E adds "Emphasized" variants of select M3 typescale roles for
+high-attention text (primary headlines, selected segmented-button labels,
+CTA copy): bolder weight and tighter letter-spacing than the standard role,
+**reusing the same brand font family and the same font-size/line-height** —
+no new font is introduced.
+
+| M3E role | Base MD3 role | Weight | Letter-spacing | Font size / line height |
+|---|---|---|---|---|
+| `headlineSmallEmphasized` | `headlineSmall` | `700` (vs `400` standard) | `-0.25` (vs `0` standard) | 24 / 32 (unchanged) |
+| `titleMediumEmphasized` | `titleMedium` | `700` (vs `500` standard) | `0.05` (vs `0.15` standard) | 16 / 24 (unchanged) |
+| `labelLargeEmphasized` | `labelLarge` | `700` (vs `500` standard) | `0.05` (vs `0.1` standard) | 14 / 20 (unchanged) |
+
+Native: `stopwatchEmphasizedFonts` in `apps/stopwatch/src/theme.ts`, each
+entry shaped as an `MD3Type` object (spreads the standard role from
+`MD3LightTheme.fonts`, overriding only `fontWeight`/`letterSpacing`). Web:
+`--md-sys-typescale-{role}-emphasized-{weight,tracking}` custom properties
+in `md3-theme.css` — the size/line-height custom properties from the
+standard scale are reused unchanged.
+
+Emphasized type styles carry text colors from the standard MD3 roles above
+(`onSurface`, `onPrimary`, etc.) — weight/tracking changes do not alter
+contrast, so no new contrast entries are needed for this section.
+
+### Expressive shape system
+
+Standard MD3's corner-radius scale (`extraSmall` 4 / `small` 8 / `medium`
+12 / `large` 16 / `extraLarge` 28) has no fully-rounded token and no
+press-state shape change. M3E adds both:
+
+- **`pill`/`stadium` (999)** — a fully-rounded corner radius for primary
+  CTAs and the instrument's physical control buttons (the `DeviceBtn`
+  equivalent), giving them a bolder, more tactile silhouette than a
+  standard MD3 `large`-radius button.
+- **`pressedDelta` (-8)** — subtracted from a shape's resting corner radius
+  on press/active state, producing a subtle "morph" (the shape tightens
+  slightly) as tactile feedback. Consumers clamp the result at 0 (see
+  `pressedCornerRadius()` helper in `theme.ts`).
+
+Native: `stopwatchShape` object (`extraSmall`/`small`/`medium`/`large`/
+`extraLarge`/`pill`/`pressedDelta`) plus a `pressedCornerRadius(radius)`
+helper, both exported from `apps/stopwatch/src/theme.ts`.
+`stopwatchTheme.roundness` (8) is unchanged — these are additive tokens for
+components that opt into expressive shape, not a global roundness change.
+Web: matching `--md-sys-shape-corner-*` custom properties (including
+`--md-sys-shape-corner-pressed-delta`, a signed px value for use with
+`calc()`) in `md3-theme.css`.
+
+This section does not apply to the instrument face (LCD, casing, bezel),
+which keeps its own hand-styled corner radii untouched, per this ADR's
+existing instrument carve-out above.
+
+### Spring motion
+
+M3E replaces MD3's default linear/ease transitions with spring physics for
+primary interactive feedback: button press, dialog open/close, and
+segmented-button selection. Three named presets cover this issue's scoped
+use cases; screens choose the matching preset rather than inventing new
+constants:
+
+| Preset | Use case | damping | stiffness | mass |
+|---|---|---|---|---|
+| `standard` | Button press / one-tap feedback | 20 | 300 | 1 |
+| `expressive` | Segmented-button selection | 12 | 250 | 1 |
+| `dialog` | Dialog open/close | 24 | 200 | 1 |
+
+Native: `stopwatchSpring` in `apps/stopwatch/src/theme.ts`, keyed
+`standard`/`expressive`/`dialog`, each an object with `damping`/`mass`/
+`stiffness` — directly usable as the `config` argument to `Animated.spring`
+(RN's stiffness-based config style) or `react-native-reanimated`'s
+`withSpring()`, which share the same key names.
+
+Web: true CSS spring-timing easing is not yet broadly supported, so
+`md3-theme.css` defines `cubic-bezier` + duration **approximations** of a
+spring curve (slight overshoot, matching the "snappier vs. bouncier vs.
+settled" feel of the three native presets) as
+`--md-motion-spring-{standard,expressive,dialog}-{easing,duration}` custom
+properties, scoped to `.md3-stopwatch-scope` alongside the color/shape
+tokens — no separate `md3-motion.css` file, since the token count is small
+enough to stay in the existing file without harming readability (this is a
+deliberate deviation from the issue's suggested-but-optional separate-file
+option).
+
+### WCAG AA re-confirmation
+
+Every new color pairing introduced by this amendment — the twelve fixed-role
+pairings in the table above — was computed with the identical
+relative-luminance formula ADR 0021 defines and meets or exceeds 4.5:1
+(normal text). No forbidden pairing (white on `blueAccent`/`yellow`) is
+introduced anywhere in this amendment. The emphasized type scale and
+expressive shape/motion tokens introduce no new colors and therefore
+require no additional contrast entries.
+
+### Foundation-only rollout (amendment)
+
+This amendment's own issue (#460) implements only:
+
+1. This "Material 3 Expressive" ADR section.
+2. `apps/stopwatch/src/theme.ts` — `stopwatchFixedColors`,
+   `stopwatchEmphasizedFonts`, `stopwatchShape` (+ `pressedCornerRadius()`),
+   and `stopwatchSpring`, exported alongside the existing `stopwatchTheme`.
+3. `apps/web/src/app/stopwatch/md3-theme.css` — the analogous
+   `--md-sys-color-*-fixed*`, `--md-sys-typescale-*-emphasized-*`,
+   `--md-sys-shape-corner-*`, and `--md-motion-spring-*` custom properties,
+   scoped to `.md3-stopwatch-scope`.
+
+No screen's JSX or styling changes in this issue. Applying these tokens to
+actual components (buttons, dialogs, segmented controls, CTAs) is tracked
+in the dependent follow-up, issue #461.
+
+---
+
 ## Consequences
 
 ### Positive
