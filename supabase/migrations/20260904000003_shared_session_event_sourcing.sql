@@ -24,9 +24,9 @@ drop function if exists get_casual_session_results(text);
 drop function if exists get_casual_session_live_view(text);
 drop function if exists generate_session_code();
 
-alter publication supabase_realtime drop table if exists casual_session_events;
-alter publication supabase_realtime drop table if exists casual_session_participants;
-alter publication supabase_realtime drop table if exists casual_sessions;
+-- Note: dropping the tables below automatically removes them from the
+-- supabase_realtime publication (Postgres removes dropped tables from
+-- publications automatically via dependency tracking).
 
 drop table if exists casual_session_events;
 drop table if exists casual_session_participants;
