@@ -19,25 +19,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-
-// ---------------------------------------------------------------------------
-// Wall-clock readout helpers (#421)
-// ---------------------------------------------------------------------------
-
-/** Format a wall-clock epoch ms as a short locale time string, e.g. "2:14 PM". */
-function fmtWallTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-/** Format elapsed ms as "Xs ago" or "Xm ago" for the time-since-alarm readout. */
-function fmtTimeSince(elapsedMs: number): string {
-  const secs = Math.floor(elapsedMs / 1000);
-  if (secs < 60) return `${secs}s ago`;
-  return `${Math.floor(secs / 60)}m ago`;
-}
 import { useWakeLock } from "./useWakeLock";
 import {
   readActiveTimerState,
@@ -45,6 +26,8 @@ import {
   clearActiveTimerState,
   readActiveTimerDurationMs,
   writeActiveTimerDurationMs,
+  readActiveRepeatConfig,
+  writeActiveRepeatConfig,
   DEFAULT_TIMER_DURATION_MS,
 } from "./soloSessionStorage";
 
@@ -244,12 +227,29 @@ export default function CountdownTimer() {
    */
   const [manualFsMode, setManualFsMode] = useState(false);
 
-  // Wall-clock readouts (#421): start time, ETA, time-since-alarm
-  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
-  const [etaMs, setEtaMs] = useState<number | null>(null);
-  const [alarmFiredAtMs, setAlarmFiredAtMs] = useState<number | null>(null);
-  const [timeSinceAlarmMs, setTimeSinceAlarmMs] = useState(0);
-  const timeSinceAlarmTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Repeat / Pomodoro mode state (ADR 0025) ──────────────────────────────────
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [restDurationMs, setRestDurationMs] = useState(60_000); // 1 min default
+  const [restInput, setRestInput] = useState("01:00");
+  const [repeatCount, setRepeatCount] = useState<number | null>(null); // null = ∞
+  const [repeatCountInput, setRepeatCountInput] = useState(""); // "" = ∞
+  /**
+   * Current repeat phase. Only meaningful when repeatEnabled is true and timer
+   * is running/paused. Never persisted — resets to "work" on page reload.
+   */
+  const [currentPhase, setCurrentPhase] = useState<"work" | "rest">("work");
+  /**
+   * Number of fully-completed work+rest cycles in the current run.
+   * Never persisted.
+   */
+  const [completedCycles, setCompletedCycles] = useState(0);
+
+  // Repeat refs — mirror the corresponding state for use inside callbacks
+  const repeatEnabledRef = useRef(false);
+  const repeatCountRef = useRef<number | null>(null);
+  const restDurationMsRef = useRef(60_000);
+  const currentPhaseRef = useRef<"work" | "rest">("work");
+  const completedCyclesRef = useRef(0);
 
   // Timing refs — wall-clock anchors, never accumulated intervals
   const endAtWallRef = useRef<number | null>(null); // Date.now() at zero, while running
@@ -259,6 +259,10 @@ export default function CountdownTimer() {
   const alarmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const alarmCountRef = useRef(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
+
+  // Ref to the latest startTick — lets complete() call startTick() without
+  // creating a circular useCallback dependency.
+  const startTickRef = useRef<() => void>(() => undefined);
 
   // Fullscreen tracking
   const enteredFsRef = useRef(false);
@@ -417,26 +421,101 @@ export default function CountdownTimer() {
   const complete = useCallback(() => {
     stopTick();
     endAtWallRef.current = null;
-    // Play GO beep — longer and louder than the tick beeps.
     const ctx = audioCtxRef.current;
-    if (ctx && isSoundEnabled()) {
-      beepTone(ctx, 880, 300, 0.3);
+
+    if (!repeatEnabledRef.current) {
+      // ── Original single-shot behavior ──────────────────────────────────────
+      if (ctx && isSoundEnabled()) {
+        beepTone(ctx, 880, 300, 0.3);
+      }
+      // Show "GO!" overlay for 1 s then exit fullscreen and proceed to alert.
+      setCountdownOverlay("GO");
+      goTimerRef.current = setTimeout(() => {
+        goTimerRef.current = null;
+        setCountdownOverlay(null);
+        exitFullscreen();
+        // Auto-reset to the ORIGINAL duration — ready to restart with one tap.
+        remainingRef.current = durationRef.current;
+        setRemainingMs(durationRef.current);
+        setState("alerting");
+        clearPersistedTimer();
+        startAlarm();
+      }, 1000);
+      return;
     }
-    // Show "GO!" overlay for 1 s then exit fullscreen and proceed to alert.
-    setCountdownOverlay("GO");
-    goTimerRef.current = setTimeout(() => {
-      goTimerRef.current = null;
-      setCountdownOverlay(null);
-      exitFullscreen();
-      // Auto-reset to the ORIGINAL duration — ready to restart with one tap.
+
+    // ── Repeat mode: transition based on current phase ─────────────────────
+    if (currentPhaseRef.current === "work") {
+      const newCycles = completedCyclesRef.current + 1;
+      completedCyclesRef.current = newCycles;
+      setCompletedCycles(newCycles);
+
+      const isLastCycle =
+        repeatCountRef.current !== null && newCycles >= repeatCountRef.current;
+
+      if (isLastCycle) {
+        // Final cycle complete — play GO tone, show overlay, then alert.
+        if (ctx && isSoundEnabled()) {
+          beepTone(ctx, 880, 300, 0.3);
+        }
+        setCountdownOverlay("GO");
+        goTimerRef.current = setTimeout(() => {
+          goTimerRef.current = null;
+          setCountdownOverlay(null);
+          exitFullscreen();
+          // Reset cycle tracking for next run.
+          currentPhaseRef.current = "work";
+          setCurrentPhase("work");
+          completedCyclesRef.current = 0;
+          setCompletedCycles(0);
+          remainingRef.current = durationRef.current;
+          setRemainingMs(durationRef.current);
+          setState("alerting");
+          clearPersistedTimer();
+          startAlarm();
+        }, 1000);
+      } else {
+        // Work phase done — start rest phase automatically.
+        const restMs = restDurationMsRef.current;
+        if (restMs <= 0) {
+          // No rest: immediately start next work phase.
+          if (ctx && isSoundEnabled()) {
+            beepTone(ctx, 880, 150, 0.2);
+          }
+          currentPhaseRef.current = "work";
+          setCurrentPhase("work");
+          endAtWallRef.current = Date.now() + durationRef.current;
+          remainingRef.current = durationRef.current;
+          setRemainingMs(durationRef.current);
+          setState("running");
+          startTickRef.current();
+        } else {
+          // Start rest phase.
+          if (ctx && isSoundEnabled()) {
+            beepTone(ctx, 660, 150, 0.2);
+          }
+          currentPhaseRef.current = "rest";
+          setCurrentPhase("rest");
+          endAtWallRef.current = Date.now() + restMs;
+          remainingRef.current = restMs;
+          setRemainingMs(restMs);
+          setState("running");
+          startTickRef.current();
+        }
+      }
+    } else {
+      // Rest phase done — start next work phase.
+      if (ctx && isSoundEnabled()) {
+        beepTone(ctx, 880, 150, 0.2);
+      }
+      currentPhaseRef.current = "work";
+      setCurrentPhase("work");
+      endAtWallRef.current = Date.now() + durationRef.current;
       remainingRef.current = durationRef.current;
       setRemainingMs(durationRef.current);
-      // Record the moment the alarm fired for the time-since-alarm readout (#421).
-      setAlarmFiredAtMs(Date.now());
-      setState("alerting");
-      clearPersistedTimer();
-      startAlarm();
-    }, 1000);
+      setState("running");
+      startTickRef.current();
+    }
   }, [stopTick, startAlarm, exitFullscreen]);
 
   const startTick = useCallback(() => {
@@ -476,6 +555,13 @@ export default function CountdownTimer() {
     }, 100);
   }, [stopTick, complete, enterFullscreen]);
 
+  // Keep the ref current so complete() can call startTick() without a circular dep.
+  // This runs after every render — useEffect without deps — so startTickRef always
+  // points to the latest startTick closure, avoiding stale ref issues.
+  useEffect(() => {
+    startTickRef.current = startTick;
+  });
+
   // Snap immediately when the tab is foregrounded (intervals are throttled
   // while hidden; the wall-clock anchor keeps the value drift-free).
   useEffect(() => {
@@ -495,32 +581,6 @@ export default function CountdownTimer() {
   }, [complete]);
 
   // -------------------------------------------------------------------------
-  // Live time-since-alarm counter (#421) — updates every second while alerting
-  // -------------------------------------------------------------------------
-
-  useEffect(() => {
-    const alerting = state === "alerting";
-    if (!alerting || alarmFiredAtMs === null) {
-      if (timeSinceAlarmTickRef.current !== null) {
-        clearInterval(timeSinceAlarmTickRef.current);
-        timeSinceAlarmTickRef.current = null;
-      }
-      return;
-    }
-    const fired = alarmFiredAtMs;
-    setTimeSinceAlarmMs(Date.now() - fired);
-    timeSinceAlarmTickRef.current = setInterval(() => {
-      setTimeSinceAlarmMs(Date.now() - fired);
-    }, 1000);
-    return () => {
-      if (timeSinceAlarmTickRef.current !== null) {
-        clearInterval(timeSinceAlarmTickRef.current);
-        timeSinceAlarmTickRef.current = null;
-      }
-    };
-  }, [state, alarmFiredAtMs]);
-
-  // -------------------------------------------------------------------------
   // Restore persisted state on mount (#224 pattern)
   // -------------------------------------------------------------------------
 
@@ -535,6 +595,21 @@ export default function CountdownTimer() {
     setDurationMs(restoredDuration);
     setRemainingMs(restoredDuration);
     setDurationInput(formatDuration(restoredDuration));
+
+    // Restore repeat config if one was saved for this session.
+    const savedRepeat = readActiveRepeatConfig();
+    if (savedRepeat) {
+      setRepeatEnabled(true);
+      repeatEnabledRef.current = true;
+      setRestDurationMs(savedRepeat.restDurationMs);
+      restDurationMsRef.current = savedRepeat.restDurationMs;
+      setRestInput(formatDuration(savedRepeat.restDurationMs));
+      setRepeatCount(savedRepeat.repeatCount);
+      repeatCountRef.current = savedRepeat.repeatCount;
+      setRepeatCountInput(
+        savedRepeat.repeatCount === null ? "" : String(savedRepeat.repeatCount)
+      );
+    }
 
     const saved = readPersistedTimer();
     if (!saved) return;
@@ -574,7 +649,6 @@ export default function CountdownTimer() {
       stopTick();
       stopAlarm();
       if (goTimerRef.current !== null) clearTimeout(goTimerRef.current);
-      if (timeSinceAlarmTickRef.current !== null) clearInterval(timeSinceAlarmTickRef.current);
     },
     [stopTick, stopAlarm]
   );
@@ -590,20 +664,17 @@ export default function CountdownTimer() {
     ensureAudioCtx();
     setFinishedWhileAway(false);
     stopAlarm();
-    // Record start time when starting a fresh round (not resuming a pause).
-    // Also clear any stale alarm data from a prior completed round (#421).
-    const now = Date.now();
-    if (state !== "paused") {
-      setStartedAtMs(now);
+    // Reset cycle tracking when starting fresh from idle or alerting states.
+    if (state === "idle" || state === "alerting") {
+      currentPhaseRef.current = "work";
+      setCurrentPhase("work");
+      completedCyclesRef.current = 0;
+      setCompletedCycles(0);
     }
-    setAlarmFiredAtMs(null);
-    setTimeSinceAlarmMs(0);
     const startFrom =
       state === "paused" ? remainingRef.current : durationRef.current;
     if (startFrom <= 0) return;
-    endAtWallRef.current = now + startFrom;
-    // Store ETA as state so it's readable during render without ref access (#421).
-    setEtaMs(now + startFrom);
+    endAtWallRef.current = Date.now() + startFrom;
     setRemainingMs(startFrom);
     setState("running");
     startTick();
@@ -617,14 +688,11 @@ export default function CountdownTimer() {
 
   const handlePause = useCallback(() => {
     if (endAtWallRef.current === null) return;
-    const now = Date.now();
-    remainingRef.current = Math.max(0, endAtWallRef.current - now);
+    remainingRef.current = Math.max(0, endAtWallRef.current - Date.now());
     endAtWallRef.current = null;
     clearOverlay();
     stopTick();
     setRemainingMs(remainingRef.current);
-    // Update ETA to reflect remaining time from now (#421).
-    setEtaMs(now + remainingRef.current);
     setState("paused");
     writePersistedTimer({
       state: "paused",
@@ -644,22 +712,17 @@ export default function CountdownTimer() {
     setState("idle");
     setFinishedWhileAway(false);
     clearPersistedTimer();
-    // Clear wall-clock readouts (#421).
-    setStartedAtMs(null);
-    setEtaMs(null);
-    setAlarmFiredAtMs(null);
-    setTimeSinceAlarmMs(0);
+    // Reset repeat cycle tracking.
+    currentPhaseRef.current = "work";
+    setCurrentPhase("work");
+    completedCyclesRef.current = 0;
+    setCompletedCycles(0);
   }, [stopTick, stopAlarm, clearOverlay]);
 
   /** Single tap silences the completion alert without restarting. */
   const handleDismissAlert = useCallback(() => {
     stopAlarm();
     setState("idle");
-    // Clear alarm readouts — user dismissed, back to idle (#421).
-    setAlarmFiredAtMs(null);
-    setEtaMs(null);
-    setTimeSinceAlarmMs(0);
-    setStartedAtMs(null);
   }, [stopAlarm]);
 
   const handleDurationChange = useCallback((value: string) => {
@@ -709,6 +772,16 @@ export default function CountdownTimer() {
 
   const primaryLabel = isRunning ? "Pause" : "Start";
   const secondaryLabel = isAlerting ? "Dismiss" : "Reset";
+
+  // Repeat mode display helpers
+  const showRepeatInfo = repeatEnabled && (isRunning || state === "paused");
+  const currentCycleNum =
+    currentPhase === "work" ? completedCycles + 1 : completedCycles;
+  const repeatCycleLabel =
+    currentPhase === "work"
+      ? `Cycle ${currentCycleNum}${repeatCount !== null ? ` of ${repeatCount}` : ""}`
+      : `Rest (after cycle ${completedCycles}${repeatCount !== null ? ` of ${repeatCount}` : ""})`;
+  const repeatPhaseText = currentPhase === "work" ? "WORK" : "REST";
 
   return (
     <>
@@ -880,25 +953,35 @@ export default function CountdownTimer() {
             {isAlerting
               ? "Time's up"
               : isRunning
-              ? "Counting down"
+              ? repeatEnabled
+                ? `${repeatPhaseText} — Counting down`
+                : "Counting down"
               : state === "paused"
-              ? "Paused"
+              ? repeatEnabled
+                ? `${repeatPhaseText} — Paused`
+                : "Paused"
               : "Timer"}
           </span>
         </div>
       </div>
 
-      {/* ── Wall-clock readouts: start time + ETA (#421) ────────────────── */}
-      {(isRunning || state === "paused") && startedAtMs !== null && etaMs !== null && (
-        <div
-          className="mt-3 flex flex-col items-center gap-0.5 text-xs font-semibold text-race-muted"
-          data-testid="timer-readouts"
-        >
-          <span data-testid="timer-start-time">
-            Started {fmtWallTime(startedAtMs)}
+      {/* ── Repeat mode phase / cycle indicator ─────────────────────────── */}
+      {showRepeatInfo && (
+        <div className="mt-3 flex flex-col items-center gap-0.5">
+          <span
+            className="text-xs font-black uppercase tracking-widest"
+            style={{ color: "var(--sw-digit-sub-color)" }}
+            data-testid="repeat-phase-label"
+            aria-label={`Phase: ${repeatPhaseText}`}
+          >
+            {repeatPhaseText}
           </span>
-          <span data-testid="timer-eta">
-            Finishes at {fmtWallTime(etaMs)}
+          <span
+            className="text-[11px] font-semibold text-race-muted"
+            data-testid="repeat-cycle-label"
+            aria-label={repeatCycleLabel}
+          >
+            {repeatCycleLabel}
           </span>
         </div>
       )}
@@ -915,17 +998,6 @@ export default function CountdownTimer() {
         </p>
       )}
 
-      {/* ── Time-since-alarm readout (#421) — live counter while alerting ── */}
-      {isAlerting && alarmFiredAtMs !== null && (
-        <p
-          className="mt-1 text-center text-xs font-semibold text-race-muted"
-          aria-live="polite"
-          data-testid="timer-since-alarm"
-        >
-          Rang {fmtTimeSince(timeSinceAlarmMs)}
-        </p>
-      )}
-
       {finishedWhileAway && (
         <p
           className="mt-4 text-center text-xs font-semibold text-race-muted"
@@ -939,30 +1011,124 @@ export default function CountdownTimer() {
 
       {/* ── Duration input (idle only) ───────────────────────────────────── */}
       {isIdle && (
-        <div className="mt-6 flex items-center gap-3" data-testid="timer-setup">
-          <label className="text-xs font-black uppercase tracking-wide">
-            Duration
-            <span className="ml-1 font-semibold normal-case tracking-normal text-race-muted">
-              (MM:SS or H:MM:SS)
-            </span>
-          </label>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={durationInput}
-            onChange={(e) => handleDurationChange(e.target.value)}
-            onBlur={() => {
-              setDurationInput(formatDuration(durationMs));
-              setInputError(false);
-            }}
-            className={`w-24 border-2 bg-white px-2 py-1 text-center font-black tabular-nums ${
-              inputError ? "border-race-red" : "border-race-ink"
-            }`}
-            aria-label="Timer duration (minutes and seconds, or hours, minutes and seconds)"
-            aria-invalid={inputError}
-            placeholder="05:00"
-            data-testid="timer-duration-input"
-          />
+        <div className="mt-6 w-full" data-testid="timer-setup">
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-black uppercase tracking-wide">
+              Duration
+              <span className="ml-1 font-semibold normal-case tracking-normal text-race-muted">
+                (MM:SS or H:MM:SS)
+              </span>
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={durationInput}
+              onChange={(e) => handleDurationChange(e.target.value)}
+              onBlur={() => {
+                setDurationInput(formatDuration(durationMs));
+                setInputError(false);
+              }}
+              className={`w-24 border-2 bg-white px-2 py-1 text-center font-black tabular-nums ${
+                inputError ? "border-race-red" : "border-race-ink"
+              }`}
+              aria-label="Timer duration (minutes and seconds, or hours, minutes and seconds)"
+              aria-invalid={inputError}
+              placeholder="05:00"
+              data-testid="timer-duration-input"
+            />
+          </div>
+
+          {/* ── Repeat / Pomodoro mode (ADR 0025) ─────────────────────────── */}
+          <div className="mt-4 border-t-2 border-race-ink pt-3">
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-wide">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[var(--race-blue-primary)]"
+                checked={repeatEnabled}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setRepeatEnabled(on);
+                  repeatEnabledRef.current = on;
+                  writeActiveRepeatConfig(
+                    on ? { restDurationMs, repeatCount } : null
+                  );
+                }}
+                data-testid="repeat-mode-toggle"
+                aria-label="Enable repeat / Pomodoro mode"
+              />
+              Repeat mode
+              <span className="ml-0.5 font-semibold normal-case tracking-normal text-race-muted">
+                (Pomodoro / intervals)
+              </span>
+            </label>
+
+            {repeatEnabled && (
+              <div className="mt-3 space-y-2 pl-6">
+                <div className="flex items-center gap-3">
+                  <label className="w-40 text-xs font-bold uppercase tracking-wide text-race-muted">
+                    Rest duration
+                    <span className="ml-1 font-semibold normal-case">
+                      (MM:SS)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={restInput}
+                    data-testid="repeat-rest-input"
+                    onChange={(e) => {
+                      setRestInput(e.target.value);
+                      const ms = parseDurationInput(e.target.value);
+                      if (ms !== null) {
+                        setRestDurationMs(ms);
+                        restDurationMsRef.current = ms;
+                        writeActiveRepeatConfig({ restDurationMs: ms, repeatCount });
+                      }
+                    }}
+                    onBlur={() => {
+                      const ms = parseDurationInput(restInput);
+                      setRestInput(formatDuration(ms !== null ? ms : restDurationMs));
+                    }}
+                    className="w-24 border-2 border-race-ink bg-white px-2 py-1 text-center font-black tabular-nums"
+                    aria-label="Rest phase duration (minutes and seconds)"
+                    placeholder="01:00"
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="w-40 text-xs font-bold uppercase tracking-wide text-race-muted">
+                    Repeat count
+                    <span className="ml-1 font-semibold normal-case">
+                      (blank = ∞)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={repeatCountInput}
+                    data-testid="repeat-count-input"
+                    placeholder="∞"
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/[^0-9]/g, "");
+                      setRepeatCountInput(raw);
+                      const n =
+                        raw === ""
+                          ? null
+                          : Math.max(1, Math.min(99, parseInt(raw, 10)));
+                      setRepeatCount(n);
+                      repeatCountRef.current = n;
+                      writeActiveRepeatConfig({ restDurationMs, repeatCount: n });
+                    }}
+                    className="w-24 border-2 border-race-ink bg-white px-2 py-1 text-center font-black tabular-nums"
+                    aria-label="Number of repeat cycles (blank for infinite)"
+                  />
+                </div>
+                <p className="text-[11px] text-race-muted">
+                  Work phase uses the duration above. Rest phase follows automatically.
+                  Stop is always available to end the cycle.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

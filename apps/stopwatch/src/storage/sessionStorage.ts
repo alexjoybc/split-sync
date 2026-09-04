@@ -87,12 +87,24 @@ export type SoloSessionMeta = {
 export type SoloSessionIndex = SoloSessionMeta[];
 
 /**
+ * Repeat/Pomodoro configuration for the countdown timer (ADR 0025).
+ */
+export type RepeatConfig = {
+  /** Rest/delay phase duration in ms. 0 = no rest (back-to-back work phases). */
+  restDurationMs: number;
+  /** Number of complete cycles (work+rest). null = infinite. */
+  repeatCount: number | null;
+};
+
+/**
  * The per-session payload stored under `solo_session_<id>_v1`.
  * Both states are optional because a freshly created session is empty.
  */
 export type SoloSessionPayload = {
   stopwatchState?: PersistedStopwatchState;
   timerState?: PersistedTimerState;
+  /** Optional repeat/Pomodoro config (ADR 0025). Absent = repeat mode off. */
+  repeatConfig?: RepeatConfig;
 };
 
 // ── Key helpers ────────────────────────────────────────────────────────────────
@@ -145,8 +157,7 @@ export async function setActiveSessionId(id: string): Promise<void> {
 export async function createSession(
   id: string,
   name: string,
-  mode: SoloMode,
-  color?: string
+  mode: SoloMode
 ): Promise<SoloSessionMeta> {
   const index = await loadIndex();
 
@@ -163,7 +174,6 @@ export async function createSession(
     mode,
     lastUsedAt: now,
     createdAt: now,
-    ...(color ? { color } : {}),
   };
 
   // Write an empty payload for the new session
@@ -208,11 +218,11 @@ export async function updateSession(
 }
 
 /**
- * Update a session's metadata (name, mode, and/or color) in the index.
+ * Update a session's metadata (name and/or mode) in the index.
  */
 export async function updateSessionMeta(
   id: string,
-  patch: Partial<Pick<SoloSessionMeta, "name" | "mode" | "color">>
+  patch: Partial<Pick<SoloSessionMeta, "name" | "mode">>
 ): Promise<void> {
   const index = await loadIndex();
   const idx = index.findIndex((m) => m.id === id);

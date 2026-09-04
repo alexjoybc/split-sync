@@ -434,6 +434,24 @@ export default function HelpPage() {
               timer mode exists in the Android Stopwatch app. There is
               deliberately only <strong>one</strong> timer — SplitSync does not
               do multi-timer boards.
+              <ul className="mt-2 list-disc space-y-1 pl-4">
+                <li>
+                  <strong>Repeat mode (Pomodoro / intervals):</strong> enable
+                  the <strong>Repeat mode</strong> toggle (visible below the
+                  duration input in idle state) to configure a{" "}
+                  <strong>rest duration</strong> and an optional{" "}
+                  <strong>repeat count</strong> (leave blank for infinite
+                  loops). Once started, the timer automatically transitions
+                  from the work phase to the rest phase and back again — no
+                  manual tap is needed between phases. The current phase (
+                  <strong>WORK</strong> or <strong>REST</strong>) and cycle
+                  number are shown near the dial while running. After the
+                  configured number of cycles completes, the final alert fires
+                  as usual. <strong>Stop</strong> is always available to end
+                  the cycle at any point. The rest and repeat-count settings
+                  are remembered per session so they survive a page refresh.
+                </li>
+              </ul>
             </li>
             <li>
               While running, tap <strong>Lap</strong> to record a split. Each
@@ -548,15 +566,6 @@ export default function HelpPage() {
                 <li>
                   <strong>Switch:</strong> click any session row to make it
                   active and close the panel.
-                </li>
-                <li>
-                  <strong>Color tag (optional):</strong> when creating or
-                  renaming a session, pick a color swatch from the{" "}
-                  <strong>COLOR TAG</strong> row to give the session a colored
-                  accent strip in the list. The color supplements the session
-                  name — it is never the only way to tell sessions apart.
-                  Select <strong>No color</strong> (the dashed swatch) to
-                  clear it.
                 </li>
                 <li>
                   Sessions are stored on this device only (no cloud sync).
