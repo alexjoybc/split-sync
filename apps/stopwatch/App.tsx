@@ -50,10 +50,12 @@ import {
   Button,
   Card,
   Chip,
+  DataTable,
   Divider,
   HelperText,
   List,
   PaperProvider,
+  SegmentedButtons,
   Surface,
   Text as PaperText,
   TextInput as PaperTextInput,
@@ -3492,6 +3494,7 @@ const SOLO_DELAY_STORAGE_KEY = "sw_delay_seconds";
 type SoloMode = "stopwatch" | "timer";
 const SOLO_MODE_STORAGE_KEY = "solo_mode_v1";
 
+// MD3 `SegmentedButtons` — replaces the old hand-rolled pill toggle (#439).
 function ModeToggleStrip({
   mode,
   onSelect,
@@ -3500,32 +3503,30 @@ function ModeToggleStrip({
   onSelect: (m: SoloMode) => void;
 }) {
   return (
-    <View style={s.delaySelector}>
+    <View style={s.modeToggleWrap}>
       <Text style={s.delayLabel}>MODE</Text>
-      <View style={s.delayOptions}>
-        {(["stopwatch", "timer"] as SoloMode[]).map((m) => (
-          <Pressable
-            key={m}
-            onPress={() => onSelect(m)}
-            style={[s.delayOption, mode === m && s.delayOptionActive]}
-            accessible
-            accessibilityRole="radio"
-            accessibilityLabel={
-              m === "stopwatch" ? "Stopwatch mode" : "Countdown timer mode"
-            }
-            accessibilityState={{ selected: mode === m }}
-          >
-            <Text
-              style={[
-                s.delayOptionText,
-                mode === m && s.delayOptionTextActive,
-              ]}
-            >
-              {m === "stopwatch" ? "STOPWATCH" : "TIMER"}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <SegmentedButtons
+        style={s.modeToggleButtons}
+        value={mode}
+        onValueChange={(v) => onSelect(v as SoloMode)}
+        density="small"
+        buttons={[
+          {
+            value: "stopwatch",
+            label: "STOPWATCH",
+            accessibilityLabel: "Stopwatch mode",
+            checkedColor: stopwatchTheme.colors.onPrimary,
+            uncheckedColor: stopwatchTheme.colors.onSurfaceVariant,
+          },
+          {
+            value: "timer",
+            label: "TIMER",
+            accessibilityLabel: "Countdown timer mode",
+            checkedColor: stopwatchTheme.colors.onPrimary,
+            uncheckedColor: stopwatchTheme.colors.onSurfaceVariant,
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -4247,15 +4248,27 @@ function SoloScreen({
         </View>
       )}
 
-      {/* ── Lap table ── */}
+      {/* ── Lap table (MD3 `Card` + `DataTable` chrome, #439) ── */}
       {lapCount > 0 && !isCountdown ? (
-        <View style={s.table}>
-          <View style={s.tableHead}>
-            <Text style={[s.th, s.cLap]}>LAP</Text>
-            <Text style={[s.th, s.cSplit]}>SPLIT</Text>
-            <Text style={[s.th, s.cTime]}>TIME</Text>
-            <Text style={[s.th, s.cDelta, { textAlign: "right" }]}>Δ BEST</Text>
-          </View>
+        <Card style={[s.table, s.lapCard]} mode="elevated">
+          <DataTable.Header style={s.lapTableHeader}>
+            <DataTable.Title style={s.cLap} textStyle={s.lapHeaderText}>
+              LAP
+            </DataTable.Title>
+            <DataTable.Title style={s.cSplit} textStyle={s.lapHeaderText}>
+              SPLIT
+            </DataTable.Title>
+            <DataTable.Title style={s.cTime} textStyle={s.lapHeaderText}>
+              TIME
+            </DataTable.Title>
+            <DataTable.Title
+              style={s.cDelta}
+              textStyle={s.lapHeaderText}
+              numeric
+            >
+              Δ BEST
+            </DataTable.Title>
+          </DataTable.Header>
           <FlatList
             data={laps}
             keyExtractor={(l) => String(l.number)}
@@ -4316,22 +4329,24 @@ function SoloScreen({
               );
             }}
           />
-        </View>
+        </Card>
       ) : !isCountdown ? (
         <View style={s.together}>
-          <Pressable
+          <Card
+            style={s.togetherCard}
+            mode="outlined"
             onPress={onGoShared}
-            style={({ pressed }) => [
-              s.togetherBtn,
-              { opacity: pressed ? 0.8 : 1 },
-            ]}
             accessible
             accessibilityRole="button"
             accessibilityLabel="Time together"
           >
-            <Text style={s.togetherLabel}>⏱  TIME TOGETHER</Text>
-            <Text style={s.togetherSub}>TAP TO CREATE A SHARED SESSION</Text>
-          </Pressable>
+            <Card.Content style={s.togetherCardContent}>
+              <Text style={s.togetherLabel}>⏱  TIME TOGETHER</Text>
+              <Text style={s.togetherSub}>
+                TAP TO CREATE A SHARED SESSION
+              </Text>
+            </Card.Content>
+          </Card>
         </View>
       ) : (
         /* Countdown: flex spacer so button bar stays anchored */
@@ -6524,6 +6539,24 @@ const s = StyleSheet.create({
 
   // Lap table
   table: { flex: 1 },
+  // MD3 `Card`/`DataTable` chrome around the lap list (#439) — the
+  // FlatList body and its row rendering below are unchanged.
+  lapCard: {
+    flex: 1,
+    margin: 0,
+    borderRadius: 0,
+    backgroundColor: C.white,
+  },
+  lapTableHeader: {
+    backgroundColor: C.ink,
+    paddingHorizontal: 14,
+  },
+  lapHeaderText: {
+    color: C.white,
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+  },
   tableHead: {
     flexDirection: "row",
     backgroundColor: C.ink,
@@ -6547,6 +6580,18 @@ const s = StyleSheet.create({
   cTime:   { flex: 1 },
   cDelta:  { width: 70 },
   cActor:  { width: 70, color: C.muted },
+
+  // Solo — mode toggle (MD3 `SegmentedButtons`, #439)
+  modeToggleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.panelBg,
+  },
+  modeToggleButtons: { flex: 1 },
 
   // Solo — delay selector
   delaySelector: {
@@ -6591,16 +6636,15 @@ const s = StyleSheet.create({
     color: C.white,
   },
 
-  // Solo — time together placeholder
+  // Solo — time together placeholder (MD3 `Card` empty state, #439)
   together: { flex: 1, justifyContent: "center", paddingHorizontal: 20 },
-  togetherBtn: {
-    borderWidth: 1.5,
-    borderColor: C.line,
+  togetherCard: {
     borderStyle: "dashed",
-    borderRadius: 2,
-    paddingVertical: 22,
+    opacity: 0.7,
+  },
+  togetherCardContent: {
     alignItems: "center",
-    opacity: 0.45,
+    paddingVertical: 22,
   },
   togetherLabel: { color: C.ink, fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
   togetherSub:   { color: C.muted, fontSize: 10, fontWeight: "700", letterSpacing: 1, marginTop: 4 },
