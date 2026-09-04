@@ -1,0 +1,79 @@
+/**
+ * MD3 sys-color tokens for the web stopwatch surface only.
+ *
+ * Scoped to `.md3-stopwatch-scope` (applied by stopwatch/layout.tsx to the
+ * route subtree's root element) — MUST NOT be applied to `:root` or leak
+ * into any other `apps/web` route, which stays on the existing `race-*`
+ * Tailwind tokens per AGENTS.md's surface table.
+ *
+ * Role mapping mirrors docs/adr/0026-stopwatch-material-3-redesign.md
+ * exactly (the native `apps/stopwatch/src/theme.ts` foundation). Do not
+ * diverge from that table — if a role's source value changes there, mirror
+ * the change here too.
+ *
+ * Canonical hex source: packages/palette/src/index.ts (ADR 0021).
+ */
+
+.md3-stopwatch-scope {
+  /* ── Primary ─────────────────────────────────────────────────────────── */
+  --md-sys-color-primary: #0b6fb3; /* palette.bluePrimary */
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #d9eefd; /* withLightness(bluePrimary, 0.92) */
+  --md-sys-color-on-primary-container: #063c60; /* withLightness(bluePrimary, 0.20) */
+
+  /* ── Secondary ───────────────────────────────────────────────────────── */
+  --md-sys-color-secondary: #5bc8f5; /* palette.blueAccent */
+  --md-sys-color-on-secondary: #18181b; /* palette.ink — white is forbidden on blueAccent (ADR 0021) */
+  --md-sys-color-secondary-container: #cfeffc; /* withLightness(blueAccent, 0.90) */
+  --md-sys-color-on-secondary-container: #053f57; /* withLightness(blueAccent, 0.18) */
+
+  /* ── Tertiary ────────────────────────────────────────────────────────── */
+  --md-sys-color-tertiary: #ffd700; /* palette.yellow — leader/highlight emphasis only */
+  --md-sys-color-on-tertiary: #18181b; /* palette.ink — white is forbidden on yellow (ADR 0021) */
+  --md-sys-color-tertiary-container: #fff8cc; /* palette.yellowTint */
+  --md-sys-color-on-tertiary-container: #18181b; /* palette.ink */
+
+  /* ── Error ───────────────────────────────────────────────────────────── */
+  --md-sys-color-error: #cc1a22; /* palette.red */
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #fdecea; /* palette.redTint */
+  --md-sys-color-on-error-container: #cc1a22; /* palette.red */
+
+  /* ── Background / surface ────────────────────────────────────────────── */
+  --md-sys-color-background: #f4f1ea; /* palette.paper */
+  --md-sys-color-on-background: #18181b; /* palette.ink */
+  --md-sys-color-surface: #ffffff; /* palette.panel */
+  --md-sys-color-on-surface: #18181b; /* palette.ink */
+  --md-sys-color-surface-variant: #e9e6df; /* palette.panelAlt */
+  --md-sys-color-on-surface-variant: #636369; /* palette.muted */
+
+  /* ── Outline ─────────────────────────────────────────────────────────── */
+  --md-sys-color-outline: #636369; /* palette.muted */
+  --md-sys-color-outline-variant: #d4d1ca; /* palette.line — decorative dividers only */
+
+  /* ── Shadow / scrim / backdrop ───────────────────────────────────────── */
+  --md-sys-color-shadow: #18181b; /* palette.ink */
+  --md-sys-color-scrim: #18181b; /* palette.ink */
+  --md-sys-color-backdrop: rgba(24, 24, 27, 0.4); /* palette.ink @ 40% */
+
+  /* ── Inverse ─────────────────────────────────────────────────────────── */
+  --md-sys-color-inverse-surface: #00213a; /* palette.blueDim */
+  --md-sys-color-inverse-on-surface: #ffffff;
+  --md-sys-color-inverse-primary: #5bc8f5; /* palette.blueAccent */
+
+  /* ── Disabled state overlays ─────────────────────────────────────────── */
+  --md-sys-color-surface-disabled: rgba(24, 24, 27, 0.12); /* palette.ink @ 12% */
+  --md-sys-color-on-surface-disabled: rgba(24, 24, 27, 0.38); /* palette.ink @ 38% */
+
+  /* ── Tonal elevation (brand-primary tint, standard MD3 ratios) ──────── */
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #f6f9fc; /* mix(panel, bluePrimary, 5%) */
+  --md-sys-color-surface-container: #eef4f9; /* mix(panel, bluePrimary, 8%) */
+  --md-sys-color-surface-container-high: #e6eef6; /* mix(panel, bluePrimary, 11%) */
+  --md-sys-color-surface-container-highest: #e3ecf5; /* mix(panel, bluePrimary, 12%) */
+
+  /* Baseline background/text for the scope itself (chrome only — the LCD
+     instrument face keeps its own instrumentFace/instrumentCasing/
+     instrumentBezel/instrumentInner tokens untouched, per ADR 0026). */
+  color: var(--md-sys-color-on-background);
+}
