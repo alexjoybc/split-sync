@@ -51,12 +51,15 @@ import {
   Card,
   Chip,
   DataTable,
+  Dialog,
   Divider,
   HelperText,
   List,
   PaperProvider,
+  Portal,
   SegmentedButtons,
   Surface,
+  Switch as PaperSwitch,
   Text as PaperText,
   TextInput as PaperTextInput,
   TouchableRipple,
@@ -1039,7 +1042,9 @@ function useCueSettings() {
   return { cueSettings, cueRef, updateCueSettings };
 }
 
-// Small ON/OFF switch styled like the device pills
+// MD3 sound-cue toggle (#441) — an `react-native-paper` `Switch`. The ON/OFF
+// state is still exposed as an accessible label (via `accessibilityLabel`)
+// rather than relying on switch position/color alone (WCAG 1.4.1).
 function CueSwitch({
   on,
   label,
@@ -1050,22 +1055,20 @@ function CueSwitch({
   onToggle: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onToggle}
-      accessible
-      accessibilityRole="switch"
-      accessibilityState={{ checked: on }}
-      accessibilityLabel={label}
-      style={[s.cueSwitch, on && s.cueSwitchOn]}
-    >
-      <Text style={[s.cueSwitchText, on && s.cueSwitchTextOn]}>
-        {on ? "ON" : "OFF"}
-      </Text>
-    </Pressable>
+    <PaperSwitch
+      value={on}
+      onValueChange={onToggle}
+      accessibilityLabel={`${label} — ${on ? "on" : "off"}`}
+    />
   );
 }
 
-// Settings panel: sound cue toggles + target time (mm:ss)
+// Settings panel: sound cue toggles + target time (mm:ss). Rendered as an
+// MD3 `Surface` bottom-sheet-style panel (#441) — it is toggled inline
+// between the app bar and the instrument, not as a floating dialog, so a
+// `Surface` with elevation (rather than a `Dialog`, which is reserved for
+// screen-blocking prompts) is the correct MD3 pattern here. Rows use
+// `List.Item` + `Switch` per the MD3 spec.
 function CueSettingsPanel({
   settings,
   onChange,
@@ -1087,60 +1090,78 @@ function CueSettingsPanel({
   );
 
   return (
-    <View style={s.cuePanel}>
-      <View style={s.cueRow}>
-        <Text style={s.cueLabel}>SOUND CUES · START / STOP / LAP</Text>
-        <CueSwitch
-          on={settings.soundEnabled}
-          label="Sound cues on start, stop, and lap"
-          onToggle={() => onChange({ soundEnabled: !settings.soundEnabled })}
-        />
-      </View>
-      <View style={s.cueRow}>
-        <Text style={s.cueLabel}>TARGET-TIME BEEP</Text>
-        <CueSwitch
-          on={settings.targetEnabled}
-          label="Beep once at target time"
-          onToggle={() => onChange({ targetEnabled: !settings.targetEnabled })}
-        />
-      </View>
+    <Surface style={s.cuePanel} elevation={2}>
+      <List.Item
+        title="Sound cues · start / stop / lap"
+        titleStyle={s.cueLabel}
+        titleNumberOfLines={2}
+        style={s.cueListItem}
+        right={() => (
+          <CueSwitch
+            on={settings.soundEnabled}
+            label="Sound cues on start, stop, and lap"
+            onToggle={() => onChange({ soundEnabled: !settings.soundEnabled })}
+          />
+        )}
+      />
+      <Divider />
+      <List.Item
+        title="Target-time beep"
+        titleStyle={s.cueLabel}
+        titleNumberOfLines={2}
+        style={s.cueListItem}
+        right={() => (
+          <CueSwitch
+            on={settings.targetEnabled}
+            label="Beep once at target time"
+            onToggle={() => onChange({ targetEnabled: !settings.targetEnabled })}
+          />
+        )}
+      />
       {settings.targetEnabled && (
-        <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
-          <Text style={s.cueLabel}>TARGET (MM:SS)</Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            <TextInput
-              value={mm}
-              onChangeText={(t) => {
-                const clean = t.replace(/[^0-9]/g, "").slice(0, 3);
-                setMm(clean);
-                commitTarget(clean, ss);
-              }}
-              keyboardType="number-pad"
-              style={s.cueInput}
-              accessibilityLabel="Target minutes"
-              maxLength={3}
-            />
-            <Text style={s.cueColon}>:</Text>
-            <TextInput
-              value={ss}
-              onChangeText={(t) => {
-                const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
-                setSs(clean);
-                commitTarget(mm, clean);
-              }}
-              keyboardType="number-pad"
-              style={s.cueInput}
-              accessibilityLabel="Target seconds"
-              maxLength={2}
-            />
+        <>
+          <Divider />
+          <View style={[s.cueListItem, s.cueTargetRow]}>
+            <PaperText style={s.cueLabel}>TARGET (MM:SS)</PaperText>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <PaperTextInput
+                mode="outlined"
+                dense
+                value={mm}
+                onChangeText={(t) => {
+                  const clean = t.replace(/[^0-9]/g, "").slice(0, 3);
+                  setMm(clean);
+                  commitTarget(clean, ss);
+                }}
+                keyboardType="number-pad"
+                style={s.cueInputPaper}
+                accessibilityLabel="Target minutes"
+                maxLength={3}
+              />
+              <Text style={s.cueColon}>:</Text>
+              <PaperTextInput
+                mode="outlined"
+                dense
+                value={ss}
+                onChangeText={(t) => {
+                  const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
+                  setSs(clean);
+                  commitTarget(mm, clean);
+                }}
+                keyboardType="number-pad"
+                style={s.cueInputPaper}
+                accessibilityLabel="Target seconds"
+                maxLength={2}
+              />
+            </View>
           </View>
-        </View>
+        </>
       )}
-      <Text style={s.cueHint}>
+      <HelperText type="info" visible style={s.cueHint}>
         The stopwatch keeps running past the target — the overrun is shown in
         red. Cues are best-effort while the app is in the background.
-      </Text>
-    </View>
+      </HelperText>
+    </Surface>
   );
 }
 
@@ -1219,10 +1240,14 @@ function LogoFooter() {
 /**
  * A full-screen, high-contrast modal overlay displaying large elapsed/remaining
  * digits. Usable at a distance (propped-up phone during a workout). Dismissed
- * by a tap anywhere on the screen or the Android back button.
+ * by a tap anywhere on the screen, an explicit MD3 dismiss control (#441), or
+ * the Android back button.
  *
  * The overlay is intentionally a React Native `Modal` (not a View on top of
  * the screen) so the OS bars (status/navigation) are hidden via `StatusBar`.
+ * The instrument content (`LcdDisplay`) it wraps is untouched by the MD3
+ * redesign — only the surrounding chrome (labels + dismiss control) is
+ * restyled.
  */
 function FullscreenOverlay({
   visible,
@@ -1267,8 +1292,23 @@ function FullscreenOverlay({
         onPress={onDismiss}
         accessible={false}
       >
+        {/* Explicit MD3 dismiss control (#441) — a contained-tonal chip in
+            the corner, in addition to the existing tap-anywhere/back
+            dismissal, so the exit affordance is discoverable without
+            relying on the hint text alone. */}
+        <Button
+          mode="contained-tonal"
+          compact
+          onPress={onDismiss}
+          style={s.fullscreenDismissBtn}
+          labelStyle={s.fullscreenDismissLabel}
+          accessibilityLabel="Exit fullscreen"
+        >
+          ✕ Exit
+        </Button>
+
         {/* Readable state label above the digits */}
-        <Text
+        <PaperText
           style={{
             color: alerting ? C.red : C.casingMuted,
             fontSize: 11,
@@ -1280,9 +1320,9 @@ function FullscreenOverlay({
           accessibilityRole="text"
         >
           {label}
-        </Text>
+        </PaperText>
 
-        {/* Large LCD digits */}
+        {/* Large LCD digits — instrument content, untouched by MD3 (#441) */}
         <LcdDisplay
           ms={ms}
           mainSize={mainSize}
@@ -1292,7 +1332,7 @@ function FullscreenOverlay({
         />
 
         {/* Sub-label (e.g. "Counting down", "Paused") */}
-        <Text
+        <PaperText
           style={{
             color: alerting ? C.red : C.casingMuted,
             fontSize: 11,
@@ -1304,10 +1344,10 @@ function FullscreenOverlay({
           accessibilityRole="text"
         >
           {subLabel}
-        </Text>
+        </PaperText>
 
         {/* Dismiss hint */}
-        <Text
+        <PaperText
           style={{
             color: C.dimGray,
             fontSize: 10,
@@ -1318,7 +1358,7 @@ function FullscreenOverlay({
           }}
         >
           Tap anywhere or press back to exit
-        </Text>
+        </PaperText>
       </Pressable>
     </Modal>
   );
@@ -5353,118 +5393,49 @@ function NameInputModal({
     if (trimmed) onConfirm(trimmed);
   }, [value, onConfirm]);
 
+  const trimmedEmpty = value.trim().length === 0;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onCancel}
-    >
-      <View style={nm.overlay}>
-        <View style={nm.dialog}>
-          <Text style={nm.title}>{title}</Text>
-          <TextInput
+    <Portal>
+      <Dialog visible={visible} onDismiss={onCancel} style={nm.dialog}>
+        <Dialog.Title>{title}</Dialog.Title>
+        <Dialog.Content>
+          <PaperTextInput
+            mode="outlined"
             value={value}
             onChangeText={setValue}
             placeholder={placeholder}
-            placeholderTextColor={C.muted}
             autoCapitalize="words"
             autoFocus
-            style={nm.input}
             onSubmitEditing={handleConfirm}
             returnKeyType="done"
             maxLength={50}
+            accessibilityLabel={title}
           />
-          <View style={nm.actions}>
-            <Pressable
-              onPress={onCancel}
-              style={({ pressed }) => [nm.actionBtn, nm.cancelBtn, { opacity: pressed ? 0.7 : 1 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-            >
-              <Text style={nm.cancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleConfirm}
-              style={({ pressed }) => [nm.actionBtn, nm.confirmBtn, { opacity: pressed ? 0.7 : 1 }]}
-              accessibilityRole="button"
-              accessibilityLabel="Confirm"
-            >
-              <Text style={nm.confirmText}>OK</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
-    </Modal>
+        </Dialog.Content>
+        <Dialog.Actions>
+          <Button onPress={onCancel} accessibilityLabel="Cancel">
+            Cancel
+          </Button>
+          <Button
+            mode="contained"
+            onPress={handleConfirm}
+            disabled={trimmedEmpty}
+            accessibilityLabel="Confirm"
+          >
+            OK
+          </Button>
+        </Dialog.Actions>
+      </Dialog>
+    </Portal>
   );
 }
 
 const nm = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.55)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-  },
   dialog: {
-    backgroundColor: C.paper,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: C.rule,
-    padding: 20,
     width: "100%",
-    maxWidth: 400,
-  },
-  title: {
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-    color: C.ink,
-    marginBottom: 14,
-    textTransform: "uppercase",
-  },
-  input: {
-    backgroundColor: C.white,
-    borderWidth: 2,
-    borderColor: C.line,
-    borderRadius: 3,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: C.ink,
-    fontWeight: "600",
-    marginBottom: 16,
-  },
-  actions: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  actionBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    alignItems: "center",
-    borderRadius: 3,
-  },
-  cancelBtn: {
-    borderWidth: 2,
-    borderColor: C.line,
-    backgroundColor: C.white,
-  },
-  cancelText: {
-    color: C.ink,
-    fontSize: 13,
-    fontWeight: "800",
-    letterSpacing: 0.5,
-  },
-  confirmBtn: {
-    backgroundColor: C.ink,
-  },
-  confirmText: {
-    color: C.white,
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 1,
+    maxWidth: 420,
+    alignSelf: "center",
   },
 });
 
@@ -5705,177 +5676,156 @@ function SessionSwitcherModal({
   const atCap = sessions.length >= SESSION_CAP;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={onClose}
-    >
-      <SafeAreaView style={ssm.screen}>
-        <StatusBar barStyle="light-content" backgroundColor={C.casing} />
-
-        {/* Header */}
-        <View style={ssm.header}>
-          <Text style={ssm.headerTitle}>SESSIONS</Text>
-          <Pressable
-            onPress={onClose}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Close sessions panel"
-            style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
-          >
-            <Text style={ssm.closeBtn}>✕ CLOSE</Text>
-          </Pressable>
-        </View>
+    <Portal>
+      <Dialog visible={visible} onDismiss={onClose} style={ssm.dialog}>
+        <Dialog.Title>Sessions</Dialog.Title>
 
         {/* Cap notice */}
         {atCap && (
-          <View style={ssm.capNotice}>
-            <Text style={ssm.capNoticeText}>
-              ⚠ Session limit ({SESSION_CAP}) reached — delete a session to create a new one.
-            </Text>
-          </View>
+          <Dialog.Content style={{ paddingBottom: 0 }}>
+            <HelperText type="error" visible>
+              Session limit ({SESSION_CAP}) reached — delete a session to
+              create a new one.
+            </HelperText>
+          </Dialog.Content>
         )}
 
         {/* Session list */}
-        {loading ? (
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <ActivityIndicator color={C.ink} />
-          </View>
-        ) : sessions.length === 0 ? (
-          <View style={{ flex: 1, justifyContent: "center", padding: 24 }}>
-            <Text style={{ color: C.muted, fontSize: 14, textAlign: "center" }}>
-              No sessions yet. Create one below.
-            </Text>
-          </View>
-        ) : (
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingVertical: 4 }}
-            scrollEnabled={draggingId === null}
-          >
-            {localSessions.map((item) => {
-              const isActive = item.id === activeSessionId;
-              const isDragging = item.id === draggingId;
-              const runState = sessionRunState(item);
-              const modeLabel = item.mode === "timer" ? "⏲ TIMER" : "⏱ SW";
-              const sessionColor = item.color;
-              const dragHandlers = getOrCreatePanResponder(item.id).panHandlers;
+        <Dialog.ScrollArea style={ssm.scrollArea}>
+          {loading ? (
+            <View style={ssm.centerBox}>
+              <PaperActivityIndicator />
+            </View>
+          ) : sessions.length === 0 ? (
+            <View style={ssm.centerBox}>
+              <PaperText variant="bodyMedium" style={{ textAlign: "center" }}>
+                No sessions yet. Create one below.
+              </PaperText>
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={{ paddingVertical: 4 }}
+              scrollEnabled={draggingId === null}
+            >
+              {localSessions.map((item) => {
+                const isActive = item.id === activeSessionId;
+                const isDragging = item.id === draggingId;
+                const runState = sessionRunState(item);
+                const modeLabel = item.mode === "timer" ? "⏲ TIMER" : "⏱ SW";
+                const sessionColor = item.color;
+                const dragHandlers = getOrCreatePanResponder(item.id).panHandlers;
 
-              return (
-                <View
-                  key={item.id}
-                  style={[
-                    ssm.row,
-                    isActive && ssm.rowActive,
-                    isDragging && ssm.rowDragging,
-                  ]}
-                >
-                  {/* Color accent strip — left edge */}
-                  {sessionColor && (
-                    <View
-                      style={[ssm.colorStrip, { backgroundColor: sessionColor }]}
-                      accessibilityLabel={`Color tag: ${SESSION_COLORS.find((c) => c.value === sessionColor)?.label ?? "Custom"}`}
-                    />
-                  )}
-                  {/* Drag handle */}
+                return (
                   <View
-                    {...dragHandlers}
-                    style={ssm.dragHandle}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Drag to reorder ${item.name}`}
+                    key={item.id}
+                    style={[
+                      ssm.row,
+                      isActive && ssm.rowActive,
+                      isDragging && ssm.rowDragging,
+                    ]}
                   >
-                    <Text style={ssm.dragHandleText}>≡</Text>
-                  </View>
+                    {/* Color accent strip — left edge */}
+                    {sessionColor && (
+                      <View
+                        style={[ssm.colorStrip, { backgroundColor: sessionColor }]}
+                        accessibilityLabel={`Color tag: ${SESSION_COLORS.find((c) => c.value === sessionColor)?.label ?? "Custom"}`}
+                      />
+                    )}
 
-                  {/* Main tap area — switches session */}
-                  <Pressable
-                    onPress={() => handleSwitch(item)}
-                    style={ssm.rowMain}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Switch to ${item.name}`}
-                    accessibilityState={{ selected: isActive }}
-                  >
-                    <View style={ssm.rowTop}>
-                      <Text style={[ssm.rowName, isActive && ssm.rowNameActive]} numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      {isActive && (
-                        <Text style={ssm.activeDot} accessibilityLabel="Active">● ACTIVE</Text>
-                      )}
-                    </View>
-                    <View style={ssm.rowMeta}>
-                      <Text style={ssm.modeBadge}>{modeLabel}</Text>
-                      {runState && (
+                    <List.Item
+                      title={item.name}
+                      titleNumberOfLines={1}
+                      titleStyle={[ssm.rowName, isActive && ssm.rowNameActive]}
+                      onPress={() => handleSwitch(item)}
+                      accessibilityLabel={`Switch to ${item.name}`}
+                      accessibilityState={{ selected: isActive }}
+                      style={ssm.listItem}
+                      left={() => (
                         <View
-                          style={[
-                            ssm.stateBadge,
-                            runState === "running" && { backgroundColor: C.red },
-                            runState === "paused" && { backgroundColor: C.yellow },
-                          ]}
-                          accessible
-                          accessibilityLabel={runState === "running" ? "Running" : "Paused"}
+                          {...dragHandlers}
+                          style={ssm.dragHandle}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Drag to reorder ${item.name}`}
                         >
-                          <Text
-                            style={[
-                              ssm.stateBadgeText,
-                              runState === "running" && { color: C.white },
-                              runState === "paused" && { color: C.ink },
-                            ]}
-                          >
-                            {runState === "running" ? "● RUN" : "‖ PAUSED"}
-                          </Text>
+                          <Text style={ssm.dragHandleText}>≡</Text>
                         </View>
                       )}
-                      <Text style={ssm.lastUsed}>{fmtAge(item.lastUsedAt)}</Text>
-                    </View>
-                  </Pressable>
-
-                  {/* Action buttons */}
-                  <View style={ssm.rowActions}>
-                    <Pressable
-                      onPress={() => handleOpenRename(item)}
-                      hitSlop={4}
-                      style={({ pressed }) => [ssm.actionIcon, { opacity: pressed ? 0.6 : 1 }]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Rename ${item.name}`}
-                    >
-                      <Text style={ssm.actionIconText}>✎</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => handleDelete(item)}
-                      hitSlop={4}
-                      style={({ pressed }) => [ssm.actionIcon, ssm.deleteIcon, { opacity: pressed ? 0.6 : 1 }]}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Delete ${item.name}`}
-                    >
-                      <Text style={[ssm.actionIconText, { color: C.white }]}>🗑</Text>
-                    </Pressable>
+                      description={() => (
+                        <View style={ssm.rowMeta}>
+                          {isActive && (
+                            <Text style={ssm.activeDot} accessibilityLabel="Active">
+                              ● ACTIVE
+                            </Text>
+                          )}
+                          <Text style={ssm.modeBadge}>{modeLabel}</Text>
+                          {runState && (
+                            <View
+                              style={[
+                                ssm.stateBadge,
+                                runState === "running" && { backgroundColor: C.red },
+                                runState === "paused" && { backgroundColor: C.yellow },
+                              ]}
+                              accessible
+                              accessibilityLabel={runState === "running" ? "Running" : "Paused"}
+                            >
+                              <Text
+                                style={[
+                                  ssm.stateBadgeText,
+                                  runState === "running" && { color: C.white },
+                                  runState === "paused" && { color: C.ink },
+                                ]}
+                              >
+                                {runState === "running" ? "● RUN" : "‖ PAUSED"}
+                              </Text>
+                            </View>
+                          )}
+                          <Text style={ssm.lastUsed}>{fmtAge(item.lastUsedAt)}</Text>
+                        </View>
+                      )}
+                      right={() => (
+                        <View style={ssm.rowActions}>
+                          <Pressable
+                            onPress={() => handleOpenRename(item)}
+                            hitSlop={4}
+                            style={({ pressed }) => [ssm.actionIcon, { opacity: pressed ? 0.6 : 1 }]}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Rename ${item.name}`}
+                          >
+                            <Text style={ssm.actionIconText}>✎</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => handleDelete(item)}
+                            hitSlop={4}
+                            style={({ pressed }) => [ssm.actionIcon, ssm.deleteIcon, { opacity: pressed ? 0.6 : 1 }]}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Delete ${item.name}`}
+                          >
+                            <Text style={[ssm.actionIconText, { color: C.white }]}>🗑</Text>
+                          </Pressable>
+                        </View>
+                      )}
+                    />
                   </View>
-                </View>
-              );
-            })}
-          </ScrollView>
-        )}
+                );
+              })}
+            </ScrollView>
+          )}
+        </Dialog.ScrollArea>
 
-        {/* Create button */}
-        <View style={ssm.footer}>
-          <Pressable
+        <Dialog.Actions>
+          <Button
+            mode="contained"
             onPress={atCap ? undefined : handleOpenCreate}
-            style={({ pressed }) => [
-              ssm.createBtn,
-              atCap && ssm.createBtnDisabled,
-              { opacity: pressed && !atCap ? 0.8 : 1 },
-            ]}
-            accessibilityRole="button"
+            disabled={atCap}
             accessibilityLabel="Create new session"
-            accessibilityState={{ disabled: atCap }}
           >
-            <Text style={[ssm.createBtnText, atCap && ssm.createBtnTextDisabled]}>
-              + NEW SESSION
-            </Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
+            + New session
+          </Button>
+          <Button onPress={onClose} accessibilityLabel="Close sessions panel">
+            Close
+          </Button>
+        </Dialog.Actions>
+      </Dialog>
 
       {/* Name input modal (create / rename) */}
       <NameInputModal
@@ -5888,49 +5838,26 @@ function SessionSwitcherModal({
         }
         onCancel={() => setNameModal(null)}
       />
-    </Modal>
+    </Portal>
   );
 }
 
 const ssm = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: C.paper,
+  dialog: {
+    maxHeight: "85%",
   },
-  header: {
-    backgroundColor: C.casing,
-    flexDirection: "row",
+  scrollArea: {
+    paddingHorizontal: 0,
+  },
+  centerBox: {
+    minHeight: 120,
+    justifyContent: "center",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: 3,
-    borderColor: C.casingBorder,
+    padding: 24,
   },
-  headerTitle: {
-    color: C.casingMuted,
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 3,
-  },
-  closeBtn: {
-    color: C.faint,
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 1,
-  },
-  capNotice: {
-    backgroundColor: C.yellowBg,
-    borderBottomWidth: 2,
-    borderColor: C.rule,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  capNoticeText: {
-    color: C.ink,
-    fontSize: 12,
-    fontWeight: "700",
-    lineHeight: 17,
+  listItem: {
+    flex: 1,
+    paddingRight: 8,
   },
   row: {
     flexDirection: "row",
@@ -5965,19 +5892,6 @@ const ssm = StyleSheet.create({
     color: C.muted,
     fontWeight: "900",
     letterSpacing: 1,
-  },
-  rowMain: {
-    flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    justifyContent: "center",
-    minHeight: 66,
-  },
-  rowTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginBottom: 4,
   },
   rowName: {
     fontSize: 15,
@@ -6046,32 +5960,6 @@ const ssm = StyleSheet.create({
   actionIconText: {
     fontSize: 16,
     color: C.ink,
-  },
-  footer: {
-    backgroundColor: C.paper,
-    borderTopWidth: 2,
-    borderColor: C.rule,
-    padding: 16,
-  },
-  createBtn: {
-    backgroundColor: C.bluePrimary,
-    borderRadius: 3,
-    paddingVertical: 15,
-    alignItems: "center",
-  },
-  createBtnDisabled: {
-    backgroundColor: C.panelBg,
-    borderWidth: 2,
-    borderColor: C.line,
-  },
-  createBtnText: {
-    color: C.white,
-    fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 2,
-  },
-  createBtnTextDisabled: {
-    color: C.muted,
   },
 });
 
@@ -6885,9 +6773,22 @@ const s = StyleSheet.create({
     backgroundColor: C.panelBg,
     borderBottomWidth: 2,
     borderColor: C.rule,
-    paddingHorizontal: 16,
     paddingTop: 4,
-    paddingBottom: 10,
+    paddingBottom: 4,
+  },
+  cueListItem: {
+    paddingHorizontal: 16,
+  },
+  cueTargetRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 9,
+  },
+  cueInputPaper: {
+    minWidth: 56,
+    height: 40,
+    textAlign: "center",
   },
   cueRow: {
     flexDirection: "row",
@@ -6905,23 +6806,6 @@ const s = StyleSheet.create({
     flexShrink: 1,
     paddingRight: 8,
   },
-  cueSwitch: {
-    borderWidth: 1.5,
-    borderColor: C.muted,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    minWidth: 52,
-    alignItems: "center",
-  },
-  cueSwitchOn: { backgroundColor: C.red, borderColor: C.red },
-  cueSwitchText: {
-    color: C.muted,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-  },
-  cueSwitchTextOn: { color: C.white },
   cueInput: {
     backgroundColor: C.white,
     borderWidth: 1.5,
@@ -6962,6 +6846,19 @@ const s = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     fontVariant: ["tabular-nums"],
+    letterSpacing: 1,
+  },
+
+  // Fullscreen overlay MD3 dismiss control (#441)
+  fullscreenDismissBtn: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    zIndex: 1,
+  },
+  fullscreenDismissLabel: {
+    fontSize: 12,
+    fontWeight: "800",
     letterSpacing: 1,
   },
 
