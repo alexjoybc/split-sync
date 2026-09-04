@@ -72,16 +72,24 @@ type MdDialogProps = MdElementProps & {
   "aria-label"?: string;
 };
 
+// `[prop: string]: unknown` keeps these permissive enough to also cover
+// `md-outlined-text-field` / `md-outlined-button` usage in CountdownTimer.tsx
+// (#443) — the same two custom elements, first typed here for this file's
+// dialog/list panel, then reused for the countdown timer's setup form and
+// fullscreen toggle. A shared `.d.ts` would be cleaner if a third screen
+// adopts either element.
 type MdTextFieldProps = MdElementProps & {
   value?: string;
   label?: string;
   maxLength?: number;
   autofocus?: boolean;
   onInput?: React.FormEventHandler<HTMLElement>;
+  [prop: string]: unknown;
 };
 
 type MdButtonProps = MdElementProps & {
   disabled?: boolean;
+  [prop: string]: unknown;
 };
 
 type MdIconButtonProps = MdElementProps & {

@@ -22,6 +22,24 @@ async function enterTimerMode(page: Page) {
   await expect(page.getByTestId('timer-mode')).toBeVisible();
 }
 
+// The duration/rest/count fields are `<md-outlined-text-field>` and the
+// repeat toggle is an `<md-switch>` (#443 MD3 chrome) — both wrap a real
+// `<input>` in shadow DOM. Playwright's CSS engine pierces open shadow
+// roots, so a descendant selector reaches the actual editable/checkable
+// element that `.fill()`/`.check()`/`.toBeChecked()` need.
+function durationInput(page: Page) {
+  return page.locator('[data-testid="timer-duration-input"] input');
+}
+function restInput(page: Page) {
+  return page.locator('[data-testid="repeat-rest-input"] input');
+}
+function countInput(page: Page) {
+  return page.locator('[data-testid="repeat-count-input"] input');
+}
+function repeatToggle(page: Page) {
+  return page.locator('[data-testid="repeat-mode-toggle"] input');
+}
+
 /** Read remaining ms from the dial ("MM:SS" or "H:MM:SS"). */
 async function readRemainingMs(page: Page): Promise<number> {
   const text = (await page.getByTestId('timer-display').textContent())?.trim();
@@ -38,7 +56,7 @@ test.describe('/stopwatch repeat / Pomodoro timer mode', () => {
     // Repeat toggle should be visible in idle state
     await expect(page.getByTestId('repeat-mode-toggle')).toBeVisible();
     // By default it is unchecked
-    await expect(page.getByTestId('repeat-mode-toggle')).not.toBeChecked();
+    await expect(repeatToggle(page)).not.toBeChecked();
   });
 
   test('enabling repeat mode reveals rest-duration and repeat-count inputs', async ({ page }) => {
@@ -49,7 +67,7 @@ test.describe('/stopwatch repeat / Pomodoro timer mode', () => {
     await expect(page.getByTestId('repeat-count-input')).not.toBeVisible();
 
     // Enable repeat mode
-    await page.getByTestId('repeat-mode-toggle').check();
+    await repeatToggle(page).check();
 
     // Now both inputs should appear
     await expect(page.getByTestId('repeat-rest-input')).toBeVisible();
@@ -60,14 +78,14 @@ test.describe('/stopwatch repeat / Pomodoro timer mode', () => {
     await enterTimerMode(page);
 
     // Set a very short work duration
-    await page.getByTestId('timer-duration-input').fill('00:02');
+    await durationInput(page).fill('00:02');
 
     // Enable repeat mode
-    await page.getByTestId('repeat-mode-toggle').check();
+    await repeatToggle(page).check();
     // Set 1-second rest
-    await page.getByTestId('repeat-rest-input').fill('00:01');
+    await restInput(page).fill('00:01');
     // Set 3 repeats so we don't loop forever
-    await page.getByTestId('repeat-count-input').fill('3');
+    await countInput(page).fill('3');
 
     // Start the timer
     await page.getByTestId('timer-primary-btn').click();
@@ -84,11 +102,11 @@ test.describe('/stopwatch repeat / Pomodoro timer mode', () => {
   test('phase and cycle labels update correctly through cycles', async ({ page }) => {
     await enterTimerMode(page);
 
-    await page.getByTestId('timer-duration-input').fill('00:02');
+    await durationInput(page).fill('00:02');
 
-    await page.getByTestId('repeat-mode-toggle').check();
-    await page.getByTestId('repeat-rest-input').fill('00:01');
-    await page.getByTestId('repeat-count-input').fill('2');
+    await repeatToggle(page).check();
+    await restInput(page).fill('00:01');
+    await countInput(page).fill('2');
 
     // Start
     await page.getByTestId('timer-primary-btn').click();
@@ -105,11 +123,11 @@ test.describe('/stopwatch repeat / Pomodoro timer mode', () => {
   test('after N cycles complete, the final alert fires', async ({ page }) => {
     await enterTimerMode(page);
 
-    await page.getByTestId('timer-duration-input').fill('00:02');
+    await durationInput(page).fill('00:02');
 
-    await page.getByTestId('repeat-mode-toggle').check();
-    await page.getByTestId('repeat-rest-input').fill('00:01');
-    await page.getByTestId('repeat-count-input').fill('2');
+    await repeatToggle(page).check();
+    await restInput(page).fill('00:01');
+    await countInput(page).fill('2');
 
     await page.getByTestId('timer-primary-btn').click();
 
@@ -124,11 +142,11 @@ test.describe('/stopwatch repeat / Pomodoro timer mode', () => {
   test('Stop / Reset button works during any phase', async ({ page }) => {
     await enterTimerMode(page);
 
-    await page.getByTestId('timer-duration-input').fill('00:20');
+    await durationInput(page).fill('00:20');
 
-    await page.getByTestId('repeat-mode-toggle').check();
-    await page.getByTestId('repeat-rest-input').fill('00:20');
-    await page.getByTestId('repeat-count-input').fill('10');
+    await repeatToggle(page).check();
+    await restInput(page).fill('00:20');
+    await countInput(page).fill('10');
 
     await page.getByTestId('timer-primary-btn').click();
 
@@ -150,9 +168,9 @@ test.describe('/stopwatch repeat / Pomodoro timer mode', () => {
     await enterTimerMode(page);
 
     // Enable repeat mode and configure it
-    await page.getByTestId('repeat-mode-toggle').check();
-    await page.getByTestId('repeat-rest-input').fill('00:30');
-    await page.getByTestId('repeat-count-input').fill('5');
+    await repeatToggle(page).check();
+    await restInput(page).fill('00:30');
+    await countInput(page).fill('5');
 
     // Reload
     await page.reload();
@@ -161,20 +179,20 @@ test.describe('/stopwatch repeat / Pomodoro timer mode', () => {
     await expect(page.getByTestId('timer-mode')).toBeVisible();
 
     // Repeat toggle should still be checked
-    await expect(page.getByTestId('repeat-mode-toggle')).toBeChecked();
+    await expect(repeatToggle(page)).toBeChecked();
 
     // Inputs should still be visible and populated
     await expect(page.getByTestId('repeat-rest-input')).toBeVisible();
-    await expect(page.getByTestId('repeat-count-input')).toHaveValue('5');
+    await expect(countInput(page)).toHaveValue('5');
   });
 
   test('existing single-shot countdown is unaffected with repeat mode OFF', async ({ page }) => {
     await enterTimerMode(page);
 
     // Repeat toggle exists but is NOT enabled
-    await expect(page.getByTestId('repeat-mode-toggle')).not.toBeChecked();
+    await expect(repeatToggle(page)).not.toBeChecked();
 
-    await page.getByTestId('timer-duration-input').fill('00:02');
+    await durationInput(page).fill('00:02');
     await page.getByTestId('timer-primary-btn').click();
 
     // Should complete with the standard alert (not a repeat transition)

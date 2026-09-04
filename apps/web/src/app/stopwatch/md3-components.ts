@@ -44,3 +44,8 @@ import "@material/web/menu/menu-item.js";
 import "@material/web/divider/divider.js";
 import "@material/web/progress/circular-progress.js";
 import "@material/web/progress/linear-progress.js";
+// Added by #443 (CountdownTimer chrome): full switch component — the
+// `field/*` imports above are the low-level visual container only, not
+// the interactive `<input>`-backed component. `outlined-text-field.js` is
+// already covered above (added by #444's SoloSessionSwitcher chrome).
+import "@material/web/switch/switch.js";

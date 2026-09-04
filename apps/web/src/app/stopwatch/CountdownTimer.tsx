@@ -20,6 +20,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useWakeLock } from "./useWakeLock";
+// `stopwatch/layout.tsx` also imports this module, but that file is a
+// Server Component (it exports `metadata`), so its import only evaluates
+// during SSR and never reaches the browser bundle — `@material/web`'s
+// `customElements.define()` calls are guarded to no-op outside a DOM
+// environment, so the elements never actually register client-side from
+// that import alone. Re-importing it here (a "use client" module) is what
+// makes the registration actually reach the browser for this screen.
+import "./md3-components";
 import {
   readActiveTimerState,
   writeActiveTimerState,
@@ -30,6 +38,52 @@ import {
   writeActiveRepeatConfig,
   DEFAULT_TIMER_DURATION_MS,
 } from "./soloSessionStorage";
+
+// ---------------------------------------------------------------------------
+// MD3 web component JSX typings (#443)
+//
+// `@material/web` custom elements aren't known to TypeScript's JSX namespace
+// out of the box. React 19 has first-class support for custom elements: it
+// sets a prop as a DOM *property* when that property exists on the element
+// instance (e.g. `value`, `selected`), otherwise falls back to a plain HTML
+// attribute (e.g. `aria-label`, `data-testid`). Lowercase `on<event>` props
+// (e.g. `onchange`, `oninput`, `onfocusout`) are wired up as native
+// `addEventListener` calls with the *exact* event name — that's the
+// supported mechanism for a custom element's non-standard events, distinct
+// from React's camelCase synthetic `onChange`/`onInput` used on built-in
+// form elements. See react-dom's `setPropOnCustomElement`.
+//
+// The interfaces below are intentionally permissive (index signature) since
+// this is presentational markup, not domain logic — precise typing of every
+// MD3 attribute isn't worth the churn here.
+//
+// `md-outlined-button` and `md-outlined-text-field` are NOT re-declared
+// here: SoloSessionSwitcher.tsx (#444) already augments `JSX.IntrinsicElements`
+// for both (widened with an index signature so this file's extra attributes
+// — `type`, `inputMode`, `error`, `errorText`, `oninput`, `onfocusout`, etc.
+// — type-check too). TypeScript's declaration merging requires every module
+// augmentation of the same intrinsic element to agree on its exact type, so
+// redeclaring either tag with a different (even if compatible-in-spirit)
+// type here would fail the build with "Subsequent property declarations
+// must have the same type."
+// ---------------------------------------------------------------------------
+
+type Md3ElementProps = React.DetailedHTMLProps<
+  React.HTMLAttributes<HTMLElement>,
+  HTMLElement
+> & {
+  [prop: string]: unknown;
+};
+
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "md-filled-tonal-button": Md3ElementProps;
+      "md-switch": Md3ElementProps;
+      "md-outlined-card": Md3ElementProps;
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Persistence (#224 pattern — wall-clock anchor survives refresh/close)
@@ -1009,127 +1063,134 @@ export default function CountdownTimer() {
         </p>
       )}
 
-      {/* ── Duration input (idle only) ───────────────────────────────────── */}
+      {/* ── Duration / repeat settings (idle only) — MD3 chrome (#443) ──────
+          The instrument dial/pushers above and below stay untouched; only
+          this settings panel adopts @material/web components. */}
       {isIdle && (
-        <div className="mt-6 w-full" data-testid="timer-setup">
-          <div className="flex items-center gap-3">
-            <label className="text-xs font-black uppercase tracking-wide">
-              Duration
-              <span className="ml-1 font-semibold normal-case tracking-normal text-race-muted">
-                (MM:SS or H:MM:SS)
-              </span>
-            </label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={durationInput}
-              onChange={(e) => handleDurationChange(e.target.value)}
-              onBlur={() => {
-                setDurationInput(formatDuration(durationMs));
-                setInputError(false);
-              }}
-              className={`w-24 border-2 bg-white px-2 py-1 text-center font-black tabular-nums ${
-                inputError ? "border-race-red" : "border-race-ink"
-              }`}
-              aria-label="Timer duration (minutes and seconds, or hours, minutes and seconds)"
-              aria-invalid={inputError}
-              placeholder="05:00"
-              data-testid="timer-duration-input"
-            />
-          </div>
-
-          {/* ── Repeat / Pomodoro mode (ADR 0025) ─────────────────────────── */}
-          <div className="mt-4 border-t-2 border-race-ink pt-3">
-            <label className="flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-wide">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-[var(--race-blue-primary)]"
-                checked={repeatEnabled}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setRepeatEnabled(on);
-                  repeatEnabledRef.current = on;
-                  writeActiveRepeatConfig(
-                    on ? { restDurationMs, repeatCount } : null
-                  );
+        <md-outlined-card
+          className="mt-6 block w-full"
+          data-testid="timer-setup"
+        >
+          <div className="p-4">
+            <div className="flex items-center gap-3">
+              <md-outlined-text-field
+                className="w-32"
+                label="Duration (MM:SS or H:MM:SS)"
+                type="text"
+                inputMode="numeric"
+                value={durationInput}
+                error={inputError}
+                errorText="Use MM:SS or H:MM:SS"
+                placeholder="05:00"
+                oninput={(e: Event) => {
+                  handleDurationChange((e.target as HTMLInputElement).value);
                 }}
-                data-testid="repeat-mode-toggle"
-                aria-label="Enable repeat / Pomodoro mode"
+                onfocusout={() => {
+                  setDurationInput(formatDuration(durationMs));
+                  setInputError(false);
+                }}
+                aria-label="Timer duration (minutes and seconds, or hours, minutes and seconds)"
+                aria-invalid={inputError ? "true" : "false"}
+                data-testid="timer-duration-input"
               />
-              Repeat mode
-              <span className="ml-0.5 font-semibold normal-case tracking-normal text-race-muted">
-                (Pomodoro / intervals)
-              </span>
-            </label>
+            </div>
 
-            {repeatEnabled && (
-              <div className="mt-3 space-y-2 pl-6">
-                <div className="flex items-center gap-3">
-                  <label className="w-40 text-xs font-bold uppercase tracking-wide text-race-muted">
-                    Rest duration
-                    <span className="ml-1 font-semibold normal-case">
-                      (MM:SS)
-                    </span>
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={restInput}
-                    data-testid="repeat-rest-input"
-                    onChange={(e) => {
-                      setRestInput(e.target.value);
-                      const ms = parseDurationInput(e.target.value);
-                      if (ms !== null) {
-                        setRestDurationMs(ms);
-                        restDurationMsRef.current = ms;
-                        writeActiveRepeatConfig({ restDurationMs: ms, repeatCount });
-                      }
-                    }}
-                    onBlur={() => {
-                      const ms = parseDurationInput(restInput);
-                      setRestInput(formatDuration(ms !== null ? ms : restDurationMs));
-                    }}
-                    className="w-24 border-2 border-race-ink bg-white px-2 py-1 text-center font-black tabular-nums"
-                    aria-label="Rest phase duration (minutes and seconds)"
-                    placeholder="01:00"
-                  />
+            {/* ── Repeat / Pomodoro mode (ADR 0025) ─────────────────────────── */}
+            <div className="mt-4 border-t-2 border-race-ink pt-3">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-black uppercase tracking-wide">
+                <md-switch
+                  selected={repeatEnabled}
+                  onchange={(e: Event) => {
+                    const on = (e.target as HTMLInputElement & { selected: boolean })
+                      .selected;
+                    setRepeatEnabled(on);
+                    repeatEnabledRef.current = on;
+                    writeActiveRepeatConfig(
+                      on ? { restDurationMs, repeatCount } : null
+                    );
+                  }}
+                  data-testid="repeat-mode-toggle"
+                  aria-label="Enable repeat / Pomodoro mode"
+                />
+                Repeat mode
+                <span className="ml-0.5 font-semibold normal-case tracking-normal text-race-muted">
+                  (Pomodoro / intervals)
+                </span>
+              </label>
+
+              {repeatEnabled && (
+                <div className="mt-3 space-y-3 pl-1">
+                  <div className="flex items-center gap-3">
+                    <label className="w-32 text-xs font-bold uppercase tracking-wide text-race-muted">
+                      Rest duration
+                      <span className="ml-1 font-semibold normal-case">
+                        (MM:SS)
+                      </span>
+                    </label>
+                    <md-outlined-text-field
+                      className="w-28"
+                      type="text"
+                      inputMode="numeric"
+                      value={restInput}
+                      data-testid="repeat-rest-input"
+                      placeholder="01:00"
+                      oninput={(e: Event) => {
+                        const value = (e.target as HTMLInputElement).value;
+                        setRestInput(value);
+                        const ms = parseDurationInput(value);
+                        if (ms !== null) {
+                          setRestDurationMs(ms);
+                          restDurationMsRef.current = ms;
+                          writeActiveRepeatConfig({ restDurationMs: ms, repeatCount });
+                        }
+                      }}
+                      onfocusout={() => {
+                        const ms = parseDurationInput(restInput);
+                        setRestInput(formatDuration(ms !== null ? ms : restDurationMs));
+                      }}
+                      aria-label="Rest phase duration (minutes and seconds)"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="w-32 text-xs font-bold uppercase tracking-wide text-race-muted">
+                      Repeat count
+                      <span className="ml-1 font-semibold normal-case">
+                        (blank = ∞)
+                      </span>
+                    </label>
+                    <md-outlined-text-field
+                      className="w-28"
+                      type="text"
+                      inputMode="numeric"
+                      value={repeatCountInput}
+                      data-testid="repeat-count-input"
+                      placeholder="∞"
+                      oninput={(e: Event) => {
+                        const raw = (e.target as HTMLInputElement).value.replace(
+                          /[^0-9]/g,
+                          ""
+                        );
+                        setRepeatCountInput(raw);
+                        const n =
+                          raw === ""
+                            ? null
+                            : Math.max(1, Math.min(99, parseInt(raw, 10)));
+                        setRepeatCount(n);
+                        repeatCountRef.current = n;
+                        writeActiveRepeatConfig({ restDurationMs, repeatCount: n });
+                      }}
+                      aria-label="Number of repeat cycles (blank for infinite)"
+                    />
+                  </div>
+                  <p className="text-[11px] text-race-muted">
+                    Work phase uses the duration above. Rest phase follows automatically.
+                    Stop is always available to end the cycle.
+                  </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <label className="w-40 text-xs font-bold uppercase tracking-wide text-race-muted">
-                    Repeat count
-                    <span className="ml-1 font-semibold normal-case">
-                      (blank = ∞)
-                    </span>
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={repeatCountInput}
-                    data-testid="repeat-count-input"
-                    placeholder="∞"
-                    onChange={(e) => {
-                      const raw = e.target.value.replace(/[^0-9]/g, "");
-                      setRepeatCountInput(raw);
-                      const n =
-                        raw === ""
-                          ? null
-                          : Math.max(1, Math.min(99, parseInt(raw, 10)));
-                      setRepeatCount(n);
-                      repeatCountRef.current = n;
-                      writeActiveRepeatConfig({ restDurationMs, repeatCount: n });
-                    }}
-                    className="w-24 border-2 border-race-ink bg-white px-2 py-1 text-center font-black tabular-nums"
-                    aria-label="Number of repeat cycles (blank for infinite)"
-                  />
-                </div>
-                <p className="text-[11px] text-race-muted">
-                  Work phase uses the duration above. Rest phase follows automatically.
-                  Stop is always available to end the cycle.
-                </p>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        </md-outlined-card>
       )}
 
       {/* ── Pushers ──────────────────────────────────────────────────────── */}
@@ -1165,19 +1226,30 @@ export default function CountdownTimer() {
         </button>
       </div>
 
-      {/* ── On-demand fullscreen button (#422) ──────────────────────────── */}
-      <button
-        type="button"
-        className="race-action race-action--outline mt-4 text-xs"
-        onClick={toggleManualFs}
-        aria-pressed={manualFsMode}
-        aria-label={manualFsMode ? "Exit fullscreen timer" : "Enter fullscreen timer"}
-        data-testid="timer-fullscreen-btn"
-      >
-        {manualFsMode ? "Exit fullscreen" : "Fullscreen"}
-      </button>
+      {/* ── On-demand fullscreen button (#422) — MD3 chrome (#443) ────────── */}
+      {manualFsMode ? (
+        <md-filled-tonal-button
+          className="mt-4"
+          onClick={toggleManualFs}
+          aria-pressed={manualFsMode ? "true" : "false"}
+          aria-label="Exit fullscreen timer"
+          data-testid="timer-fullscreen-btn"
+        >
+          Exit fullscreen
+        </md-filled-tonal-button>
+      ) : (
+        <md-outlined-button
+          className="mt-4"
+          onClick={toggleManualFs}
+          aria-pressed={manualFsMode ? "true" : "false"}
+          aria-label="Enter fullscreen timer"
+          data-testid="timer-fullscreen-btn"
+        >
+          Fullscreen
+        </md-outlined-button>
+      )}
 
-      {/* ── Alert settings (#227 / #420) ─────────────────────────────────── */}
+      {/* ── Alert settings (#227 / #420) — MD3 chrome (#443) ──────────────── */}
       <section
         className="mt-8 w-full border-t-2 border-race-ink pt-4"
         aria-label="Timer alert settings"
@@ -1186,23 +1258,29 @@ export default function CountdownTimer() {
 
         <label className="flex items-center justify-between gap-3 text-sm font-semibold">
           <span>Sound on completion</span>
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-[var(--race-blue-primary)]"
-            checked={soundOn}
-            onChange={(e) => handleSoundToggle(e.target.checked)}
+          <md-switch
+            selected={soundOn}
+            onchange={(e: Event) =>
+              handleSoundToggle(
+                (e.target as HTMLInputElement & { selected: boolean }).selected
+              )
+            }
             data-testid="timer-sound-toggle"
+            aria-label="Sound on completion"
           />
         </label>
 
         <label className="mt-3 flex items-center justify-between gap-3 text-sm font-semibold">
           <span>Vibration on completion</span>
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-[var(--race-blue-primary)]"
-            checked={vibrationOn}
-            onChange={(e) => handleVibrationToggle(e.target.checked)}
+          <md-switch
+            selected={vibrationOn}
+            onchange={(e: Event) =>
+              handleVibrationToggle(
+                (e.target as HTMLInputElement & { selected: boolean }).selected
+              )
+            }
             data-testid="timer-vibration-toggle"
+            aria-label="Vibration on completion"
           />
         </label>
 
