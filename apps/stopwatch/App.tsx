@@ -4633,8 +4633,10 @@ function TimerScreen({
   }, []);
 
   const fireAlarmPulse = useCallback(() => {
-    // Haptic always — vibrate-only is the completion signal with sound off.
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    // Haptic only when vibration is enabled (default on).
+    if (cueRef.current.vibrationEnabled) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    }
     if (cueRef.current.soundEnabled) playCue("alarm");
   }, [cueRef]);
 
@@ -5042,7 +5044,7 @@ function TimerScreen({
               />
             </View>
           </View>
-          <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
+          <View style={s.cueRow}>
             <Text style={s.cueLabel}>SOUND ON COMPLETION</Text>
             <CueSwitch
               on={cueSettings.soundEnabled}
@@ -5052,10 +5054,27 @@ function TimerScreen({
               }
             />
           </View>
+          <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
+            <Text style={s.cueLabel}>VIBRATION ON COMPLETION</Text>
+            <CueSwitch
+              on={cueSettings.vibrationEnabled}
+              label="Vibration on timer completion"
+              onToggle={() =>
+                updateCueSettings({ vibrationEnabled: !cueSettings.vibrationEnabled })
+              }
+            />
+          </View>
           <Text style={s.cueHint}>
             On completion the timer resets to the set value, ready to restart
             with one tap. The alert repeats a few times, then goes quiet — one
-            tap dismisses it. Sound off = vibrate only.
+            tap dismisses it.{"\n"}
+            {!cueSettings.soundEnabled && !cueSettings.vibrationEnabled
+              ? "Both sound and vibration are off — watch for the visual alert (the dial flashes)."
+              : !cueSettings.soundEnabled
+              ? "Sound off — vibration only."
+              : !cueSettings.vibrationEnabled
+              ? "Vibration off — sound only."
+              : null}
           </Text>
         </View>
       )}

@@ -425,8 +425,8 @@ export default function HelpPage() {
               the timer reaches zero it <strong>resets to the value you set</strong>,
               ready to restart with a single tap — ideal for rest intervals,
               kitchen timing, or study blocks. The completion alert (sound if
-              enabled under <strong>Sound</strong>, plus vibration where
-              supported) repeats a few times and then goes quiet on its own;
+               enabled, plus vibration if enabled, where supported — both
+               toggleable under <strong>Alert</strong>) repeats a few times and then goes quiet on its own;
               one tap on <strong>Dismiss</strong> (or <strong>Start</strong>)
               silences it immediately. A running timer survives tab switches,
               page refreshes, and closing the browser — it counts against a
@@ -453,7 +453,7 @@ export default function HelpPage() {
             </li>
             <li>
               <strong>Sound cues</strong> are optional and off by default.
-              Under the <strong>Sound</strong> section below the stopwatch,
+              Under the <strong>Alert</strong> section below the stopwatch,
               enable <strong>Beep on start / stop / lap</strong> for a short
               audible confirmation of each press. The beeps are synthesized in
               your browser — nothing is downloaded and no permission is needed.
@@ -470,8 +470,8 @@ export default function HelpPage() {
             <li>
               In the Android Stopwatch app, the same options live behind the{" "}
               <strong>♪</strong> button in the top bar — for both the solo
-              stopwatch and shared sessions — and haptic feedback stays on
-              regardless. Cues are guaranteed while the app is on screen; with
+              stopwatch and shared sessions — and haptic feedback follows the
+               Vibration toggle in the ♪ panel. Cues are guaranteed while the app is on screen; with
               the app backgrounded or the phone locked they are best-effort,
               as the system may pause the app&apos;s timers.
             </li>
