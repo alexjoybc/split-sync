@@ -431,9 +431,9 @@ export default function HelpPage() {
               silences it immediately. A running timer survives tab switches,
               page refreshes, and closing the browser — it counts against a
               wall-clock anchor and is restored when you come back. The same
-              timer mode exists in the Android Stopwatch app. There is
-              deliberately only <strong>one</strong> timer — SplitSync does not
-              do multi-timer boards.
+               timer mode exists in the Android Stopwatch app. A session can
+               contain multiple independent timer rows when you need to time
+               more than one activity.
               <ul className="mt-2 list-disc space-y-1 pl-4">
                 <li>
                   <strong>Repeat mode (Pomodoro / intervals):</strong> enable
@@ -531,11 +531,11 @@ export default function HelpPage() {
               restored even if the app is killed or the phone reboots.
             </li>
             <li>
-              <strong>Multiple sessions (web only):</strong> tap the session
+               <strong>Sessions and timers (web only):</strong> tap the session
               name in the top-right corner of the stopwatch header to open the{" "}
               <strong>Sessions</strong> panel. You can keep up to{" "}
-              <strong>10</strong> independent solo sessions on this device — each
-              with its own name, mode (stopwatch or timer), and saved state.
+               <strong>10</strong> independent local sessions on this device — each
+               with its own timer rows, names, modes (stopwatch or timer), and saved state.
               Switching sessions immediately loads the other session exactly as
               you left it; a running session is preserved in the background and
               picks up from the correct wall-clock time when you switch back.
@@ -557,7 +557,7 @@ export default function HelpPage() {
                   persists across browser restarts.
                 </li>
                 <li>
-                  <strong>Delete:</strong> click the trash icon, then confirm
+                   <strong>Delete:</strong> click the trash icon, then confirm
                   with <strong>Yes</strong>. A confirmation is always required.
                   Deleting the active session automatically switches to the
                   next available one (or creates a fresh session if none
@@ -571,8 +571,13 @@ export default function HelpPage() {
                   Sessions are stored on this device only (no cloud sync).
                   Clearing your browser&apos;s site data will remove them.
                 </li>
-              </ul>
-            </li>
+               </ul>
+               Within a session, use <strong>+ Add timer</strong> to add a row.
+               Give each row a name, drag its handle to reorder it, and use its
+               delete control (then confirm) to remove it. Each row has its own
+               Start, Lap, Stop, Reset, and countdown/repeat settings; changing
+               one never changes another timer.
+             </li>
           </ul>
         </section>
 
@@ -584,20 +589,20 @@ export default function HelpPage() {
             </h2>
           </div>
           <p className="mt-4 text-sm font-semibold text-race-ink">
-            The SplitSync Stopwatch app (Android) supports shared timing sessions
-            — multiple devices timing the same activity in real time, all seeing
-            the same clock and lap splits. Like the solo stopwatch, it is free
+             The SplitSync Stopwatch supports shared sessions — multiple devices
+             collaboratively controlling the same named timer rows in real time.
+             Like the local stopwatch, it is free
             with no ads and no subscription; only the person <em>creating</em> a
             session signs in, and everyone else joins with just a display name.
           </p>
           <ul className="mt-4 list-disc space-y-2 pl-5 text-sm font-semibold text-race-ink">
             <li>
-              <strong>Creating a session</strong> requires a SplitSync account.
+               <strong>Sharing a whole session</strong> requires a SplitSync account.
               Sign in with email/password or Google, then click{" "}
-              <strong>Time together</strong> on the stopwatch page (web) or tap{" "}
-              <strong>NEW SESSION</strong> in the app. Name the session, enter a
-              display name for yourself, and share the link — joiners do{" "}
-              <em>not</em> need an account.
+               <strong>Share session</strong> from a local session (or create a
+               shared session), enter a display name, and share the link. Every
+               timer row and its recorded history is shared; joiners do <em>not</em>
+               need an account.
             </li>
             <li>
               The share link looks like{" "}
@@ -615,17 +620,16 @@ export default function HelpPage() {
               It has no timing controls and does not use a participant slot.
             </li>
             <li>
-              Any participant can press <strong>START</strong>, <strong>LAP</strong>,
-              or <strong>STOP</strong>. All devices share a server-anchored clock so
-              everyone sees the same elapsed time.
+               Any participant can press <strong>START</strong>, <strong>LAP</strong>,
+               <strong>STOP</strong>, or <strong>RESET</strong> on any timer. Each
+               row is independent, while every participant sees the same session
+               and updates. Only the session creator can add, rename, reorder, or
+               delete rows.
             </li>
             <li>
-              The <strong>lap table</strong> shows each split with the name of who
-              pressed LAP. The <strong>participant strip</strong> shows who is in the
-              session.
-            </li>
-            <li>
-              Only the <strong>session creator</strong> (★) can Reset the clock.
+               Each timer&apos;s <strong>lap table</strong> shows its splits and who
+               pressed LAP. The <strong>participant strip</strong> shows who is in
+               the session.
             </li>
             <li>
               <strong>Closing a session</strong> (creator only, from{" "}

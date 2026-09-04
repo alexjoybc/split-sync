@@ -200,61 +200,61 @@ Migration 00004 introduces the ownership policies. Migration 00005 enforces the 
 
 `apps/web/src/lib/useEventAccess.ts` resolves, for the signed-in user and one event, whether they are the `owner`, an `event_members` role, or have no access — this drives both the event setup page and the scorer page. It is a UX convenience only; the RLS policies above are the actual enforcement boundary.
 
-## Casual Stopwatch
+## Shared Stopwatch
 
-The casual stopwatch is the **fourth surface**, independent of the three event-management surfaces (Spectator, Organizer, Mobile tracker). It lives in `apps/stopwatch` (native Expo app, `org.splitsync.stopwatch`) and `apps/web/src/app/stopwatch` (web entry point). See ADR 0017 for full rationale.
+The shared stopwatch is the **fourth surface**, independent of the three event-management surfaces (Spectator, Organizer, Mobile tracker). It lives in `apps/stopwatch` (native Expo app, `org.splitsync.stopwatch`) and `apps/web/src/app/stopwatch` (web entry point). A session contains one or more independently controlled timers. See ADR 0027.
 
 ### Data model
 
-Three tables support this surface (migration `20260830000001_casual_stopwatch_sessions.sql`):
+Three tables support shared sessions (migration tracked in #463):
 
 | Table | Purpose |
 | --- | --- |
-| `casual_sessions` | A timed session: owner, human-readable name, unique 6-char join code, status (`waiting` / `running` / `stopped` / `closed`), expiry, participant cap, and server-anchored T0 |
-| `casual_session_participants` | Everyone in a session — owner plus joiners. `client_id` UUID is the idempotency key for re-join |
-| `casual_session_events` | The event log (`start` / `lap` / `stop` / `reset`). Client-generated `id` is the idempotency key. Elapsed time and lap splits are **always derived** from this log — never persisted |
+| `shared_sessions` | A shared session: owner, human-readable name, unique 6-character join code, status (`waiting` / `running` / `stopped` / `closed`), expiry, event sequence, and cached JSON state |
+| `shared_session_participants` | Everyone in a session — owner plus joiners. `(session_id, client_id)` is idempotent for re-join |
+| `shared_session_events` | The append-only event log. Client-generated `id` is the idempotency key; `timer_id` identifies a timer or is null for session-level events. The state cache is a derived read optimization; elapsed time, laps, splits, and timer configuration are reduced from this log |
 
 ### Auth and access control
 
-- **Creator must be authenticated.** `create_casual_session(p_name, p_display_name)` validates `auth.uid() IS NOT NULL` inside the security-definer RPC and stores `auth.uid()::text` as `casual_sessions.owner_id` — the same pattern as `events.owner_id`.
-- **Joiners are anonymous.** `join_casual_session(code, display_name, client_id)` is callable by the anon role; no account required.
-- **No direct table grants for writes.** RLS is enabled on all three tables as defense in depth. `casual_sessions` grants `select` to `authenticated` (scoped by RLS to `owner_id = auth.uid()::text`) so a creator's own "My Sessions" list can query it directly; all writes and all anon access flow through security-definer RPCs:
+- **Creator must be authenticated.** `create_shared_session(name, display_name)` validates `auth.uid() IS NOT NULL` in a security-definer RPC and stores `auth.uid()::text` as `shared_sessions.owner_id` — the same pattern as `events.owner_id`.
+- **Joiners are anonymous.** `join_shared_session(code, display_name, client_id)` is callable by the anon role; no account is required.
+- **No direct anon table grants.** RLS is enabled on all three tables as defense in depth. Owners may read their own session list through owner-scoped RLS; creation, joining, event recording, state reads, lifecycle writes, and public views flow through security-definer RPCs:
 
 | RPC | Caller | Description |
 | --- | --- | --- |
-| `create_casual_session(name, display_name)` | Authenticated | Creates session + owner participant; generates unique 6-char code |
-| `join_casual_session(code, display_name, client_id)` | Anon | Validates code, checks expiry/cap/status, creates participant row (idempotent) |
-| `record_session_event(session_id, participant_id, event_type, client_recorded_at, client_event_id)` | Anon | Validates membership, enforces concurrency rules, upserts event (idempotent on client id) |
-| `get_session_state(session_id, participant_id)` | Anon | Returns full session + participants + events for catch-up on reconnect |
-| `get_casual_session_results(code)` | Anon | Read-only results for **terminal** sessions (stopped, closed, or expired) — session header, participant display names, and the ordered event log. Serves the `/stopwatch/s/<code>/results` permalink (migration `20260830000003`, ADR 0022) |
-| `get_casual_session_live_view(code)` | Anon | Read-only sanitized state for non-expired sessions. Serves `/stopwatch/s/<code>/live` and returns no bearer identifiers (migration `20260831000001`, ADR 0023) |
-| `close_casual_session(session_id)` | Authenticated (owner only) | Sets status to `closed`, a terminal state that rejects new joins/events but keeps results readable (migration `20260901000001`, ADR 0024) |
-| `delete_casual_session(session_id)` | Authenticated (owner only) | Hard-deletes the session; cascades to participants and events (migration `20260901000001`, ADR 0024) |
+| `create_shared_session(name, display_name)` | Authenticated | Creates a session and owner participant; generates a unique 6-character code |
+| `join_shared_session(code, display_name, client_id)` | Anon | Validates code, expiry/cap/status, and creates an idempotent participant row |
+| `record_session_event(session_id, participant_id, timer_id, type, payload, client_recorded_at, client_event_id)` | Anon participant | Validates membership, appends an idempotent event, and applies the reducer to cached state atomically |
+| `get_session_state(session_id, participant_id)` | Anon participant | Returns the current cached session state and participant list for reconnect/catch-up |
+| `close_shared_session(session_id)` | Authenticated owner | Sets the session to `closed`, rejecting joins/events while preserving results |
+| `delete_shared_session(session_id)` | Authenticated owner | Hard-deletes a session and cascading participants/events |
+| `get_shared_session_results(code)` | Anon | Read-only terminal-session results at `/stopwatch/s/<code>/results` |
+| `get_shared_session_live_view(code)` | Anon | Sanitized non-expired live view at `/stopwatch/s/<code>/live`, without bearer identifiers |
 
 The `participant_id` UUID returned on join acts as a bearer token: calls without a valid `(session_id, participant_id)` pair are rejected. The owner RLS policy (`owner_id = auth.uid()::text`) allows authenticated creators to list their own sessions directly.
 
 ### Results permalink and event-log retention
 
-Once a session is stopped, closed, or its 4-hour join expiry passes, its results are readable by anyone holding the code at `/stopwatch/s/<code>/results` — no sign-in, read-only. `get_casual_session_results` ignores `expires_at` for reading (expiry gates joining, not remembering), never returns participant ids (they are the write bearer tokens — actor names are resolved server-side onto each event), and raises the same generic error for unknown codes and still-live sessions so the code space cannot be probed. Retention of `casual_session_events` beyond expiry is a contract: any future cleanup job must keep stopped sessions and their events readable (see ADR 0022). Lap splits, totals, and best laps remain derived client-side from the event log; CSV/copy export happens entirely in the client.
+Once a session is stopped, closed, or its join expiry passes, results are readable by anyone holding the code at `/stopwatch/s/<code>/results` — no sign-in, read-only. `get_shared_session_results` never returns participant bearer identifiers and uses the same generic error for unknown and still-live codes. The ordered event log remains sufficient to derive each timer's laps, splits, totals, and configuration; the client performs CSV/copy export.
 
 ### Event log is source of truth
 
-Elapsed time and lap splits are computed entirely on the client from the event log:
+Clients reduce the ordered event log to reconstruct every timer and derive elapsed time and splits. `shared_sessions.state` is a server-maintained cache for fast reads, not a mutable source of truth. A local session can become shared by uploading its complete local event log through `record_session_event`, preserving its historical timestamps and all timer/session changes.
 
 ```
 elapsed_ms = (Date.now() + offset_ms) - t0_server.getTime()
 split_ms   = client_recorded_at[lap_N] - client_recorded_at[lap_N-1]
 ```
 
-`t0_server` is set atomically by the server when the first `start` event is accepted and is never changed thereafter. No `standings`, `laps`, or `elapsed` column is ever persisted — this mirrors domain invariant #2.
+No elapsed time, lap split, or timer state is directly written by a client as an authoritative value; event reduction remains the truth.
 
 ### Realtime
 
-`casual_session_events`, `casual_session_participants`, and `casual_sessions` are added to the `supabase_realtime` publication (the latter added in migration `20260901000001`, so an owner's "My Sessions" list reflects a close/delete without a manual refresh). The Broadcast channel key is `stopwatch:<code>` (e.g., `stopwatch:AB3K9X`). All participants in the same session subscribe to the same channel. The anon role can use Broadcast channels without table SELECT grants, which is why Broadcast is preferred over `postgres_changes` for in-session state (session_event, participant_joined/left, sync_request/response, and — per ADR 0024 — session_closed/session_deleted).
+`shared_session_events` and `shared_session_participants` are in the `supabase_realtime` publication. Participants subscribe to `session:<code>` (for example, `session:AB3K9X`). A participant broadcasts an accepted **event**, not a full state snapshot; each receiver applies the same reducer. Clients use `get_session_state` to catch up after a gap or reconnect. Broadcast is not an authorization boundary.
 
-The public live-view clients treat Broadcast only as an invalidation signal and re-fetch the sanitized live-view RPC; Broadcast payloads are not an authorization boundary. Viewers have no participant record and do not count toward `participant_cap`.
+Public live viewers treat Broadcast only as an invalidation signal and re-fetch `get_shared_session_live_view`; they have no participant record and do not count toward the participant cap.
 
-Migration `20260829000001_realtime_publication.sql` first enabled the publication; `20260830000001_casual_stopwatch_sessions.sql` adds the three casual-stopwatch tables.
+Migration `20260829000001_realtime_publication.sql` first enabled the publication; issue #463 adds the shared-session tables and publication members.
 
 ### Deep links
 
@@ -264,7 +264,7 @@ Migration `20260829000001_realtime_publication.sql` first enabled the publicatio
 | Web/native live view | `https://splitsync.org/stopwatch/s/<code>/live` |
 | Android native scheme | `org.splitsync.stopwatch://s/<code>` |
 
-Both link directly into the Join screen. The native app registers an Android intent filter for the HTTPS pattern (App Links / `autoVerify: true`); `assetlinks.json` at `apps/web/public/.well-known/assetlinks.json` must include the app's signing-certificate SHA-256 to enable verified deep links. The `<code>` is the 6-character alphanumeric join code stored in `casual_sessions.code`.
+Both link directly into the Join screen. The native app registers an Android intent filter for the HTTPS pattern (App Links / `autoVerify: true`); `assetlinks.json` at `apps/web/public/.well-known/assetlinks.json` must include the app's signing-certificate SHA-256 to enable verified deep links. The `<code>` is the 6-character alphanumeric join code stored in `shared_sessions.code`.
 
 ### Local solo sessions (client-side only)
 
@@ -272,20 +272,20 @@ In addition to the Supabase-backed shared session model above, the stopwatch sur
 
 | Property | Local solo session | Supabase-backed shared session |
 | --- | --- | --- |
-| Storage | `localStorage` / IndexedDB on web; `AsyncStorage` on native | `casual_sessions`, `casual_session_events`, `casual_session_participants` tables |
+| Storage | `localStorage` / IndexedDB on web; `AsyncStorage` on native | `shared_sessions`, `shared_session_events`, `shared_session_participants` tables |
 | Auth required | No — no account, no sign-in | Creator must be authenticated; joiners are anonymous |
-| Shareable | No — device-private | Yes — via 6-char code / HTTPS deep link |
+| Shareable | Yes — creator can upload its complete event log to make it shared | Yes — via 6-character code / HTTPS deep link |
 | Participants | Single user only | Multiple devices, real-time Broadcast |
 | Max sessions per device | 10 (enforced in UI) | Unlimited (per account) |
 | Persistence boundary | Cleared by browser site-data reset / AsyncStorage wipe | Server-retained; results permalink survives after session expiry |
 
 **Key invariants:**
 
-- A local solo session is never written to Supabase. No migration, no RLS policy, no RPC.
+- A local session stays device-private until its creator explicitly shares it; sharing uploads its complete event log to a new shared session.
 - Each session persists its own elapsed time, running/paused status, mode (stopwatch or countdown), and lap list entirely in device storage.
 - A running local session anchors to a wall-clock timestamp so it keeps counting correctly across tab switches, page refreshes, and browser restarts.
 - The session cap (10) is enforced purely in the client. It limits worst-case local storage to roughly 10 × (metadata + lap array) — well under 1 MB for up to ~500 laps per session.
-- Local solo sessions are wholly distinct from the casual shared-session model (ADR 0017, ADR 0022, ADR 0023). AGENTS.md's stopwatch surface description ("Creator owns session; participants join by code/link; event log is truth; no roster") refers to shared sessions and is unaffected.
+- Local and shared sessions use the same event-sourced model; only shared sessions are subject to Supabase RLS/RPC access control.
 
 ## UI System
 
