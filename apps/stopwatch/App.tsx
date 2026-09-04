@@ -1167,6 +1167,115 @@ function LogoFooter() {
   );
 }
 
+// ── Fullscreen overlay (#422) ──────────────────────────────────────────────────
+/**
+ * A full-screen, high-contrast modal overlay displaying large elapsed/remaining
+ * digits. Usable at a distance (propped-up phone during a workout). Dismissed
+ * by a tap anywhere on the screen or the Android back button.
+ *
+ * The overlay is intentionally a React Native `Modal` (not a View on top of
+ * the screen) so the OS bars (status/navigation) are hidden via `StatusBar`.
+ */
+function FullscreenOverlay({
+  visible,
+  onDismiss,
+  ms,
+  label,
+  subLabel,
+  alerting,
+  fontsLoaded,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  ms: number;
+  label: string;
+  subLabel: string;
+  alerting?: boolean;
+  fontsLoaded: boolean;
+}) {
+  const { width, height } = useWindowDimensions();
+  // Choose a digit size that fills the long axis comfortably (readable from ~3m)
+  const longAxis = Math.max(width, height);
+  const shortAxis = Math.min(width, height);
+  const mainSize = Math.min(Math.floor(longAxis * 0.18), Math.floor(shortAxis * 0.35));
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={false}
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onDismiss}
+    >
+      <StatusBar barStyle="light-content" backgroundColor={C.black} />
+      <Pressable
+        style={{
+          flex: 1,
+          backgroundColor: C.black,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingHorizontal: 24,
+        }}
+        onPress={onDismiss}
+        accessible={false}
+      >
+        {/* Readable state label above the digits */}
+        <Text
+          style={{
+            color: alerting ? C.red : C.casingMuted,
+            fontSize: 11,
+            fontWeight: "900",
+            letterSpacing: 3,
+            textTransform: "uppercase",
+            marginBottom: 16,
+          }}
+          accessibilityRole="text"
+        >
+          {label}
+        </Text>
+
+        {/* Large LCD digits */}
+        <LcdDisplay
+          ms={ms}
+          mainSize={mainSize}
+          color={alerting ? C.red : C.lcd}
+          dimColor={alerting ? C.btnRedLo : C.lcdDim}
+          fontLoaded={fontsLoaded}
+        />
+
+        {/* Sub-label (e.g. "Counting down", "Paused") */}
+        <Text
+          style={{
+            color: alerting ? C.red : C.casingMuted,
+            fontSize: 11,
+            fontWeight: "700",
+            letterSpacing: 2,
+            textTransform: "uppercase",
+            marginTop: 20,
+          }}
+          accessibilityRole="text"
+        >
+          {subLabel}
+        </Text>
+
+        {/* Dismiss hint */}
+        <Text
+          style={{
+            color: C.dimGray,
+            fontSize: 10,
+            fontWeight: "600",
+            letterSpacing: 1.5,
+            textTransform: "uppercase",
+            marginTop: 40,
+          }}
+        >
+          Tap anywhere or press back to exit
+        </Text>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ── Screen: Loading ────────────────────────────────────────────────────────────
 function LoadingScreen() {
   return (
@@ -3424,6 +3533,9 @@ function SoloScreen({
   useKeepAwake();
   const { width, height } = useWindowDimensions();
 
+  // Fullscreen overlay state (#422)
+  const [fsVisible, setFsVisible] = useState(false);
+
   type SwState = "idle" | "countdown" | "running" | "paused";
 
   const [swState, setSw] = useState<SwState>("idle");
@@ -3919,6 +4031,13 @@ function SoloScreen({
           variant={cueSettings.soundEnabled || cueSettings.targetEnabled ? "yellow" : "grey"}
           accessibilityLabel="Sound cue settings"
         />
+        <TopBarButton
+          label="FULL"
+          onPress={() => setFsVisible(true)}
+          variant="grey"
+          accessibilityLabel="Open fullscreen stopwatch view"
+          testID="solo-fullscreen-btn"
+        />
         <TopBarStatus
           label={
             isRunning ? "● RUN"
@@ -3929,6 +4048,26 @@ function SoloScreen({
           variant={isRunning || isCountdown || isPaused ? "yellow" : "grey"}
         />
       </View>
+
+      {/* ── Fullscreen overlay (#422) ── */}
+      <FullscreenOverlay
+        visible={fsVisible}
+        onDismiss={() => setFsVisible(false)}
+        ms={sessionMs}
+        label={
+          isRunning ? "Stopwatch · Running"
+            : isPaused ? "Stopwatch · Paused"
+            : isCountdown ? "Stopwatch · Get ready"
+            : "Stopwatch"
+        }
+        subLabel={
+          isRunning ? `Lap ${laps.length + 1} · ${fmtCompact(lapMs)}`
+            : isPaused ? "Paused"
+            : isIdle ? "Ready"
+            : `${countdownSec}s`
+        }
+        fontsLoaded={fontsLoaded}
+      />
 
       {/* ── Sound cue settings (#227) ── */}
       {showCuePanel && (
@@ -4344,6 +4483,9 @@ function TimerScreen({
   useKeepAwake();
   const { width, height } = useWindowDimensions();
 
+  // Fullscreen overlay state (#422) — also auto-opens when alerting
+  const [fsVisible, setFsVisible] = useState(false);
+
   type TimerState = "idle" | "running" | "paused" | "alerting";
 
   const [timerState, setTimerState] = useState<TimerState>("idle");
@@ -4458,6 +4600,8 @@ function TimerScreen({
     remainingRef.current = durationRef.current;
     setRemainingMs(durationRef.current);
     setTimerState("alerting");
+    // Auto-enter fullscreen so the alert is visible from a distance (#422).
+    setFsVisible(true);
     clearPersistedTimer();
     startAlarm();
   }, [stopTick, clearPersistedTimer, startAlarm]);
@@ -4636,6 +4780,13 @@ function TimerScreen({
           variant="blue"
           accessibilityLabel="Open sessions list"
         />
+        <TopBarButton
+          label="FULL"
+          onPress={() => setFsVisible(true)}
+          variant="grey"
+          accessibilityLabel="Open fullscreen timer view"
+          testID="timer-fullscreen-btn"
+        />
         <TopBarStatus
           label={
             isRunning ? "▼ RUN"
@@ -4646,6 +4797,25 @@ function TimerScreen({
           variant={isRunning || isAlerting || isPaused ? "yellow" : "grey"}
         />
       </View>
+
+      {/* ── Fullscreen overlay (#422) ── */}
+      <FullscreenOverlay
+        visible={fsVisible}
+        onDismiss={() => setFsVisible(false)}
+        ms={remainingMs}
+        label={
+          isAlerting ? "Timer · Time's Up!"
+            : isRunning ? "Timer · Counting Down"
+            : isPaused ? "Timer · Paused"
+            : "Countdown Timer"
+        }
+        subLabel={
+          isAlerting ? `Reset to ${fmtParts(durationMs).main}`
+            : `Set: ${fmtParts(durationMs).main}`
+        }
+        alerting={isAlerting}
+        fontsLoaded={fontsLoaded}
+      />
 
       {/* ── LCD instrument panel — remaining time ── */}
       <View style={s.instrument}>
