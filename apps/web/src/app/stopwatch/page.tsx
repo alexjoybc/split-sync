@@ -127,7 +127,7 @@ function generateUUID(): string {
 // (apps/web/src/app/stopwatch/s/[code]/page.tsx) so the creator's own
 // browser recognizes them as the existing owner participant instead of
 // falling through to JoinForm (#332). `client_id` is not returned by
-// create_casual_session (the owner row's client_id is generated
+// create_shared_session (the owner row's client_id is generated
 // server-side and is not needed for local matching — isOwner is derived
 // from participant_id), so a fresh local UUID is stored as a placeholder.
 interface StoredParticipant {
@@ -203,7 +203,7 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
     setLoading(true);
     setError(null);
     try {
-      const { data, error: rpcError } = await supabase.rpc("create_casual_session", {
+      const { data, error: rpcError } = await supabase.rpc("create_shared_session", {
         p_name: name.trim(),
         p_display_name: displayName.trim(),
       });
@@ -897,7 +897,7 @@ export default function StopwatchPage() {
 
   const fetchSessions = useCallback(async () => {
     const { data, error } = await supabase
-      .from("casual_sessions")
+      .from("shared_sessions")
       .select("id, code, name, status, created_at")
       .order("created_at", { ascending: false })
       .limit(20);
@@ -916,7 +916,7 @@ export default function StopwatchPage() {
         return;
       }
       setSessionActionPendingId(session.id);
-      const { error } = await supabase.rpc("close_casual_session", {
+      const { error } = await supabase.rpc("close_shared_session", {
         p_session_id: session.id,
       });
       if (!error) {
@@ -939,7 +939,7 @@ export default function StopwatchPage() {
         return;
       }
       setSessionActionPendingId(session.id);
-      const { error } = await supabase.rpc("delete_casual_session", {
+      const { error } = await supabase.rpc("delete_shared_session", {
         p_session_id: session.id,
       });
       if (!error) {
@@ -964,13 +964,13 @@ export default function StopwatchPage() {
 
     // Real-time subscription for live status updates
     const channel = supabase
-      .channel("casual_sessions_owner")
+      .channel("shared_sessions_owner")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "casual_sessions",
+          table: "shared_sessions",
         },
         () => {
           fetchSessions();

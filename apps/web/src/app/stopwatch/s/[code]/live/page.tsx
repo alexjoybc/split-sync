@@ -50,7 +50,7 @@ export default function LiveSessionView({ params }: { params: Promise<{ code: st
   const payloadRef = useRef<LivePayload | null>(null);
 
   const refresh = async () => {
-    const { data, error } = await supabase.rpc("get_casual_session_live_view", { p_code: upperCode });
+    const { data, error } = await supabase.rpc("get_shared_session_live_view", { p_code: upperCode });
     if (error || !data) {
       setUnavailable(true);
       return;

@@ -177,7 +177,7 @@ function JoinForm({ code, sessionName, onJoined }: JoinFormProps) {
     setError(null);
     const clientId = generateUUID();
     try {
-      const { data, error: rpcError } = await supabase.rpc("join_casual_session", {
+      const { data, error: rpcError } = await supabase.rpc("join_shared_session", {
         p_code: code,
         p_display_name: displayName.trim(),
         p_client_id: clientId,
@@ -198,7 +198,7 @@ function JoinForm({ code, sessionName, onJoined }: JoinFormProps) {
       onJoined(stored);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      // join_casual_session raises one generic SESSION_NOT_JOINABLE for
+      // join_shared_session raises one generic SESSION_NOT_JOINABLE for
       // not-found, expired, stopped, and closed sessions (to avoid letting
       // the error message probe the code space for in-progress sessions).
       if (msg.includes("SESSION_NOT_JOINABLE")) {
@@ -314,8 +314,8 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
   const clockOffsetRef = useRef(0);
 
   // Local clock-sync anchor: record_session_event returns a row from
-  // casual_session_events, which has no t0_server column (that lives on
-  // casual_sessions only) — so a broadcast "start" event's t0_server is
+  // shared_session_events, which has no t0_server column (that lives on
+  // shared_sessions only) — so a broadcast "start" event's t0_server is
   // normally absent. Mirrors the native client's clientT0Ref (#339): never
   // gate the running tick loop on t0_server being present, or Start
   // silently does nothing on this device while the badge still says "Live"
@@ -610,7 +610,7 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
       return;
     }
     setActionError(null);
-    const { error: rpcError } = await supabase.rpc("close_casual_session", {
+    const { error: rpcError } = await supabase.rpc("close_shared_session", {
       p_session_id: stored.session_id,
     });
     if (rpcError) {
@@ -630,7 +630,7 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
       return;
     }
     setActionError(null);
-    const { error: rpcError } = await supabase.rpc("delete_casual_session", {
+    const { error: rpcError } = await supabase.rpc("delete_shared_session", {
       p_session_id: stored.session_id,
     });
     if (rpcError) {
@@ -930,7 +930,7 @@ export default function SharedSessionPage({ params }: PageProps) {
         });
     } else {
       // No stored participant — show join form directly.
-      // Session name is surfaced after joining via join_casual_session response.
+      // Session name is surfaced after joining via join_shared_session response.
       setPhase("join");
     }
   }, [upperCode]);
