@@ -44,7 +44,14 @@ import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { PaperProvider } from "react-native-paper";
+import {
+  Appbar,
+  Button,
+  Chip,
+  PaperProvider,
+  Surface,
+  TouchableRipple,
+} from "react-native-paper";
 import { stopwatchTheme } from "./src/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
@@ -775,6 +782,13 @@ interface BtnProps {
   flex?: number;
   onPress: () => void;
 }
+// MD3 physical device control (#438). The raised-bezel skeuomorphic look
+// used to live entirely in this component's hand-rolled borders/shadows;
+// it now uses genuine MD3 primitives (`Surface` for tonal elevation,
+// `TouchableRipple` for the MD3 state layer) while keeping each button's
+// distinct body color so LAP/START/STOP/RESET stay visually distinguishable.
+// NOTE: this is unrelated to `LcdDisplay`'s instrument face, which this
+// change does not touch.
 function DeviceBtn({
   label,
   sub,
@@ -787,51 +801,40 @@ function DeviceBtn({
   onPress,
 }: BtnProps) {
   const bg = disabled ? C.btnDimBody : body;
-  const top = disabled ? C.btnDimHi : hi;
-  const bot = disabled ? C.btnDimLo : lo;
+  const edge = disabled ? C.btnDimLo : lo;
   const txt = disabled ? C.pillBorder : textColor;
 
   return (
-    <Pressable
-      onPress={disabled ? undefined : onPress}
-      style={{ flex }}
-      accessible
-      accessibilityRole="button"
-      accessibilityLabel={label}
+    <Surface
+      style={{ flex, borderRadius: 10, minHeight: 56 }}
+      elevation={disabled ? 0 : 3}
     >
-      {({ pressed }) => (
-        <View
-          style={{
-            height: 68,
-            borderRadius: 6,
-            backgroundColor: pressed ? bot : bg,
-            borderTopWidth: pressed ? 1 : 3,
-            borderBottomWidth: pressed ? 5 : 3,
-            borderLeftWidth: 1.5,
-            borderRightWidth: 1.5,
-            borderTopColor: pressed ? bg : top,
-            borderBottomColor: bot,
-            borderLeftColor: pressed ? bg : top,
-            borderRightColor: bot,
-            shadowColor: C.black,
-            shadowOpacity: pressed ? 0.1 : 0.55,
-            shadowRadius: pressed ? 1 : 5,
-            shadowOffset: { width: 0, height: pressed ? 1 : 4 },
-            elevation: pressed ? 1 : 8,
-            transform: pressed ? [{ translateY: 2 }] : [{ translateY: 0 }],
-            alignItems: "center",
-            justifyContent: "center",
-            paddingHorizontal: 4,
-          }}
-        >
+      <TouchableRipple
+        onPress={disabled ? undefined : onPress}
+        disabled={disabled}
+        rippleColor={hi ? `${hi}55` : "rgba(255,255,255,0.24)"}
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityState={{ disabled: !!disabled }}
+        style={{
+          minHeight: 56,
+          minWidth: 44,
+          borderRadius: 10,
+          backgroundColor: bg,
+          borderWidth: 1,
+          borderColor: edge,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingHorizontal: 4,
+          paddingVertical: 8,
+        }}
+      >
+        <View style={{ alignItems: "center", justifyContent: "center" }}>
           {sub && (
             <Text
               style={{
-                color: pressed
-                  ? C.faint
-                  : disabled
-                  ? C.dark
-                  : C.btnSubLabel,
+                color: disabled ? C.dark : C.btnSubLabel,
                 fontSize: 9,
                 fontWeight: "900",
                 letterSpacing: 2,
@@ -847,8 +850,8 @@ function DeviceBtn({
             {label}
           </Text>
         </View>
-      )}
-    </Pressable>
+      </TouchableRipple>
+    </Surface>
   );
 }
 
@@ -891,6 +894,11 @@ function topBarColors(variant: TopBarVariant) {
   }
 }
 
+// MD3 chrome button (#438) — an `Appbar`-row action rendered with Paper's
+// `Button` so it gets the standard MD3 state layer/ripple and a ≥44pt
+// touch target, while keeping the existing 3-color variant scheme (grey
+// neutral / blue navigation / yellow active-warning) and its text label
+// (WCAG 1.4.1 — never color-only).
 function TopBarButton({
   label,
   onPress,
@@ -906,26 +914,28 @@ function TopBarButton({
 }) {
   const { bg, fg } = topBarColors(variant);
   return (
-    <Pressable
+    <Button
+      mode="contained"
       onPress={onPress}
-      hitSlop={6}
-      accessibilityRole="button"
+      buttonColor={bg}
+      textColor={fg}
+      compact
+      uppercase={false}
       accessibilityLabel={accessibilityLabel ?? label}
       testID={testID}
-      style={({ pressed }) => [
-        s.topBarBtn,
-        { backgroundColor: bg, opacity: pressed ? 0.75 : 1 },
-      ]}
+      style={s.topBarBtn}
+      contentStyle={s.topBarBtnContent}
+      labelStyle={s.topBarBtnText}
     >
-      <Text style={[s.topBarBtnText, { color: fg }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
+      {label}
+    </Button>
   );
 }
 
-// Non-pressable status indicator, same footprint as TopBarButton so it sits
-// evenly in the row.
+// Non-pressable status indicator (MD3 `Chip`), same footprint as
+// TopBarButton so it sits evenly in the row. Always pairs its color with a
+// text label — never color-only (WCAG 1.4.1) — and keeps the "syncing"
+// pending dot as a supplemental indicator.
 function TopBarStatus({
   label,
   variant,
@@ -937,10 +947,16 @@ function TopBarStatus({
 }) {
   const { bg, fg } = topBarColors(variant);
   return (
-    <View style={[s.topBarBtn, { backgroundColor: bg }]}>
-      <Text style={[s.topBarBtnText, { color: fg }]} numberOfLines={1}>
+    <View style={s.topBarBtn}>
+      <Chip
+        mode="flat"
+        compact
+        style={[s.topBarStatusChip, { backgroundColor: bg }]}
+        textStyle={[s.topBarBtnText, { color: fg }]}
+        accessibilityLabel={pending ? `${label} — syncing` : label}
+      >
         {label}
-      </Text>
+      </Chip>
       {pending && (
         <View style={s.topBarPendingDot} accessibilityLabel="Syncing" />
       )}
@@ -1118,7 +1134,10 @@ function CueSettingsPanel({
   );
 }
 
-// Red overrun strip shown once elapsed time passes the target
+// Red overrun strip shown once elapsed time passes the target. Rendered as
+// an MD3 `Surface` (elevation-tinted alert strip) rather than a plain View
+// (#438) — kept red per ADR 0021 (red reserved for errors/overrun states),
+// with a text label alongside the color (WCAG 1.4.1).
 function TargetOverrunStrip({
   elapsedMs,
   targetMs,
@@ -1128,14 +1147,15 @@ function TargetOverrunStrip({
 }) {
   if (elapsedMs < targetMs) return null;
   return (
-    <View
+    <Surface
       style={s.targetOverrun}
+      elevation={2}
       accessible
       accessibilityLabel={`Past target by ${fmtCompact(elapsedMs - targetMs)}`}
     >
       <Text style={s.targetOverrunLabel}>TARGET {fmtCompact(targetMs)}</Text>
       <Text style={s.targetOverrunTime}>+{fmtCompact(elapsedMs - targetMs)}</Text>
-    </View>
+    </Surface>
   );
 }
 
@@ -3131,9 +3151,18 @@ function SessionScreen({
     <SafeAreaView style={s.screen}>
       <StatusBar barStyle="light-content" backgroundColor={C.casing} />
 
-      {/* ── Top bar (#414) ── */}
-      <View style={s.topBar}>
-        <TopBarButton label="‹ BACK" onPress={onBack} variant="blue" accessibilityLabel="Back" />
+      {/* ── Top chrome (#438) — MD3 Appbar.Header replacing the ad-hoc
+          top-bar View from #414. Back navigation uses Appbar.BackAction;
+          the toggle/status controls stay the shared TopBarButton/
+          TopBarStatus components (now MD3 Button/Chip internally, #438)
+          so Solo/Timer screens keep the same look without needing their
+          own JSX changes. ── */}
+      <Appbar.Header style={s.topBar} elevated dark statusBarHeight={0}>
+        <Appbar.BackAction
+          onPress={onBack}
+          accessibilityLabel="Back"
+          color={C.white}
+        />
         <TopBarButton
           label={isLocked ? "UNLOCK" : "LOCK"}
           onPress={handleLockTap}
@@ -3162,7 +3191,7 @@ function SessionScreen({
           variant={status === "running" ? "yellow" : "grey"}
           pending={pendingCount > 0}
         />
-      </View>
+      </Appbar.Header>
 
       {/* ── Sound cue settings (#227) ── */}
       {showCuePanel && (
@@ -6424,13 +6453,26 @@ const s = StyleSheet.create({
   },
   topBarBtn: {
     flex: 1,
-    height: 40,
+    minHeight: 44,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 8,
+  },
+  topBarBtnContent: {
+    minHeight: 44,
     paddingHorizontal: 4,
   },
-  topBarBtnText: { fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  topBarStatusChip: {
+    width: "100%",
+    justifyContent: "center",
+    borderRadius: 8,
+  },
+  topBarBtnText: {
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+    marginVertical: 0,
+  },
   topBarPendingDot: {
     position: "absolute",
     top: 4,
