@@ -358,3 +358,151 @@ test.describe('/stopwatch multi-session: legacy migration', () => {
     await expect(sessionList).toContainText('PAUSED');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 6. Drag-to-reorder
+// ---------------------------------------------------------------------------
+
+test.describe('/stopwatch multi-session: drag-to-reorder', () => {
+  /**
+   * Seed helper — creates three sessions with a known ID order and returns the IDs.
+   */
+  async function seedThreeSessions(page: import('@playwright/test').Page) {
+    const idFirst = 'e2e-reorder-first';
+    const idSecond = 'e2e-reorder-second';
+    const idThird = 'e2e-reorder-third';
+
+    await page.goto('/stopwatch');
+
+    await page.evaluate(
+      ({ indexKey, activeKey, ids }) => {
+        const now = new Date().toISOString();
+        const names = ['Alpha', 'Beta', 'Gamma'];
+        localStorage.setItem(indexKey, JSON.stringify({ ids }));
+        ids.forEach((id: string, i: number) => {
+          localStorage.setItem(`splitsync_stopwatch_session_${id}_v1`, JSON.stringify({
+            id,
+            name: names[i],
+            mode: 'stopwatch',
+            stopwatchState: null,
+            timerState: null,
+            timerDurationMs: 300_000,
+            lastUsedAt: now,
+            createdAt: now,
+          }));
+        });
+        localStorage.setItem(activeKey, ids[0]);
+      },
+      {
+        indexKey: INDEX_KEY,
+        activeKey: ACTIVE_KEY,
+        ids: [idFirst, idSecond, idThird],
+      }
+    );
+
+    await page.reload();
+    return { idFirst, idSecond, idThird };
+  }
+
+  test('dragging a session row to a new position reorders the list immediately', async ({ page }) => {
+    const { idFirst, idThird } = await seedThreeSessions(page);
+
+    await page.getByTestId('open-session-panel').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    const sessionList = page.getByRole('list', { name: /solo sessions/i });
+    const rows = sessionList.getByRole('listitem');
+
+    // Initial order: Alpha (0), Beta (1), Gamma (2)
+    await expect(rows.nth(0)).toContainText('Alpha');
+    await expect(rows.nth(1)).toContainText('Beta');
+    await expect(rows.nth(2)).toContainText('Gamma');
+
+    // Simulate HTML5 drag: drag "Gamma" (third row) onto "Alpha" (first row).
+    // page.dragAndDrop fires the native HTML5 drag events that our handlers listen to.
+    await page.dragAndDrop(
+      `[data-testid="solo-session-row-${idThird}"]`,
+      `[data-testid="solo-session-row-${idFirst}"]`
+    );
+
+    // After drop: Gamma should have moved before Alpha.
+    await expect(rows.nth(0)).toContainText('Gamma');
+    await expect(rows.nth(1)).toContainText('Alpha');
+    await expect(rows.nth(2)).toContainText('Beta');
+  });
+
+  test('reordered session list persists after closing and reopening the panel', async ({ page }) => {
+    const { idFirst, idThird } = await seedThreeSessions(page);
+
+    await page.getByTestId('open-session-panel').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    // Drag "Gamma" onto "Alpha"
+    await page.dragAndDrop(
+      `[data-testid="solo-session-row-${idThird}"]`,
+      `[data-testid="solo-session-row-${idFirst}"]`
+    );
+
+    // Close the panel
+    await page.getByRole('button', { name: /close sessions panel/i }).click();
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 2_000 });
+
+    // Reopen the panel — new order must still be in place (verified from storage)
+    await page.getByTestId('open-session-panel').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    const sessionList = page.getByRole('list', { name: /solo sessions/i });
+    const rows = sessionList.getByRole('listitem');
+
+    await expect(rows.nth(0)).toContainText('Gamma');
+    await expect(rows.nth(1)).toContainText('Alpha');
+    await expect(rows.nth(2)).toContainText('Beta');
+  });
+
+  test('keyboard reorder: Space to pick up, ArrowDown to move, Enter to confirm and persist', async ({ page }) => {
+    const { idFirst } = await seedThreeSessions(page);
+
+    await page.getByTestId('open-session-panel').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    const sessionList = page.getByRole('list', { name: /solo sessions/i });
+    const rows = sessionList.getByRole('listitem');
+
+    // Focus the drag handle of the first row ("Alpha") and pick it up with Space
+    const firstHandle = rows.nth(0).getByRole('button', { name: /drag to reorder/i });
+    await firstHandle.focus();
+    await firstHandle.press('Space');
+
+    // Move it down once (Alpha → position 1, Beta → position 0)
+    await firstHandle.press('ArrowDown');
+
+    // Confirm with Enter
+    await firstHandle.press('Enter');
+
+    // Alpha should now be in second position
+    await expect(rows.nth(0)).toContainText('Beta');
+    await expect(rows.nth(1)).toContainText('Alpha');
+
+    // Close and reopen to verify persistence
+    await page.getByRole('button', { name: /close sessions panel/i }).click();
+    await page.getByTestId('open-session-panel').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    const rows2 = page.getByRole('list', { name: /solo sessions/i }).getByRole('listitem');
+    await expect(rows2.nth(0)).toContainText('Beta');
+    await expect(rows2.nth(1)).toContainText('Alpha');
+
+    // Verify the index stored the new order
+    const storedIds: string[] = await page.evaluate(
+      ({ indexKey }) => {
+        const raw = localStorage.getItem(indexKey);
+        return raw ? JSON.parse(raw).ids : [];
+      },
+      { indexKey: INDEX_KEY }
+    );
+    // Beta (idSecond) should precede Alpha (idFirst) in storage
+    const firstIdx = storedIds.indexOf(idFirst);
+    const secondIdx = storedIds.indexOf('e2e-reorder-second');
+    expect(secondIdx).toBeLessThan(firstIdx);
+  });
+});
