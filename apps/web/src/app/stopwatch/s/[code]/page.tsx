@@ -717,7 +717,13 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
         )}
 
         {actionError && (
-          <p className="mt-3 text-sm font-bold text-race-red">{actionError}</p>
+          <p
+            role="alert"
+            data-testid="action-error"
+            className="mt-3 text-sm font-bold text-race-red"
+          >
+            {actionError}
+          </p>
         )}
 
         {/* ── Participants ───────────────────────────────────────────────── */}
