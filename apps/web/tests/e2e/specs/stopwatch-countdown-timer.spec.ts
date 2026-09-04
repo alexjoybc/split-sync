@@ -31,6 +31,16 @@ async function enterTimerMode(page: Page) {
   await expect(page.getByTestId('timer-mode')).toBeVisible();
 }
 
+/**
+ * The duration input is an `<md-outlined-text-field>` custom element (#443
+ * MD3 chrome) — its editable `<input>` lives inside its shadow root.
+ * Playwright's CSS engine pierces open shadow roots, so a descendant
+ * selector reaches the real `<input>` that `.fill()`/`.blur()` need.
+ */
+function durationInput(page: Page) {
+  return page.locator('[data-testid="timer-duration-input"] input');
+}
+
 test.describe('/stopwatch countdown timer mode', () => {
 
   test('mode toggle switches between stopwatch and timer views', async ({ page }) => {
@@ -64,7 +74,7 @@ test.describe('/stopwatch countdown timer mode', () => {
   test('setting a duration updates the dial; H:MM:SS accepted; invalid flagged', async ({ page }) => {
     await enterTimerMode(page);
 
-    const input = page.getByTestId('timer-duration-input');
+    const input = durationInput(page);
     await input.fill('10:30');
     expect(await readRemainingMs(page)).toBe(10 * 60_000 + 30_000);
 
@@ -72,7 +82,16 @@ test.describe('/stopwatch countdown timer mode', () => {
     expect(await readRemainingMs(page)).toBe(3_600_000 + 5 * 60_000);
 
     await input.fill('nonsense');
-    await expect(input).toHaveAttribute('aria-invalid', 'true');
+    // `@material/web`'s `mixinDelegatesAria` moves `aria-*` attributes set on
+    // a delegates-focus host into `data-aria-*` (and applies the real ARIA
+    // state to the internal focusable element instead) — see
+    // `@material/web/internal/aria/delegate.js`. The accessible state is
+    // still correct; only the literal host attribute name differs from a
+    // plain `<input>`.
+    await expect(page.getByTestId('timer-duration-input')).toHaveAttribute(
+      'data-aria-invalid',
+      'true'
+    );
     // Blur restores the last valid duration
     await input.blur();
     await expect(input).toHaveValue('1:05:00');
@@ -81,7 +100,7 @@ test.describe('/stopwatch countdown timer mode', () => {
   test('start counts down; pause freezes; resume continues', async ({ page }) => {
     await enterTimerMode(page);
 
-    await page.getByTestId('timer-duration-input').fill('00:30');
+    await durationInput(page).fill('00:30');
     await page.getByTestId('timer-primary-btn').click();
 
     // Counting down: remaining drops below the set duration
@@ -107,7 +126,7 @@ test.describe('/stopwatch countdown timer mode', () => {
   test('completion auto-resets to the original duration and can be dismissed with one tap', async ({ page }) => {
     await enterTimerMode(page);
 
-    await page.getByTestId('timer-duration-input').fill('00:02');
+    await durationInput(page).fill('00:02');
     await page.getByTestId('timer-primary-btn').click();
 
     // Completion: alert visible, display reset to the ORIGINAL value
@@ -126,7 +145,7 @@ test.describe('/stopwatch countdown timer mode', () => {
   test('after completion, one tap on Start runs a full round again', async ({ page }) => {
     await enterTimerMode(page);
 
-    await page.getByTestId('timer-duration-input').fill('00:02');
+    await durationInput(page).fill('00:02');
     await page.getByTestId('timer-primary-btn').click();
     await expect(page.getByTestId('timer-complete')).toBeVisible({ timeout: 4000 });
 
@@ -143,7 +162,7 @@ test.describe('/stopwatch countdown timer mode', () => {
   test('a running timer survives a page refresh (wall-clock anchor)', async ({ page }) => {
     await enterTimerMode(page);
 
-    await page.getByTestId('timer-duration-input').fill('00:30');
+    await durationInput(page).fill('00:30');
     await page.getByTestId('timer-primary-btn').click();
     await page.waitForTimeout(1200);
 
@@ -160,7 +179,7 @@ test.describe('/stopwatch countdown timer mode', () => {
   test('reset returns a paused timer to the set duration', async ({ page }) => {
     await enterTimerMode(page);
 
-    await page.getByTestId('timer-duration-input').fill('00:20');
+    await durationInput(page).fill('00:20');
     await page.getByTestId('timer-primary-btn').click();
     await page.waitForTimeout(1200);
     await page.getByTestId('timer-primary-btn').click(); // Pause

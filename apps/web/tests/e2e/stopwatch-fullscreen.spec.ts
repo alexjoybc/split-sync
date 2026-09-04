@@ -42,23 +42,30 @@ test.describe("Stopwatch fullscreen", () => {
     await page.getByTestId("sw-mode-timer").click();
     await expect(page.getByTestId("timer-mode")).toBeVisible();
 
-    // Fullscreen button should be present
+    // Fullscreen button should be present. It's an `<md-outlined-button>` /
+    // `<md-filled-tonal-button>` (#443 MD3 chrome) — `@material/web`'s
+    // `mixinDelegatesAria` moves `aria-*` set on a delegates-focus host into
+    // `data-aria-*` and applies the real ARIA state to the internal
+    // focusable element instead (see
+    // `@material/web/internal/aria/delegate.js`); the accessible state is
+    // still correct, only the literal host attribute name differs from a
+    // plain `<button>`.
     const fsBtn = page.getByTestId("timer-fullscreen-btn");
     await expect(fsBtn).toBeVisible();
-    await expect(fsBtn).toHaveAttribute("aria-pressed", "false");
+    await expect(fsBtn).toHaveAttribute("data-aria-pressed", "false");
 
     // Open fullscreen overlay
     await fsBtn.click();
     const overlay = page.getByTestId("timer-manual-fs-overlay");
     await expect(overlay).toBeVisible();
-    await expect(fsBtn).toHaveAttribute("aria-pressed", "true");
+    await expect(fsBtn).toHaveAttribute("data-aria-pressed", "true");
 
     // Dismiss via the exit button inside the overlay
     const exitBtn = page.getByTestId("timer-fs-exit-btn");
     await expect(exitBtn).toBeVisible();
     await exitBtn.click();
     await expect(overlay).not.toBeVisible();
-    await expect(fsBtn).toHaveAttribute("aria-pressed", "false");
+    await expect(fsBtn).toHaveAttribute("data-aria-pressed", "false");
   });
 
   test("timer mode: overlay shows timer display and correct role", async ({ page }) => {
@@ -82,7 +89,10 @@ test.describe("Stopwatch fullscreen", () => {
     await expect(page.getByTestId("timer-mode")).toBeVisible();
 
     // Set a very short duration (1 second) so the auto-overlay fires quickly.
-    const input = page.getByTestId("timer-duration-input");
+    // `timer-duration-input` is an `<md-outlined-text-field>` (#443 MD3
+    // chrome) — its editable `<input>` is in shadow DOM; Playwright's CSS
+    // engine pierces open shadow roots so this descendant selector reaches it.
+    const input = page.locator('[data-testid="timer-duration-input"] input');
     await input.fill("0:01");
     await input.blur();
 
