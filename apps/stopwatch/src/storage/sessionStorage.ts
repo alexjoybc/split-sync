@@ -73,6 +73,12 @@ export type SoloSessionMeta = {
   lastUsedAt: string;
   /** ISO 8601 timestamp of creation */
   createdAt: string;
+  /**
+   * Optional accent color tag (hex string from @splitsync/palette).
+   * Undefined means "no color" (default styling applies).
+   * WCAG 1.4.1: color supplements the name label, never replaces it.
+   */
+  color?: string;
 };
 
 /**
@@ -139,7 +145,8 @@ export async function setActiveSessionId(id: string): Promise<void> {
 export async function createSession(
   id: string,
   name: string,
-  mode: SoloMode
+  mode: SoloMode,
+  color?: string
 ): Promise<SoloSessionMeta> {
   const index = await loadIndex();
 
@@ -156,6 +163,7 @@ export async function createSession(
     mode,
     lastUsedAt: now,
     createdAt: now,
+    ...(color ? { color } : {}),
   };
 
   // Write an empty payload for the new session
@@ -200,11 +208,11 @@ export async function updateSession(
 }
 
 /**
- * Update a session's metadata (name and/or mode) in the index.
+ * Update a session's metadata (name, mode, and/or color) in the index.
  */
 export async function updateSessionMeta(
   id: string,
-  patch: Partial<Pick<SoloSessionMeta, "name" | "mode">>
+  patch: Partial<Pick<SoloSessionMeta, "name" | "mode" | "color">>
 ): Promise<void> {
   const index = await loadIndex();
   const idx = index.findIndex((m) => m.id === id);
