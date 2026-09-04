@@ -131,6 +131,21 @@ const C = {
   btnBlueBody:  '#5BC8F5', btnBlueHi:  '#8DDBFB', btnBlueLo:  '#2E86C1',
 };
 
+// ── Session color tags ────────────────────────────────────────────────────────
+/**
+ * Palette-derived colors selectable as session accent tags.
+ * All values come from packages/palette/src/index.ts (AGENTS.md rule).
+ * Color is always supplemental to the session name label (WCAG 1.4.1).
+ */
+export const SESSION_COLORS: { label: string; value: string }[] = [
+  { label: "Blue",   value: palette.bluePrimary },
+  { label: "Red",    value: palette.red },
+  { label: "Yellow", value: palette.yellow },
+  { label: "Green",  value: palette.success },
+  { label: "Teal",   value: palette.blueAccent },
+  { label: "Grey",   value: palette.muted },
+];
+
 // ── Touch target constant ─────────────────────────────────────────────────────
 /** Minimum 44×44 pt touch target — apply to all icon-only controls. */
 const ICON_BTN_SIZE = 44;
@@ -3413,6 +3428,7 @@ function SoloScreen({
   onGoShared,
   activeSessionId,
   onOpenSessions,
+  sessionColor,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
@@ -3420,6 +3436,8 @@ function SoloScreen({
   onGoShared: () => void;
   activeSessionId: string | null;
   onOpenSessions: () => void;
+  /** Optional palette-derived accent color for this session (WCAG 1.4.1: supplement only). */
+  sessionColor?: string;
 }) {
   useKeepAwake();
   const { width, height } = useWindowDimensions();
@@ -3895,12 +3913,38 @@ function SoloScreen({
       {/* ── Top bar (#414) ── */}
       <View style={s.topBar}>
         <TopBarButton label="‹ BACK" onPress={onBack} variant="blue" accessibilityLabel="Back" />
-        <TopBarButton
-          label="SESSIONS"
+        {/* SESSIONS button with optional color-tag dot (WCAG 1.4.1: dot supplements name) */}
+        <Pressable
           onPress={onOpenSessions}
-          variant="blue"
-          accessibilityLabel="Open sessions list"
-        />
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={
+            sessionColor
+              ? `Open sessions list (color: ${SESSION_COLORS.find((c) => c.value === sessionColor)?.label ?? "tagged"})`
+              : "Open sessions list"
+          }
+          style={({ pressed }) => [
+            s.topBarBtn,
+            { backgroundColor: C.bluePrimary, opacity: pressed ? 0.75 : 1 },
+          ]}
+        >
+          <Text style={[s.topBarBtnText, { color: C.white }]} numberOfLines={1}>
+            SESSIONS
+          </Text>
+          {sessionColor && (
+            <View
+              style={[
+                s.sessionColorDot,
+                {
+                  backgroundColor: sessionColor,
+                  borderColor: sessionColor === palette.yellow ? C.ink : C.white,
+                },
+              ]}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+            />
+          )}
+        </Pressable>
         <TopBarButton
           label={isLocked ? "UNLOCK" : "LOCK"}
           onPress={handleLockTap}
@@ -4838,28 +4882,36 @@ function NameInputModal({
   visible,
   title,
   initialValue,
+  initialColor,
   placeholder,
+  showColorPicker = false,
   onConfirm,
   onCancel,
 }: {
   visible: boolean;
   title: string;
   initialValue: string;
+  initialColor?: string;
   placeholder: string;
-  onConfirm: (name: string) => void;
+  showColorPicker?: boolean;
+  onConfirm: (name: string, color?: string) => void;
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(initialValue);
+  const [selectedColor, setSelectedColor] = useState<string | undefined>(initialColor);
 
   // Reset the input value whenever the modal opens with a new initialValue
   useEffect(() => {
-    if (visible) setValue(initialValue);
-  }, [visible, initialValue]);
+    if (visible) {
+      setValue(initialValue);
+      setSelectedColor(initialColor);
+    }
+  }, [visible, initialValue, initialColor]);
 
   const handleConfirm = useCallback(() => {
     const trimmed = value.trim();
-    if (trimmed) onConfirm(trimmed);
-  }, [value, onConfirm]);
+    if (trimmed) onConfirm(trimmed, showColorPicker ? selectedColor : undefined);
+  }, [value, onConfirm, showColorPicker, selectedColor]);
 
   return (
     <Modal
@@ -4883,6 +4935,52 @@ function NameInputModal({
             returnKeyType="done"
             maxLength={50}
           />
+          {showColorPicker && (
+            <View style={nm.colorPickerSection}>
+              <Text style={nm.colorPickerLabel}>COLOR TAG</Text>
+              <View style={nm.colorPickerRow}>
+                {/* "None" swatch */}
+                <Pressable
+                  onPress={() => setSelectedColor(undefined)}
+                  accessibilityRole="radio"
+                  accessibilityLabel="No color"
+                  accessibilityState={{ checked: selectedColor === undefined }}
+                  style={[
+                    nm.colorSwatch,
+                    nm.colorSwatchNone,
+                    selectedColor === undefined && nm.colorSwatchSelected,
+                  ]}
+                >
+                  {selectedColor === undefined && (
+                    <Text style={nm.colorSwatchCheck}>✓</Text>
+                  )}
+                </Pressable>
+                {SESSION_COLORS.map(({ label, value: hex }) => {
+                  const isSelected = selectedColor === hex;
+                  // Yellow swatch needs dark checkmark for contrast
+                  const checkColor = hex === palette.yellow ? C.ink : C.white;
+                  return (
+                    <Pressable
+                      key={hex}
+                      onPress={() => setSelectedColor(hex)}
+                      accessibilityRole="radio"
+                      accessibilityLabel={label}
+                      accessibilityState={{ checked: isSelected }}
+                      style={[
+                        nm.colorSwatch,
+                        { backgroundColor: hex },
+                        isSelected && nm.colorSwatchSelected,
+                      ]}
+                    >
+                      {isSelected && (
+                        <Text style={[nm.colorSwatchCheck, { color: checkColor }]}>✓</Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          )}
           <View style={nm.actions}>
             <Pressable
               onPress={onCancel}
@@ -4974,6 +5072,43 @@ const nm = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
+  colorPickerSection: {
+    marginBottom: 16,
+  },
+  colorPickerLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    color: C.muted,
+    marginBottom: 8,
+  },
+  colorPickerRow: {
+    flexDirection: "row",
+    gap: 8,
+    flexWrap: "wrap",
+  },
+  colorSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: C.line,
+  },
+  colorSwatchNone: {
+    backgroundColor: C.white,
+    borderStyle: "dashed",
+  },
+  colorSwatchSelected: {
+    borderColor: C.ink,
+    borderWidth: 2.5,
+  },
+  colorSwatchCheck: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: "900",
+  },
 });
 
 // ── Session switcher modal (ADR 0024 / issue #366) ─────────────────────────────
@@ -4999,6 +5134,7 @@ function SessionSwitcherModal({
   const [nameModal, setNameModal] = useState<{
     mode: "create" | "rename";
     initialValue: string;
+    initialColor?: string;
     sessionId?: string;
   } | null>(null);
 
@@ -5049,11 +5185,11 @@ function SessionSwitcherModal({
   }, [sessions.length]);
 
   const handleCreateConfirm = useCallback(
-    async (name: string) => {
+    async (name: string, color?: string) => {
       setNameModal(null);
       const id = generateUUID();
       try {
-        await createSession(id, name, "stopwatch");
+        await createSession(id, name, "stopwatch", color);
         await loadAll();
       } catch (err) {
         Alert.alert(
@@ -5070,16 +5206,19 @@ function SessionSwitcherModal({
     setNameModal({
       mode: "rename",
       initialValue: meta.name,
+      initialColor: meta.color,
       sessionId: meta.id,
     });
   }, []);
 
   const handleRenameConfirm = useCallback(
-    async (name: string) => {
+    async (name: string, color?: string) => {
       const id = nameModal?.sessionId;
       setNameModal(null);
       if (!id) return;
-      await updateSessionMeta(id, { name });
+      // Persist color: if undefined, clear it by spreading an explicit undefined
+      // which JSON.stringify omits, effectively removing the field from storage.
+      await updateSessionMeta(id, { name, color });
       await loadAll();
     },
     [nameModal, loadAll]
@@ -5184,9 +5323,17 @@ function SessionSwitcherModal({
               const isActive = item.id === activeSessionId;
               const runState = sessionRunState(item);
               const modeLabel = item.mode === "timer" ? "⏲ TIMER" : "⏱ SW";
+              const sessionColor = item.color;
 
               return (
                 <View style={[ssm.row, isActive && ssm.rowActive]}>
+                  {/* Color accent strip — left edge */}
+                  {sessionColor && (
+                    <View
+                      style={[ssm.colorStrip, { backgroundColor: sessionColor }]}
+                      accessibilityLabel={`Color tag: ${SESSION_COLORS.find((c) => c.value === sessionColor)?.label ?? "Custom"}`}
+                    />
+                  )}
                   {/* Main tap area — switches session */}
                   <Pressable
                     onPress={() => handleSwitch(item)}
@@ -5282,7 +5429,9 @@ function SessionSwitcherModal({
         visible={nameModal !== null}
         title={nameModal?.mode === "create" ? "New Session" : "Rename Session"}
         initialValue={nameModal?.initialValue ?? ""}
+        initialColor={nameModal?.initialColor}
         placeholder="Session name"
+        showColorPicker
         onConfirm={
           nameModal?.mode === "create" ? handleCreateConfirm : handleRenameConfirm
         }
@@ -5344,6 +5493,10 @@ const ssm = StyleSheet.create({
     backgroundColor: C.blueTint,
     borderLeftWidth: 4,
     borderLeftColor: C.bluePrimary,
+  },
+  colorStrip: {
+    width: 5,
+    alignSelf: "stretch",
   },
   rowMain: {
     flex: 1,
@@ -5468,6 +5621,7 @@ function SoloContainer({
   const [mode, setMode] = useState<SoloMode>("stopwatch");
   const [modeLoaded, setModeLoaded] = useState(false);
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
+  const [sessionColor, setSessionColor] = useState<string | undefined>(undefined);
   const [showSwitcher, setShowSwitcher] = useState(false);
 
   useEffect(() => {
@@ -5475,11 +5629,14 @@ function SoloContainer({
     resolveActiveSession(generateUUID)
       .then(async (id) => {
         setActiveSessionIdState(id);
-        // Load the mode from the session meta in the index
+        // Load mode and color from the session meta in the index
         const index = await loadIndex();
         const meta = index.find((m) => m.id === id);
         if (meta && (meta.mode === "timer" || meta.mode === "stopwatch")) {
           setMode(meta.mode);
+        }
+        if (meta?.color) {
+          setSessionColor(meta.color);
         }
         setModeLoaded(true);
       })
@@ -5498,10 +5655,18 @@ function SoloContainer({
    * Updating `activeSessionId` changes the `key` prop of the child screen,
    * which triggers a remount and re-reads the new session's persisted state.
    */
-  const handleSessionSwitch = useCallback((id: string, newMode: SoloMode) => {
+  const handleSessionSwitch = useCallback(async (id: string, newMode: SoloMode) => {
     setMode(newMode);
     setActiveSessionIdState(id);
     setShowSwitcher(false);
+    // Load the color for the newly switched-to session
+    try {
+      const index = await loadIndex();
+      const meta = index.find((m) => m.id === id);
+      setSessionColor(meta?.color);
+    } catch {
+      setSessionColor(undefined);
+    }
   }, []);
 
   const handleOpenSwitcher = useCallback(() => {
@@ -5530,6 +5695,7 @@ function SoloContainer({
           onGoShared={onGoShared}
           activeSessionId={activeSessionId}
           onOpenSessions={handleOpenSwitcher}
+          sessionColor={sessionColor}
         />
       )}
       <SessionSwitcherModal
@@ -5820,6 +5986,16 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
   topBarBtnText: { fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  /** Small colored dot shown on the SESSIONS button when a session has a color tag. */
+  sessionColorDot: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    borderWidth: 1.5,
+  },
   topBarPendingDot: {
     position: "absolute",
     top: 4,
