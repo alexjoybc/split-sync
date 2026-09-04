@@ -78,27 +78,27 @@ The `pg_cron` extension is enabled via migration
 
 | Job name | Schedule | Purpose |
 |---|---|---|
-| `casual_sessions_expiry` | `0 * * * *` (every hour) | Marks `running`/`waiting` casual sessions past their `expires_at` as `stopped`; hard-deletes `stopped` sessions older than 30 days. |
+| `shared_sessions_expiry` | `0 * * * *` (every hour) | Marks `running`/`waiting` shared sessions past their `expires_at` as `stopped`; hard-deletes `stopped` sessions older than 30 days. |
 
 **Verification in Supabase Dashboard → Database → Cron Jobs:**
 
 1. Open the Supabase Dashboard for project `bsihlrzncucrglqltjrc`.
 2. Go to **Database → Cron Jobs**.
-3. Confirm `casual_sessions_expiry` appears with the `0 * * * *` schedule and shows a recent "Last run" timestamp once at least one hour has elapsed since the migration was applied.
+3. Confirm `shared_sessions_expiry` appears with the `0 * * * *` schedule and shows a recent "Last run" timestamp once at least one hour has elapsed since the migration was applied.
 
 If the job is missing (e.g. after a database restore), re-run the migration or manually schedule it with:
 
 ```sql
 SELECT cron.schedule(
-  'casual_sessions_expiry',
+  'shared_sessions_expiry',
   '0 * * * *',
   $$
-  UPDATE casual_sessions
+  UPDATE shared_sessions
     SET status = 'stopped'
   WHERE status IN ('running', 'waiting')
     AND expires_at < now();
 
-  DELETE FROM casual_sessions
+  DELETE FROM shared_sessions
   WHERE status = 'stopped'
     AND expires_at < now() - interval '30 days';
   $$

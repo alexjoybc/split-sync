@@ -11,7 +11,7 @@ The product has four deliberate surfaces. Do not blend their permissions or goal
 | Spectator | `apps/web/src/app/live`, `apps/web/src/app/results`, `apps/web/src/app/announce` | Public | No sign-in, read-only, mobile-first, must never expose organizer controls |
 | Organizer admin | `apps/web/src/app`, `new`, `event`, `login`, `auth` | Event owner | Creates roster/races, publishes event, owns all writes through RLS |
 | Mobile tracker | `apps/mobile` | Event owner now, volunteers later | Start/finish and one-tap crossings only; no roster edits during a race |
-| Casual stopwatch | `apps/stopwatch` (native, `org.splitsync.stopwatch`) + `apps/web/src/app/stopwatch` (web) | Creator must sign in; participants anonymous | Creator owns session (auth.uid()); participants join by code/link with display name only; event log is truth; no roster |
+| Shared stopwatch | `apps/stopwatch` (native, `org.splitsync.stopwatch`) + `apps/web/src/app/stopwatch` (web) | Creator must sign in; participants anonymous | Creator owns multi-timer session (auth.uid()); participants join by code/link with display name only; event log is truth; no roster |
 
 ## Domain Invariants
 
