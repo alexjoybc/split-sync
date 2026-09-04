@@ -544,6 +544,15 @@ export default function HelpPage() {
                   active and close the panel.
                 </li>
                 <li>
+                  <strong>Color tag (optional):</strong> when creating or
+                  renaming a session, pick a color swatch from the{" "}
+                  <strong>COLOR TAG</strong> row to give the session a colored
+                  accent strip in the list. The color supplements the session
+                  name — it is never the only way to tell sessions apart.
+                  Select <strong>No color</strong> (the dashed swatch) to
+                  clear it.
+                </li>
+                <li>
                   Sessions are stored on this device only (no cloud sync).
                   Clearing your browser&apos;s site data will remove them.
                 </li>
