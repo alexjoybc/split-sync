@@ -19,6 +19,25 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+
+// ---------------------------------------------------------------------------
+// Wall-clock readout helpers (#421)
+// ---------------------------------------------------------------------------
+
+/** Format a wall-clock epoch ms as a short locale time string, e.g. "2:14 PM". */
+function fmtWallTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Format elapsed ms as "Xs ago" or "Xm ago" for the time-since-alarm readout. */
+function fmtTimeSince(elapsedMs: number): string {
+  const secs = Math.floor(elapsedMs / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  return `${Math.floor(secs / 60)}m ago`;
+}
 import { useWakeLock } from "./useWakeLock";
 import {
   readActiveTimerState,
@@ -188,6 +207,13 @@ export default function CountdownTimer() {
    */
   const [countdownOverlay, setCountdownOverlay] = useState<number | "GO" | null>(null);
 
+  // Wall-clock readouts (#421): start time, ETA, time-since-alarm
+  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
+  const [etaMs, setEtaMs] = useState<number | null>(null);
+  const [alarmFiredAtMs, setAlarmFiredAtMs] = useState<number | null>(null);
+  const [timeSinceAlarmMs, setTimeSinceAlarmMs] = useState(0);
+  const alarmTickRef2 = useRef<ReturnType<typeof setInterval> | null>(null);
+
   // Timing refs — wall-clock anchors, never accumulated intervals
   const endAtWallRef = useRef<number | null>(null); // Date.now() at zero, while running
   const remainingRef = useRef<number>(DEFAULT_DURATION_MS); // ms left, while paused/idle
@@ -347,6 +373,8 @@ export default function CountdownTimer() {
       // Auto-reset to the ORIGINAL duration — ready to restart with one tap.
       remainingRef.current = durationRef.current;
       setRemainingMs(durationRef.current);
+      // Record the moment the alarm fired for the time-since-alarm readout (#421).
+      setAlarmFiredAtMs(Date.now());
       setState("alerting");
       clearPersistedTimer();
       startAlarm();
@@ -409,6 +437,32 @@ export default function CountdownTimer() {
   }, [complete]);
 
   // -------------------------------------------------------------------------
+  // Live time-since-alarm counter (#421) — updates every second while alerting
+  // -------------------------------------------------------------------------
+
+  useEffect(() => {
+    const alerting = state === "alerting";
+    if (!alerting || alarmFiredAtMs === null) {
+      if (alarmTickRef2.current !== null) {
+        clearInterval(alarmTickRef2.current);
+        alarmTickRef2.current = null;
+      }
+      return;
+    }
+    const fired = alarmFiredAtMs;
+    setTimeSinceAlarmMs(Date.now() - fired);
+    alarmTickRef2.current = setInterval(() => {
+      setTimeSinceAlarmMs(Date.now() - fired);
+    }, 1000);
+    return () => {
+      if (alarmTickRef2.current !== null) {
+        clearInterval(alarmTickRef2.current);
+        alarmTickRef2.current = null;
+      }
+    };
+  }, [state, alarmFiredAtMs]);
+
+  // -------------------------------------------------------------------------
   // Restore persisted state on mount (#224 pattern)
   // -------------------------------------------------------------------------
 
@@ -461,6 +515,7 @@ export default function CountdownTimer() {
       stopTick();
       stopAlarm();
       if (goTimerRef.current !== null) clearTimeout(goTimerRef.current);
+      if (alarmTickRef2.current !== null) clearInterval(alarmTickRef2.current);
     },
     [stopTick, stopAlarm]
   );
@@ -476,10 +531,20 @@ export default function CountdownTimer() {
     ensureAudioCtx();
     setFinishedWhileAway(false);
     stopAlarm();
+    // Record start time when starting a fresh round (not resuming a pause).
+    // Also clear any stale alarm data from a prior completed round (#421).
+    const now = Date.now();
+    if (state !== "paused") {
+      setStartedAtMs(now);
+    }
+    setAlarmFiredAtMs(null);
+    setTimeSinceAlarmMs(0);
     const startFrom =
       state === "paused" ? remainingRef.current : durationRef.current;
     if (startFrom <= 0) return;
-    endAtWallRef.current = Date.now() + startFrom;
+    endAtWallRef.current = now + startFrom;
+    // Store ETA as state so it's readable during render without ref access (#421).
+    setEtaMs(now + startFrom);
     setRemainingMs(startFrom);
     setState("running");
     startTick();
@@ -493,11 +558,14 @@ export default function CountdownTimer() {
 
   const handlePause = useCallback(() => {
     if (endAtWallRef.current === null) return;
-    remainingRef.current = Math.max(0, endAtWallRef.current - Date.now());
+    const now = Date.now();
+    remainingRef.current = Math.max(0, endAtWallRef.current - now);
     endAtWallRef.current = null;
     clearOverlay();
     stopTick();
     setRemainingMs(remainingRef.current);
+    // Update ETA to reflect remaining time from now (#421).
+    setEtaMs(now + remainingRef.current);
     setState("paused");
     writePersistedTimer({
       state: "paused",
@@ -517,12 +585,22 @@ export default function CountdownTimer() {
     setState("idle");
     setFinishedWhileAway(false);
     clearPersistedTimer();
+    // Clear wall-clock readouts (#421).
+    setStartedAtMs(null);
+    setEtaMs(null);
+    setAlarmFiredAtMs(null);
+    setTimeSinceAlarmMs(0);
   }, [stopTick, stopAlarm, clearOverlay]);
 
   /** Single tap silences the completion alert without restarting. */
   const handleDismissAlert = useCallback(() => {
     stopAlarm();
     setState("idle");
+    // Clear alarm readouts — user dismissed, back to idle (#421).
+    setAlarmFiredAtMs(null);
+    setEtaMs(null);
+    setTimeSinceAlarmMs(0);
+    setStartedAtMs(null);
   }, [stopAlarm]);
 
   const handleDurationChange = useCallback((value: string) => {
@@ -664,6 +742,21 @@ export default function CountdownTimer() {
         </div>
       </div>
 
+      {/* ── Wall-clock readouts: start time + ETA (#421) ────────────────── */}
+      {(isRunning || state === "paused") && startedAtMs !== null && etaMs !== null && (
+        <div
+          className="mt-3 flex flex-col items-center gap-0.5 text-xs font-semibold text-race-muted"
+          data-testid="timer-readouts"
+        >
+          <span data-testid="timer-start-time">
+            Started {fmtWallTime(startedAtMs)}
+          </span>
+          <span data-testid="timer-eta">
+            Finishes at {fmtWallTime(etaMs)}
+          </span>
+        </div>
+      )}
+
       {/* ── Completion alert ─────────────────────────────────────────────── */}
       {isAlerting && (
         <p
@@ -673,6 +766,17 @@ export default function CountdownTimer() {
         >
           Time&apos;s up — reset to {formatDuration(durationMs)}. Tap Start to
           go again or Dismiss to silence.
+        </p>
+      )}
+
+      {/* ── Time-since-alarm readout (#421) — live counter while alerting ── */}
+      {isAlerting && alarmFiredAtMs !== null && (
+        <p
+          className="mt-1 text-center text-xs font-semibold text-race-muted"
+          aria-live="polite"
+          data-testid="timer-since-alarm"
+        >
+          Rang {fmtTimeSince(timeSinceAlarmMs)}
         </p>
       )}
 

@@ -1,5 +1,5 @@
 /**
- * E2E spec: /stopwatch — countdown timer mode (#232)
+ * E2E spec: /stopwatch — countdown timer mode (#232, #421)
  *
  * Solo mode only (shared sessions are unaffected). Tests:
  *   1. Mode toggle is visible; TIMER switches to the countdown view and hides
@@ -13,6 +13,8 @@
  *      workflow).
  *   7. A running timer survives a page refresh via the wall-clock anchor.
  *   8. Reset returns a paused timer to the set duration.
+ *   9. (#421) Start time + ETA readouts appear while running and while paused.
+ *  10. (#421) Time-since-alarm readout appears and updates while alerting.
  */
 import { test, expect, type Page } from '@playwright/test';
 
@@ -169,6 +171,51 @@ test.describe('/stopwatch countdown timer mode', () => {
     await page.getByTestId('timer-secondary-btn').click(); // Reset
     expect(await readRemainingMs(page)).toBe(20_000);
     await expect(page.getByTestId('timer-primary-btn')).toHaveText('Start');
+  });
+
+  // #421 — wall-clock readouts
+  test('start time and ETA readouts appear while running and while paused', async ({ page }) => {
+    await enterTimerMode(page);
+
+    await page.getByTestId('timer-duration-input').fill('01:00');
+    await page.getByTestId('timer-primary-btn').click();
+
+    // While running: readouts should be visible immediately after start
+    await expect(page.getByTestId('timer-readouts')).toBeVisible();
+    const startText = await page.getByTestId('timer-start-time').textContent();
+    expect(startText).toMatch(/Started \d+:\d+/);
+    const etaText = await page.getByTestId('timer-eta').textContent();
+    expect(etaText).toMatch(/Finishes at \d+:\d+/);
+
+    // While paused: readouts still visible, ETA updated to reflect remaining time
+    await page.getByTestId('timer-primary-btn').click(); // Pause
+    await expect(page.getByTestId('timer-readouts')).toBeVisible();
+    const pausedEta = await page.getByTestId('timer-eta').textContent();
+    expect(pausedEta).toMatch(/Finishes at \d+:\d+/);
+
+    // After reset: readouts gone
+    await page.getByTestId('timer-secondary-btn').click(); // Reset
+    await expect(page.getByTestId('timer-readouts')).not.toBeVisible();
+  });
+
+  test('time-since-alarm readout appears and updates while alerting (#421)', async ({ page }) => {
+    await enterTimerMode(page);
+
+    await page.getByTestId('timer-duration-input').fill('00:02');
+    await page.getByTestId('timer-primary-btn').click();
+
+    // Wait for completion (alarm fires after ~2 s + 1 s GO overlay)
+    await expect(page.getByTestId('timer-complete')).toBeVisible({ timeout: 5000 });
+
+    // Time-since-alarm readout should appear
+    await expect(page.getByTestId('timer-since-alarm')).toBeVisible();
+    const sinceText = await page.getByTestId('timer-since-alarm').textContent();
+    // Should show "Rang Xs ago" (within a few seconds of alarm)
+    expect(sinceText).toMatch(/Rang \d+s ago/);
+
+    // After dismiss: readout gone
+    await page.getByTestId('timer-secondary-btn').click(); // Dismiss
+    await expect(page.getByTestId('timer-since-alarm')).not.toBeVisible();
   });
 
 });
