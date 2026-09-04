@@ -48,6 +48,7 @@ import {
   ActivityIndicator as PaperActivityIndicator,
   Appbar,
   Button,
+  Button as PaperButton,
   Card,
   Chip,
   DataTable,
@@ -1972,41 +1973,45 @@ function CreateScreen({
           you share.
         </Text>
 
-        <LabeledInput
-          label="SESSION NAME"
+        <PaperTextInput
+          mode="outlined"
+          label="Session name"
           value={sessionName}
           onChangeText={setSessionName}
           placeholder="e.g. Tuesday Hill Climb"
           autoCapitalize="words"
+          autoCorrect={false}
+          error={!!error}
+          style={{ marginBottom: 4 }}
         />
-        <LabeledInput
-          label="YOUR DISPLAY NAME"
+        <View style={{ marginBottom: 14 }} />
+
+        <PaperTextInput
+          mode="outlined"
+          label="Your display name"
           value={displayName}
           onChangeText={setDisplayName}
           placeholder="e.g. Coach Alex"
           autoCapitalize="words"
+          autoCorrect={false}
+          error={!!error}
+          style={{ marginBottom: 4 }}
         />
 
-        {error && (
-          <View style={s.errorBox}>
-            <Text style={s.errorText}>{error}</Text>
-          </View>
-        )}
+        <HelperText type="error" visible={!!error}>
+          {error ?? ""}
+        </HelperText>
 
-        <Pressable
+        <PaperButton
+          mode="contained"
           onPress={handleCreate}
           disabled={loading}
-          style={({ pressed }) => [
-            s.primaryBtn,
-            { opacity: pressed || loading ? 0.7 : 1 },
-          ]}
+          loading={loading}
+          style={{ marginTop: 8 }}
+          contentStyle={{ paddingVertical: 4 }}
         >
-          {loading ? (
-            <ActivityIndicator color={C.white} />
-          ) : (
-            <Text style={s.primaryBtnText}>START SESSION</Text>
-          )}
-        </Pressable>
+          Start session
+        </PaperButton>
       </ScrollView>
     </SafeAreaView>
   );
@@ -2117,51 +2122,54 @@ function JoinScreen({
           Enter the 6-character session code and choose a name others will see.
         </Text>
 
-        <LabeledInput
-          label="SESSION CODE"
+        <PaperTextInput
+          mode="outlined"
+          label="Session code"
           value={code}
           onChangeText={(t) => setCode(t.toUpperCase())}
           placeholder="AB3K9X"
           autoCapitalize="characters"
+          autoCorrect={false}
+          error={!!error}
+          style={{ marginBottom: 4 }}
         />
-        <LabeledInput
-          label="YOUR DISPLAY NAME"
+        <View style={{ marginBottom: 14 }} />
+
+        <PaperTextInput
+          mode="outlined"
+          label="Your display name"
           value={displayName}
           onChangeText={setDisplayName}
           placeholder="e.g. Jamie"
           autoCapitalize="words"
+          autoCorrect={false}
+          error={!!error}
+          style={{ marginBottom: 4 }}
         />
 
-        {error && (
-          <View style={s.errorBox}>
-            <Text style={s.errorText}>{error}</Text>
-          </View>
-        )}
+        <HelperText type="error" visible={!!error}>
+          {error ?? ""}
+        </HelperText>
 
-        <Pressable
+        <PaperButton
+          mode="contained"
           onPress={handleJoin}
           disabled={loading}
-          style={({ pressed }) => [
-            s.primaryBtn,
-            { opacity: pressed || loading ? 0.7 : 1 },
-          ]}
+          loading={loading}
+          style={{ marginTop: 8 }}
+          contentStyle={{ paddingVertical: 4 }}
         >
-          {loading ? (
-            <ActivityIndicator color={C.white} />
-          ) : (
-            <Text style={s.primaryBtnText}>JOIN</Text>
-          )}
-        </Pressable>
-        <Pressable
+          Join
+        </PaperButton>
+        <PaperButton
+          mode="outlined"
           onPress={() => onView(code.trim().toUpperCase())}
           disabled={code.trim().length !== 6}
-          style={({ pressed }) => [
-            s.outlineBtn,
-            { marginTop: 12, opacity: pressed || code.trim().length !== 6 ? 0.7 : 1 },
-          ]}
+          style={{ marginTop: 12 }}
+          contentStyle={{ paddingVertical: 4 }}
         >
-          <Text style={s.outlineBtnText}>VIEW ONLY</Text>
-        </Pressable>
+          View only
+        </PaperButton>
       </ScrollView>
     </SafeAreaView>
   );
