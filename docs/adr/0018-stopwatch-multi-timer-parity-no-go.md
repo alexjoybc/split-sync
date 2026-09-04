@@ -49,3 +49,13 @@ supersedes this ADR for one specific capability:** a device-local list of
 named, switchable solo sessions (one active at a time, capped at 10). All
 other rejections in this ADR — simultaneous on-screen timers, floating
 picture-in-picture, home-screen widgets — remain in force.
+
+## Amendment — ADR 0025
+
+**ADR 0025 (`0025-stopwatch-pomodoro-repeat-timer.md`) narrowly amends this
+ADR for one specific capability:** an optional repeat/Pomodoro mode on a
+single active countdown session, with configurable work duration, rest/delay
+duration, and repeat count (finite or infinite). The repeat runs sequentially
+within one visible session — there is never more than one timer on screen at a
+time. All other rejections in this ADR — simultaneous on-screen timers,
+floating picture-in-picture, home-screen widgets — remain in force.
