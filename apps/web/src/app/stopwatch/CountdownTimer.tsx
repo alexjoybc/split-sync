@@ -187,6 +187,13 @@ export default function CountdownTimer() {
    * "GO"  = show "GO!" for ~1 s after reaching zero
    */
   const [countdownOverlay, setCountdownOverlay] = useState<number | "GO" | null>(null);
+  /**
+   * On-demand fullscreen mode — shows the current remaining time in a
+   * full-screen high-contrast overlay, reachable at any point (not only
+   * the terminal 5-second auto-overlay). The 5-second auto-overlay takes
+   * visual precedence (higher z-index) when both are active.
+   */
+  const [manualFsMode, setManualFsMode] = useState(false);
 
   // Timing refs — wall-clock anchors, never accumulated intervals
   const endAtWallRef = useRef<number | null>(null); // Date.now() at zero, while running
@@ -236,12 +243,32 @@ export default function CountdownTimer() {
     exitFullscreen();
   }, [exitFullscreen]);
 
+  // ── On-demand fullscreen (available at any time) ──────────────────────
+  const enterManualFs = useCallback(() => {
+    setManualFsMode(true);
+    enterFullscreen();
+  }, [enterFullscreen]);
+
+  const exitManualFs = useCallback(() => {
+    setManualFsMode(false);
+    exitFullscreen();
+  }, [exitFullscreen]);
+
+  const toggleManualFs = useCallback(() => {
+    if (manualFsMode) {
+      exitManualFs();
+    } else {
+      enterManualFs();
+    }
+  }, [manualFsMode, enterManualFs, exitManualFs]);
+
   // Sync when user presses Esc / browser exits fullscreen unilaterally
   useEffect(() => {
     const onFsChange = () => {
       if (!document.fullscreenElement && enteredFsRef.current) {
         enteredFsRef.current = false;
         setCountdownOverlay(null);
+        setManualFsMode(false);
       }
     };
     document.addEventListener("fullscreenchange", onFsChange);
@@ -570,7 +597,89 @@ export default function CountdownTimer() {
 
   return (
     <>
-      {/* ── Fullscreen final-seconds overlay ─────────────────────────────── */}
+      {/* ── On-demand fullscreen overlay (lower z-index than 5-s auto overlay) */}
+      {manualFsMode && countdownOverlay === null && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={
+            isAlerting
+              ? "Time's up — fullscreen view"
+              : `Timer fullscreen — ${display} remaining`
+          }
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9998,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#000",
+            color: "#fff",
+            cursor: "pointer",
+          }}
+          onClick={exitManualFs}
+          data-testid="timer-manual-fs-overlay"
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              fontFamily: "monospace",
+              fontWeight: 900,
+              fontSize: "clamp(64px, 22vw, 200px)",
+              lineHeight: 1,
+              letterSpacing: "-0.04em",
+              color: isAlerting ? "var(--race-red)" : "#fff",
+              fontVariantNumeric: "tabular-nums",
+            }}
+          >
+            {display}
+          </span>
+          <span
+            aria-hidden="true"
+            style={{
+              marginTop: "1.5rem",
+              fontSize: "clamp(14px, 3vw, 24px)",
+              fontWeight: 700,
+              letterSpacing: "0.3em",
+              textTransform: "uppercase",
+              color: isAlerting ? "var(--race-red)" : "rgba(255,255,255,0.55)",
+            }}
+          >
+            {isAlerting
+              ? "Time's up"
+              : isRunning
+              ? "Counting down"
+              : state === "paused"
+              ? "Paused"
+              : "Timer"}
+          </span>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); exitManualFs(); }}
+            aria-label="Exit fullscreen"
+            style={{
+              marginTop: "3rem",
+              padding: "0.5rem 1.5rem",
+              background: "transparent",
+              border: "2px solid rgba(255,255,255,0.35)",
+              borderRadius: "4px",
+              color: "rgba(255,255,255,0.55)",
+              fontSize: "clamp(11px, 2vw, 14px)",
+              fontWeight: 700,
+              letterSpacing: "0.2em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+            }}
+            data-testid="timer-fs-exit-btn"
+          >
+            Tap anywhere or press Esc to exit fullscreen
+          </button>
+        </div>
+      )}
+
+      {/* ── Fullscreen final-seconds overlay (auto, higher z-index) ────────── */}
       {countdownOverlay !== null && (
         <div
           role="status"
@@ -748,6 +857,18 @@ export default function CountdownTimer() {
           {primaryLabel}
         </button>
       </div>
+
+      {/* ── On-demand fullscreen button (#422) ──────────────────────────── */}
+      <button
+        type="button"
+        className="race-action race-action--outline mt-4 text-xs"
+        onClick={toggleManualFs}
+        aria-pressed={manualFsMode}
+        aria-label={manualFsMode ? "Exit fullscreen timer" : "Enter fullscreen timer"}
+        data-testid="timer-fullscreen-btn"
+      >
+        {manualFsMode ? "Exit fullscreen" : "Fullscreen"}
+      </button>
 
       {/* ── Sound setting (#227 — same flag as the stopwatch cues) ───────── */}
       <section
