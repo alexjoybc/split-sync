@@ -284,6 +284,11 @@ In addition to the Supabase-backed shared session model above, the stopwatch sur
 - A local session stays device-private until its creator explicitly shares it; sharing uploads its complete event log to a new shared session.
 - Each session persists its own elapsed time, running/paused status, mode (stopwatch or countdown), and lap list entirely in device storage.
 - A running local session anchors to a wall-clock timestamp so it keeps counting correctly across tab switches, page refreshes, and browser restarts.
+- The next-generation local and shared session representation is defined in
+  `packages/stopwatch-core`: a framework-neutral event log plus a cached JSON
+  snapshot. Its pure reducer, idempotency keys, and storage adapter contract
+  are shared by the web and native clients (ADR 0027). Existing UI storage is
+  migrated in follow-on redesign work.
 - The session cap (10) is enforced purely in the client. It limits worst-case local storage to roughly 10 × (metadata + lap array) — well under 1 MB for up to ~500 laps per session.
 - Local and shared sessions use the same event-sourced model; only shared sessions are subject to Supabase RLS/RPC access control.
 

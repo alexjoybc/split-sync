@@ -1,3 +1,7 @@
+// Type anchor: the canonical event/session shape from the shared package.
+// This import is intentionally type-only so it has no runtime cost.
+import type { SessionStateJSON as _CoreSessionStateJSON } from "@splitsync/stopwatch-core";
+
 /**
  * Multi-session local solo stopwatch storage layer (ADR 0024).
  *

@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { STOPWATCH_CORE_SCHEMA_VERSION } from "@splitsync/stopwatch-core";
 import { useWakeLock } from "./useWakeLock";
 // `stopwatch/layout.tsx` also imports this module, but that file is a
 // Server Component (it exports `metadata`), so its import only evaluates
@@ -38,6 +39,9 @@ import {
   writeActiveRepeatConfig,
   DEFAULT_TIMER_DURATION_MS,
 } from "./soloSessionStorage";
+
+// Runtime workspace-package resolution spike (#464). Integration follows in later redesign issues.
+void STOPWATCH_CORE_SCHEMA_VERSION;
 
 // ---------------------------------------------------------------------------
 // MD3 web component JSX typings (#443)

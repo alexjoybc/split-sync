@@ -18,6 +18,7 @@
  */
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { STOPWATCH_CORE_SCHEMA_VERSION } from "@splitsync/stopwatch-core";
 import {
   ActivityIndicator,
   Alert,
@@ -96,6 +97,9 @@ import {
   SESSION_CAP,
 } from "./src/storage/sessionStorage";
 import type { PersistedStopwatchState, PersistedTimerState, RepeatConfig, SoloSessionMeta, SoloSessionPayload } from "./src/storage/sessionStorage";
+
+// Runtime workspace-package resolution spike (#464). UI migration follows in later redesign issues.
+void STOPWATCH_CORE_SCHEMA_VERSION;
 
 // Required so the in-app browser session used for Google sign-in resolves
 // its promise when redirected back into the app.
