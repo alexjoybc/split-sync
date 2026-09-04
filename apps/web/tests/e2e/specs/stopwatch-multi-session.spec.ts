@@ -468,15 +468,19 @@ test.describe('/stopwatch multi-session: drag-to-reorder', () => {
     const sessionList = page.getByRole('list', { name: /solo sessions/i });
     const rows = sessionList.getByRole('listitem');
 
-    // Focus the drag handle of the first row ("Alpha") and pick it up with Space
-    const firstHandle = rows.nth(0).getByRole('button', { name: /drag to reorder/i });
+    // Anchor the handle to Alpha's data-testid so the locator stays stable
+    // even after ArrowDown changes the DOM order (rows.nth(0) would drift to
+    // Beta after the first move, targeting the wrong element for Enter).
+    const firstHandle = page
+      .getByTestId(`solo-session-row-${idFirst}`)
+      .getByRole('button', { name: /drag to reorder/i });
     await firstHandle.focus();
     await firstHandle.press('Space');
 
     // Move it down once (Alpha → position 1, Beta → position 0)
     await firstHandle.press('ArrowDown');
 
-    // Confirm with Enter
+    // Confirm with Enter — still targets Alpha's handle (now at position 1)
     await firstHandle.press('Enter');
 
     // Alpha should now be in second position
