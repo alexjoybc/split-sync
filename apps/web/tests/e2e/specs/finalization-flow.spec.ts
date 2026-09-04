@@ -18,12 +18,21 @@
  */
 import { test as base, type Page } from '@playwright/test';
 import { expect } from '@playwright/test';
+import type { Session } from '@supabase/supabase-js';
 import {
   uniqueTestEmail,
   createTestOrganizer,
   signInProgrammatically,
 } from '../helpers/supabase';
 import { authedDb, buildEvent, recordCrossings } from '../helpers/fixtures';
+
+/**
+ * Worker-scoped fixture: the organizer user is created once per Playwright
+ * worker and its session reused by all tests that run in that worker.
+ */
+type FinalizationWorkerFixtures = {
+  finalizationUser: { session: Session; accessToken: string };
+};
 
 type FinalizationFixtures = {
   finalizationContext: {
@@ -34,15 +43,22 @@ type FinalizationFixtures = {
   };
 };
 
-const test = base.extend<FinalizationFixtures>({
-  finalizationContext: async ({ page }, use) => {
-    const email = uniqueTestEmail('finalize');
-    const password = 'TestPass123!';
+const test = base.extend<FinalizationFixtures, FinalizationWorkerFixtures>({
+  // Worker-scoped: one user per Playwright worker, shared across all tests.
+  finalizationUser: [
+    async ({}, use) => {
+      const email = uniqueTestEmail('finalize');
+      const password = 'TestPass123!';
+      await createTestOrganizer(email, password);
+      const { session } = await signInProgrammatically(email, password);
+      if (!session) throw new Error('signInProgrammatically returned no session');
+      await use({ session, accessToken: session.access_token });
+    },
+    { scope: 'worker' },
+  ],
 
-    await createTestOrganizer(email, password);
-    const { session } = await signInProgrammatically(email, password);
-    if (!session) throw new Error('signInProgrammatically returned no session');
-    const accessToken = session.access_token;
+  finalizationContext: async ({ page, finalizationUser }, use) => {
+    const { session, accessToken } = finalizationUser;
 
     // Bib 10 will cross; bib 20 never will — the "no crossings" checklist case.
     const { eventId, raceId } = await buildEvent({

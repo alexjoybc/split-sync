@@ -1,24 +1,34 @@
 import { test, expect } from '@playwright/test';
-import { uniqueTestEmail, createTestOrganizer } from '../helpers/supabase';
+import type { Session } from '@supabase/supabase-js';
+import {
+  uniqueTestEmail,
+  createTestOrganizer,
+  signInProgrammatically,
+} from '../helpers/supabase';
 import { seedTimeTrialRace, insertCrossing } from '../helpers/time-trial';
 
 /**
- * Sign the browser in as the test organizer so the Supabase client-side
- * fetches use the organizer RLS policies. The live board shows identical
- * data to what an anonymous spectator sees — we authenticate only to avoid
- * flakiness from anonymous fetch behaviour in the CI Supabase environment.
+ * Inject the organizer session into the browser via localStorage so the
+ * Supabase client-side fetches use the organizer RLS policies. This is
+ * significantly faster than filling the login form (no page round-trip, no
+ * redirect wait) while providing identical auth state for the live board.
  */
-async function signInBrowser(
+async function injectSession(
   page: Parameters<Parameters<typeof test>[1]>[0],
-  email: string,
-  password: string
+  session: Session,
 ) {
-  await page.goto('/login');
-  await page.fill('input[type="email"]', email);
-  await page.fill('input[type="password"]', password);
-  await page.press('input[type="password"]', 'Enter');
-  // Wait until we leave the login page
-  await page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 10_000 });
+  const supabaseUrl =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
+  await page.goto('/');
+  await page.evaluate(
+    ([url, sess]: [string, unknown]) => {
+      const hostname = new URL(url).hostname;
+      const projectRef = hostname.split('.')[0];
+      const key = `sb-${projectRef}-auth-token`;
+      localStorage.setItem(key, JSON.stringify(sess));
+    },
+    [supabaseUrl, session] as [string, unknown],
+  );
 }
 
 /**
@@ -37,16 +47,21 @@ async function waitForBoardLoad(
 test.describe('Time Trial live board', () => {
   let organizerEmail: string;
   let organizerPassword: string;
+  let organizerSession: Session;
 
   test.beforeAll(async () => {
     organizerEmail = uniqueTestEmail('tt-live');
     organizerPassword = 'TestPass123!';
     await createTestOrganizer(organizerEmail, organizerPassword);
+    // Sign in once and cache the session for all tests in this suite.
+    const { session } = await signInProgrammatically(organizerEmail, organizerPassword);
+    if (!session) throw new Error('Failed to sign in TT organizer');
+    organizerSession = session;
   });
 
   test('shows queue in natural bib order (2, 9, 10)', async ({ page }) => {
     const { race } = await seedTimeTrialRace(organizerEmail, organizerPassword);
-    await signInBrowser(page, organizerEmail, organizerPassword);
+    await injectSession(page, organizerSession);
     await page.goto(`/live/${race.id}`);
     await waitForBoardLoad(page);
 
@@ -65,7 +80,7 @@ test.describe('Time Trial live board', () => {
 
   test('shows idle state when no one is on course', async ({ page }) => {
     const { race } = await seedTimeTrialRace(organizerEmail, organizerPassword);
-    await signInBrowser(page, organizerEmail, organizerPassword);
+    await injectSession(page, organizerSession);
     await page.goto(`/live/${race.id}`);
     await waitForBoardLoad(page);
     await expect(page.getByText(/waiting for next rider/i)).toBeVisible({ timeout: 10_000 });
@@ -74,7 +89,7 @@ test.describe('Time Trial live board', () => {
   test('shows rider on course after a start crossing', async ({ page }) => {
     const { race, client } = await seedTimeTrialRace(organizerEmail, organizerPassword);
     await insertCrossing(client, race.id, '2');
-    await signInBrowser(page, organizerEmail, organizerPassword);
+    await injectSession(page, organizerSession);
     await page.goto(`/live/${race.id}`);
     await waitForBoardLoad(page);
     await expect(page.getByText(/#2/)).toBeVisible({ timeout: 10_000 });
@@ -83,7 +98,7 @@ test.describe('Time Trial live board', () => {
 
   test('results table updates within 5 s of a finish crossing (polling fallback)', async ({ page }) => {
     const { race, client } = await seedTimeTrialRace(organizerEmail, organizerPassword);
-    await signInBrowser(page, organizerEmail, organizerPassword);
+    await injectSession(page, organizerSession);
     await page.goto(`/live/${race.id}`);
     await waitForBoardLoad(page);
     await expect(page.getByText(/waiting for next rider/i)).toBeVisible({ timeout: 10_000 });
@@ -106,7 +121,7 @@ test.describe('Time Trial live board', () => {
     await insertCrossing(client, race.id, '2', 1_000);
     await insertCrossing(client, race.id, '2', 56_000);
 
-    await signInBrowser(page, organizerEmail, organizerPassword);
+    await injectSession(page, organizerSession);
     await page.goto(`/live/${race.id}`);
     await waitForBoardLoad(page);
     await page.waitForSelector('table', { timeout: 10_000 });

@@ -21,6 +21,7 @@
  */
 import { test as base, type Page } from '@playwright/test';
 import { expect } from '@playwright/test';
+import type { Session } from '@supabase/supabase-js';
 import {
   uniqueTestEmail,
   createTestOrganizer,
@@ -29,20 +30,24 @@ import {
 import { authedDb, buildEvent } from '../helpers/fixtures';
 
 // ---------------------------------------------------------------------------
-// Local helpers
+// Fixtures
 // ---------------------------------------------------------------------------
 
-// `authedDb` is imported from helpers/fixtures — no need to duplicate the
-// client-construction logic here.
-
-// ---------------------------------------------------------------------------
-// Combined fixture: authenticated page + owned event
-// ---------------------------------------------------------------------------
+/**
+ * Worker-scoped fixture: the organizer user is created once per Playwright
+ * worker and its session reused by all tests that run in that worker.
+ * This eliminates repeated signUp + signInWithPassword round-trips.
+ */
+type ScoringWorkerFixtures = {
+  scoringUser: { session: Session; accessToken: string };
+};
 
 type ScoringFixtures = {
   /**
    * A page with a valid Supabase session injected, plus the IDs of a fresh
    * event and race owned by the authenticated user.
+   * The user itself is worker-scoped; only the event/race are per-test
+   * (each test mutates race state so isolation is required).
    */
   scoringContext: {
     page: Page;
@@ -52,20 +57,26 @@ type ScoringFixtures = {
   };
 };
 
-const test = base.extend<ScoringFixtures>({
-  scoringContext: async ({ page }, use) => {
-    const email = uniqueTestEmail('scoring');
-    const password = 'TestPass123!';
+const test = base.extend<ScoringFixtures, ScoringWorkerFixtures>({
+  // Worker-scoped: one user per Playwright worker, shared across all tests.
+  scoringUser: [
+    async ({}, use) => {
+      const email = uniqueTestEmail('scoring');
+      const password = 'TestPass123!';
+      await createTestOrganizer(email, password);
+      const { session } = await signInProgrammatically(email, password);
+      if (!session) throw new Error('signInProgrammatically returned no session');
+      await use({ session, accessToken: session.access_token });
+    },
+    { scope: 'worker' },
+  ],
 
-    // 1. Create organizer user and sign in to get a JWT.
-    await createTestOrganizer(email, password);
-    const { session } = await signInProgrammatically(email, password);
-    if (!session) throw new Error('signInProgrammatically returned no session');
-    const accessToken = session.access_token;
+  scoringContext: async ({ page, scoringUser }, use) => {
+    const { session, accessToken } = scoringUser;
 
-    // 2. Build an isolated event owned by that user.
-    //    status='live' makes it published (visible to scorers); race is created
-    //    in status='upcoming' by default so we can test the Start button.
+    // Build an isolated event owned by that user.
+    // status='live' makes it published (visible to scorers); race is created
+    // in status='upcoming' by default so we can test the Start button.
     const { eventId, raceId } = await buildEvent({
       status: 'live',
       bibs: ['10', '20', '30'],
@@ -73,8 +84,8 @@ const test = base.extend<ScoringFixtures>({
       userId: session.user.id,
     });
 
-    // 3. Inject the Supabase session into the browser via localStorage so
-    //    the scoring console recognises the user without a login round-trip.
+    // Inject the Supabase session into the browser via localStorage so
+    // the scoring console recognises the user without a login round-trip.
     const supabaseUrl =
       process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
 
