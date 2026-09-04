@@ -76,4 +76,64 @@
      instrument face keeps its own instrumentFace/instrumentCasing/
      instrumentBezel/instrumentInner tokens untouched, per ADR 0026). */
   color: var(--md-sys-color-on-background);
+
+  /* ── Material 3 Expressive (M3E) additions ──────────────────────────────
+     Mirrors apps/stopwatch/src/theme.ts's stopwatchFixedColors,
+     stopwatchEmphasizedFonts, stopwatchShape, and stopwatchSpring exports.
+     See docs/adr/0026-stopwatch-material-3-redesign.md's "Material 3
+     Expressive" section for the contrast table and derivation rule.
+     Foundation only (issue #460) — no selector below is applied to any
+     element yet; that's the follow-up polish issue (#461). */
+
+  /* Fixed color roles (tone-locked; derived via HSL-lightness-only, same
+     rule as the container roles above). */
+  --md-sys-color-primary-fixed: #cfeafc; /* withLightness(bluePrimary, 0.90) */
+  --md-sys-color-primary-fixed-dim: #9fd5f9; /* withLightness(bluePrimary, 0.80) */
+  --md-sys-color-on-primary-fixed: #031e30; /* withLightness(bluePrimary, 0.10) */
+  --md-sys-color-on-primary-fixed-variant: #063c60; /* = on-primary-container */
+
+  --md-sys-color-secondary-fixed: #cfeffc; /* withLightness(blueAccent, 0.90) */
+  --md-sys-color-secondary-fixed-dim: #9fdff9; /* withLightness(blueAccent, 0.80) */
+  --md-sys-color-on-secondary-fixed: #032330; /* withLightness(blueAccent, 0.10) */
+  --md-sys-color-on-secondary-fixed-variant: #053f57; /* = on-secondary-container */
+
+  --md-sys-color-tertiary-fixed: #fff7cc; /* withLightness(yellow, 0.90) */
+  --md-sys-color-tertiary-fixed-dim: #ffef99; /* withLightness(yellow, 0.80) */
+  --md-sys-color-on-tertiary-fixed: #18181b; /* palette.ink — derived tone fails AA, see ADR */
+  --md-sys-color-on-tertiary-fixed-variant: #18181b; /* palette.ink — derived tone fails AA, see ADR */
+
+  /* Emphasized type scale (bolder weight + tighter tracking than the
+     standard MD3 role; font-size/line-height are unchanged — set those
+     from the existing standard-scale rules, only override weight/tracking
+     with these). No new font family. */
+  --md-sys-typescale-headline-small-emphasized-weight: 700;
+  --md-sys-typescale-headline-small-emphasized-tracking: -0.25px; /* standard: 0 */
+  --md-sys-typescale-title-medium-emphasized-weight: 700;
+  --md-sys-typescale-title-medium-emphasized-tracking: 0.05px; /* standard: 0.15px */
+  --md-sys-typescale-label-large-emphasized-weight: 700;
+  --md-sys-typescale-label-large-emphasized-tracking: 0.05px; /* standard: 0.1px */
+
+  /* Expressive shape system. `--md-sys-shape-corner-pressed-delta` is a
+     signed px value — use with calc(), e.g.
+     calc(var(--md-sys-shape-corner-large) + var(--md-sys-shape-corner-pressed-delta))
+     on an :active/[data-pressed] selector, clamped at 0 by the consumer. */
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-pill: 999px; /* CTAs, instrument control buttons */
+  --md-sys-shape-corner-pressed-delta: -8px;
+
+  /* Spring motion. True CSS spring-timing easing isn't broadly supported
+     yet, so these are cubic-bezier + duration approximations of a spring
+     curve (slight overshoot, no linear/ease-only transitions on primary
+     interactive feedback). Mirrors stopwatchSpring's three presets in
+     apps/stopwatch/src/theme.ts. */
+  --md-motion-spring-standard-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --md-motion-spring-standard-duration: 250ms;
+  --md-motion-spring-expressive-easing: cubic-bezier(0.32, 1.75, 0.6, 1);
+  --md-motion-spring-expressive-duration: 300ms;
+  --md-motion-spring-dialog-easing: cubic-bezier(0.3, 1.2, 0.5, 1);
+  --md-motion-spring-dialog-duration: 220ms;
 }
