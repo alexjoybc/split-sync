@@ -17,7 +17,7 @@
  * SplitSync race-paper content areas, physical raised buttons.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -397,6 +397,82 @@ function LapTrendChart<T>({
     </View>
   );
 }
+
+// ── Memoized lap table (shared session) ─────────────────────────────────────
+// Isolated behind React.memo so the 30ms elapsed-time tick in the parent
+// screen (which re-renders on every setElapsedMs call) does not force this
+// list — and the per-row LapTrendChart — to re-render 33x/sec. It only
+// re-renders when the derived `laps` array (or best/worst) actually changes,
+// i.e. when a lap is recorded (#344).
+const LapTable = memo(function LapTable({
+  laps,
+  bestMs,
+  worstMs,
+  showSessionStats,
+  showDelta,
+}: {
+  laps: DerivedLap[];
+  bestMs: number | null;
+  worstMs: number | null;
+  showSessionStats: boolean;
+  showDelta: boolean;
+}) {
+  const renderItem = useCallback(
+    ({ item }: { item: DerivedLap }) => {
+      const isBest = bestMs !== null && item.splitMs === bestMs;
+      const delta =
+        showDelta && bestMs !== null && !isBest ? item.splitMs - bestMs : null;
+      return (
+        <View style={[s.tableRow, isBest && s.rowBest]}>
+          <Text style={[s.td, s.cLap, { color: C.muted }]}>{item.lapNum}</Text>
+          <Text
+            style={[
+              s.td,
+              s.cSplit,
+              isBest && { color: C.yellowDark, fontWeight: "900" },
+            ]}
+          >
+            {fmtCompact(item.splitMs)}
+          </Text>
+          <Text style={[s.td, s.cTime, { color: C.muted }]}>
+            {fmtCompact(item.cumulativeMs)}
+          </Text>
+          <Text style={[s.td, s.cActor, { color: C.muted }]} numberOfLines={1}>
+            {item.actorName}
+            {delta !== null ? ` ${fmtDelta(delta)}` : ""}
+          </Text>
+        </View>
+      );
+    },
+    [bestMs, showDelta]
+  );
+
+  const reversedLaps = useMemo(() => [...laps].reverse(), [laps]);
+
+  const listHeader = useMemo(
+    () =>
+      showSessionStats && bestMs !== null && worstMs !== null ? (
+        <LapTrendChart
+          laps={reversedLaps}
+          bestMs={bestMs}
+          worstMs={worstMs}
+          getLapMs={(l) => l.splitMs}
+          getLapNum={(l) => l.lapNum}
+        />
+      ) : null,
+    [showSessionStats, bestMs, worstMs, reversedLaps]
+  );
+
+  return (
+    <FlatList
+      data={laps}
+      keyExtractor={(l) => String(l.lapNum)}
+      style={{ flex: 1 }}
+      ListHeaderComponent={listHeader}
+      renderItem={renderItem}
+    />
+  );
+});
 
 // ── Volume-key hardware control ────────────────────────────────────────────────
 
@@ -2137,6 +2213,16 @@ function SessionScreen({
   }, [events]);
   /** Local monotonic counter — ensures replay order is preserved after app kill. */
   const localSeqRef = useRef(0);
+  // ── Reconnect-storm guards (#344) ─────────────────────────────────────────
+  // Supabase's realtime client retries the socket/channel join internally;
+  // every failed retry re-fires our `CHANNEL_ERROR` status callback. Without
+  // these guards, a flaky connection triggers overlapping rebuild/flush
+  // cycles in a tight loop, saturating the JS thread with state updates.
+  const recoveryInFlightRef = useRef(false);
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recoveryBackoffMsRef = useRef(0);
+  const rebuildInFlightRef = useRef(false);
+  const flushInFlightRef = useRef(false);
 
   // ── Derived lap table ───────────────────────────────────────────────────────
   const laps = useMemo<DerivedLap[]>(() => {
@@ -2292,6 +2378,70 @@ function SessionScreen({
     [startTick, stopTick]
   );
 
+  // Batched counterpart to `applyEvent`, used for `sync_response` catch-up
+  // payloads (#344). A single `setEvents` call merges the whole batch instead
+  // of one state update (and one full FlatList re-render pass) per event —
+  // important because a resync burst after a reconnect can carry many events
+  // at once, and naive per-event application is O(n²) in the number of laps.
+  const applyEventsBatch = useCallback(
+    (incoming: SessionEvent[]) => {
+      if (incoming.length === 0) return;
+
+      setEvents((prev) => {
+        const existingIds = new Set(prev.map((e) => e.id));
+        const toAdd = incoming.filter((e) => !existingIds.has(e.id));
+        if (toAdd.length === 0) return prev;
+        return [...prev, ...toAdd];
+      });
+
+      // Replay status-affecting event types (start/stop/reset) in sequence
+      // order, but only commit the final resulting state once.
+      const sorted = [...incoming].sort((a, b) => a.sequence - b.sequence);
+      let nextStatus: SessionStatus | null = null;
+      let nextT0Server: string | null | undefined; // undefined = no change
+      let nextClientT0: number | null | undefined;
+      let clearElapsed = false;
+
+      for (const ev of sorted) {
+        if (ev.sequence > lastSequenceRef.current) {
+          lastSequenceRef.current = ev.sequence;
+        }
+        if (ev.event_type === "start") {
+          if (ev.t0_server) nextT0Server = ev.t0_server;
+          nextClientT0 = Date.now();
+          nextStatus = "running";
+          clearElapsed = false;
+        } else if (ev.event_type === "stop") {
+          nextStatus = "stopped";
+        } else if (ev.event_type === "reset") {
+          nextT0Server = null;
+          nextClientT0 = null;
+          nextStatus = "waiting";
+          clearElapsed = true;
+        }
+      }
+
+      if (nextStatus === "running") {
+        targetFiredRef.current = false;
+        if (nextT0Server !== undefined) setT0Server(nextT0Server);
+        clientT0Ref.current = nextClientT0 ?? Date.now();
+        setStatus("running");
+        startTick();
+      } else if (nextStatus === "stopped") {
+        setStatus("stopped");
+        stopTick();
+      } else if (nextStatus === "waiting") {
+        setT0Server(null);
+        clientT0Ref.current = null;
+        targetFiredRef.current = false;
+        setStatus("waiting");
+        if (clearElapsed) setElapsedMs(0);
+        stopTick();
+      }
+    },
+    [startTick, stopTick]
+  );
+
   // If session was already running on mount, start ticking from known offset.
   // Also initialise the durable queue depth indicator from AsyncStorage.
   useEffect(() => {
@@ -2322,30 +2472,39 @@ function SessionScreen({
 
   // ── Realtime subscription ───────────────────────────────────────────────────
   const rebuildFromServer = useCallback(async () => {
-    const { data } = await supabase.rpc("get_session_state", {
-      p_session_id: params.sessionId,
-      p_participant_id: params.participantId,
-    });
-    if (!data) return;
-    const state = data as {
-      status: SessionStatus;
-      t0_server: string | null;
-      events: SessionEvent[];
-      participants: Participant[];
-    };
-    setStatus(state.status);
-    setT0Server(state.t0_server ?? null);
-    setParticipants(state.participants ?? []);
-    setEvents(state.events ?? []);
-    if (state.status === "running" && state.t0_server) {
-      clientT0Ref.current =
-        Date.now() -
-        Math.max(0, Date.now() - new Date(state.t0_server).getTime());
-      startTick();
-    } else {
-      stopTick();
+    // Guard: a rebuild already in flight (e.g. from an overlapping reconnect)
+    // should not be duplicated — the caller that's already running will
+    // leave state consistent.
+    if (rebuildInFlightRef.current) return;
+    rebuildInFlightRef.current = true;
+    try {
+      const { data } = await supabase.rpc("get_session_state", {
+        p_session_id: params.sessionId,
+        p_participant_id: params.participantId,
+      });
+      if (!data) return;
+      const state = data as {
+        status: SessionStatus;
+        t0_server: string | null;
+        events: SessionEvent[];
+        participants: Participant[];
+      };
+      setStatus(state.status);
+      setT0Server(state.t0_server ?? null);
+      setParticipants(state.participants ?? []);
+      setEvents(state.events ?? []);
+      if (state.status === "running" && state.t0_server) {
+        clientT0Ref.current =
+          Date.now() -
+          Math.max(0, Date.now() - new Date(state.t0_server).getTime());
+        startTick();
+      } else {
+        stopTick();
+      }
+      return state;
+    } finally {
+      rebuildInFlightRef.current = false;
     }
-    return state;
   }, [params.sessionId, params.participantId, startTick, stopTick]);
 
   // ── Durable queue flush ──────────────────────────────────────────────────────
@@ -2353,65 +2512,73 @@ function SessionScreen({
   // against server state, drops events the server already accepted, then
   // replays the rest in local-sequence order (preserving original timestamps).
   const flushDurableQueue = useCallback(async () => {
-    const queue = await loadDurableQueue(params.sessionCode);
-    if (queue.length === 0) {
-      setDurableQueueDepth(0);
-      return;
-    }
+    // Guard: prevent overlapping flushes racing each other during a
+    // reconnect storm — each would otherwise replay/dedupe the same queue.
+    if (flushInFlightRef.current) return;
+    flushInFlightRef.current = true;
+    try {
+      const queue = await loadDurableQueue(params.sessionCode);
+      if (queue.length === 0) {
+        setDurableQueueDepth(0);
+        return;
+      }
 
-    // Fetch server state to reconcile (reuse rebuildFromServer side-effects).
-    const { data } = await supabase.rpc("get_session_state", {
-      p_session_id: params.sessionId,
-      p_participant_id: params.participantId,
-    });
-
-    const serverEventIds = new Set<string>();
-    if (data) {
-      const state = data as { events: SessionEvent[] };
-      (state.events ?? []).forEach((e) => serverEventIds.add(e.id));
-    }
-
-    // Filter out events the server already accepted (idempotency reconciliation).
-    const toReplay = queue
-      .filter((e) => !serverEventIds.has(e.client_event_id))
-      .sort((a, b) => a.sequence - b.sequence);
-
-    // Drop already-acknowledged entries from durable storage right away.
-    const alreadyAcked = queue.filter((e) => serverEventIds.has(e.client_event_id));
-    for (const e of alreadyAcked) {
-      await removeFromDurableQueue(params.sessionCode, e.client_event_id);
-    }
-
-    // Replay unacknowledged events in order.
-    for (const entry of toReplay) {
-      const { data: evData, error } = await supabase.rpc("record_session_event", {
+      // Fetch server state to reconcile (reuse rebuildFromServer side-effects).
+      const { data } = await supabase.rpc("get_session_state", {
         p_session_id: params.sessionId,
         p_participant_id: params.participantId,
-        p_event_type: entry.event_type,
-        p_client_recorded_at: entry.client_recorded_at,
-        p_client_event_id: entry.client_event_id,
       });
 
-      if (!error) {
-        await removeFromDurableQueue(params.sessionCode, entry.client_event_id);
-        if (evData) {
-          const accepted = evData as SessionEvent;
-          channelRef.current?.send({
-            type: "broadcast",
-            event: "session_event",
-            payload: accepted,
-          });
-          applyEvent(accepted);
-        }
-      } else {
-        // Concurrency or permission error — stop replay; full rebuild will sync state.
-        break;
+      const serverEventIds = new Set<string>();
+      if (data) {
+        const state = data as { events: SessionEvent[] };
+        (state.events ?? []).forEach((e) => serverEventIds.add(e.id));
       }
-    }
 
-    // Update the indicator to reflect what's left.
-    const remaining = await loadDurableQueue(params.sessionCode);
-    setDurableQueueDepth(remaining.length);
+      // Filter out events the server already accepted (idempotency reconciliation).
+      const toReplay = queue
+        .filter((e) => !serverEventIds.has(e.client_event_id))
+        .sort((a, b) => a.sequence - b.sequence);
+
+      // Drop already-acknowledged entries from durable storage right away.
+      const alreadyAcked = queue.filter((e) => serverEventIds.has(e.client_event_id));
+      for (const e of alreadyAcked) {
+        await removeFromDurableQueue(params.sessionCode, e.client_event_id);
+      }
+
+      // Replay unacknowledged events in order.
+      for (const entry of toReplay) {
+        const { data: evData, error } = await supabase.rpc("record_session_event", {
+          p_session_id: params.sessionId,
+          p_participant_id: params.participantId,
+          p_event_type: entry.event_type,
+          p_client_recorded_at: entry.client_recorded_at,
+          p_client_event_id: entry.client_event_id,
+        });
+
+        if (!error) {
+          await removeFromDurableQueue(params.sessionCode, entry.client_event_id);
+          if (evData) {
+            const accepted = evData as SessionEvent;
+            channelRef.current?.send({
+              type: "broadcast",
+              event: "session_event",
+              payload: accepted,
+            });
+            applyEvent(accepted);
+          }
+        } else {
+          // Concurrency or permission error — stop replay; full rebuild will sync state.
+          break;
+        }
+      }
+
+      // Update the indicator to reflect what's left.
+      const remaining = await loadDurableQueue(params.sessionCode);
+      setDurableQueueDepth(remaining.length);
+    } finally {
+      flushInFlightRef.current = false;
+    }
   }, [params.sessionCode, params.sessionId, params.participantId, applyEvent]);
 
   useEffect(() => {
@@ -2460,7 +2627,7 @@ function SessionScreen({
         { event: "sync_response" },
         (msg: { type: string; event: string; payload: Record<string, unknown> }) => {
           const incoming = (msg.payload as { events: SessionEvent[] }).events ?? [];
-          incoming.forEach(applyEvent);
+          applyEventsBatch(incoming);
         }
       )
       .on("broadcast", { event: "session_closed" }, () => {
@@ -2477,6 +2644,13 @@ function SessionScreen({
       })
       .subscribe((subscribeStatus) => {
         if (subscribeStatus === "SUBSCRIBED") {
+          // A successful (re)subscribe means the connection is healthy again —
+          // reset the backoff so the next transient error starts fresh.
+          recoveryBackoffMsRef.current = 0;
+          if (recoveryTimerRef.current) {
+            clearTimeout(recoveryTimerRef.current);
+            recoveryTimerRef.current = null;
+          }
           // Announce presence
           channel.send({
             type: "broadcast",
@@ -2499,14 +2673,43 @@ function SessionScreen({
           }
           // Flush any events that were queued offline / during a previous kill.
           flushDurableQueue();
-        } else if (subscribeStatus === "CHANNEL_ERROR") {
-          rebuildFromServer().then(() => flushDurableQueue());
+        } else if (
+          subscribeStatus === "CHANNEL_ERROR" ||
+          subscribeStatus === "TIMED_OUT"
+        ) {
+          // Supabase's client already retries the underlying socket/channel
+          // join on its own; this callback can re-fire on every failed retry.
+          // Debounce with exponential backoff and a single in-flight guard so
+          // a flaky connection can't spawn overlapping rebuild/flush cycles
+          // (#344 — this was the primary cause of the shared-session freeze).
+          if (recoveryTimerRef.current || recoveryInFlightRef.current) return;
+          const delay = Math.min(
+            recoveryBackoffMsRef.current || 1000,
+            30000
+          );
+          recoveryTimerRef.current = setTimeout(() => {
+            recoveryTimerRef.current = null;
+            recoveryInFlightRef.current = true;
+            rebuildFromServer()
+              .then(() => flushDurableQueue())
+              .finally(() => {
+                recoveryInFlightRef.current = false;
+              });
+          }, delay);
+          recoveryBackoffMsRef.current = Math.min(
+            (recoveryBackoffMsRef.current || 1000) * 2,
+            30000
+          );
         }
       });
 
     channelRef.current = channel;
 
     return () => {
+      if (recoveryTimerRef.current) {
+        clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
+      }
       channel.send({
         type: "broadcast",
         event: "participant_left",
@@ -2975,49 +3178,12 @@ function SessionScreen({
                 <Text style={[s.th, s.cTime]}>TIME</Text>
                 <Text style={[s.th, s.cActor]}>BY</Text>
               </View>
-              <FlatList
-                data={laps}
-                keyExtractor={(l) => String(l.lapNum)}
-                style={{ flex: 1 }}
-                ListHeaderComponent={
-                  showSessionStats ? (
-                    <LapTrendChart
-                      laps={[...laps].reverse()}
-                      bestMs={bestMs!}
-                      worstMs={worstMs!}
-                      getLapMs={(l) => l.splitMs}
-                      getLapNum={(l) => l.lapNum}
-                    />
-                  ) : null
-                }
-                renderItem={({ item }) => {
-                  const isBest = bestMs !== null && item.splitMs === bestMs;
-                  return (
-                    <View style={[s.tableRow, isBest && s.rowBest]}>
-                      <Text style={[s.td, s.cLap, { color: C.muted }]}>
-                        {item.lapNum}
-                      </Text>
-                      <Text
-                        style={[
-                          s.td,
-                          s.cSplit,
-                          isBest && { color: C.yellowDark, fontWeight: "900" },
-                        ]}
-                      >
-                        {fmtCompact(item.splitMs)}
-                      </Text>
-                      <Text style={[s.td, s.cTime, { color: C.muted }]}>
-                        {fmtCompact(item.cumulativeMs)}
-                      </Text>
-                      <Text
-                        style={[s.td, s.cActor, { color: C.muted }]}
-                        numberOfLines={1}
-                      >
-                        {item.actorName}
-                      </Text>
-                    </View>
-                  );
-                }}
+              <LapTable
+                laps={laps}
+                bestMs={bestMs}
+                worstMs={worstMs}
+                showSessionStats={showSessionStats}
+                showDelta={false}
               />
             </View>
           ) : null}
@@ -3067,52 +3233,12 @@ function SessionScreen({
             <Text style={[s.th, s.cTime]}>TIME</Text>
             <Text style={[s.th, s.cActor]}>BY</Text>
           </View>
-          <FlatList
-            data={laps}
-            keyExtractor={(l) => String(l.lapNum)}
-            style={{ flex: 1 }}
-            ListHeaderComponent={
-              showSessionStats ? (
-                <LapTrendChart
-                  laps={[...laps].reverse()}
-                  bestMs={bestMs!}
-                  worstMs={worstMs!}
-                  getLapMs={(l) => l.splitMs}
-                  getLapNum={(l) => l.lapNum}
-                />
-              ) : null
-            }
-            renderItem={({ item }) => {
-              const isBest = bestMs !== null && item.splitMs === bestMs;
-              const delta =
-                bestMs !== null && !isBest ? item.splitMs - bestMs : null;
-              return (
-                <View style={[s.tableRow, isBest && s.rowBest]}>
-                  <Text style={[s.td, s.cLap, { color: C.muted }]}>
-                    {item.lapNum}
-                  </Text>
-                  <Text
-                    style={[
-                      s.td,
-                      s.cSplit,
-                      isBest && { color: C.yellowDark, fontWeight: "900" },
-                    ]}
-                  >
-                    {fmtCompact(item.splitMs)}
-                  </Text>
-                  <Text style={[s.td, s.cTime, { color: C.muted }]}>
-                    {fmtCompact(item.cumulativeMs)}
-                  </Text>
-                  <Text
-                    style={[s.td, s.cActor, { color: C.muted }]}
-                    numberOfLines={1}
-                  >
-                    {item.actorName}
-                    {delta !== null ? ` ${fmtDelta(delta)}` : ""}
-                  </Text>
-                </View>
-              );
-            }}
+          <LapTable
+            laps={laps}
+            bestMs={bestMs}
+            worstMs={worstMs}
+            showSessionStats={showSessionStats}
+            showDelta={true}
           />
         </View>
       ) : (
