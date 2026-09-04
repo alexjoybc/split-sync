@@ -36,7 +36,12 @@ test.beforeEach(async () => {
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
   try {
-    const res = await fetch(`${supabaseUrl}/health`, { signal: AbortSignal.timeout(2_000) });
+    // #431: this previously checked `${supabaseUrl}/health`, which the local
+    // Supabase gateway does not expose (404) — every test in this file was
+    // silently skipped in every run, including CI, regardless of whether
+    // Supabase was actually running. Match the health-check path used by the
+    // other stopwatch specs (`/auth/v1/health`) so this suite actually runs.
+    const res = await fetch(`${supabaseUrl}/auth/v1/health`, { signal: AbortSignal.timeout(2_000) });
     if (!res.ok) {
       test.skip(true, 'Local Supabase not running — skipping shared session tests');
     }
@@ -182,6 +187,27 @@ test.describe('Shared controls', () => {
     const timerText = await creatorPage.getByRole('timer').textContent();
     // Timer format MM:SS — check that something is displayed
     expect(timerText).toBeTruthy();
+
+    // Regression test for #431: the joiner's clock must actually tick, not
+    // just flip its status badge to "Live". record_session_event's returned
+    // event has no t0_server field (it lives on casual_sessions, not
+    // casual_session_events), so a client that hard-requires t0_server
+    // before starting its display loop shows "● Live" while the digits stay
+    // frozen at 0:00. Sample the joiner's timer twice, a beat apart, and
+    // assert it actually advanced.
+    const readJoinerElapsedMs = async () => {
+      const label = await joinerPage.getByRole('timer').getAttribute('aria-label');
+      const match = label?.match(/Elapsed time: (\d+):(\d+)\.?(\d+)?/);
+      if (!match) return 0;
+      const [, mm, ss, hundredths] = match;
+      return (
+        Number(mm) * 60_000 + Number(ss) * 1_000 + Number(hundredths ?? 0) * 10
+      );
+    };
+    const joinerElapsedBefore = await readJoinerElapsedMs();
+    await joinerPage.waitForTimeout(1_000);
+    const joinerElapsedAfter = await readJoinerElapsedMs();
+    expect(joinerElapsedAfter).toBeGreaterThan(joinerElapsedBefore);
 
     // ── Joiner presses LAP ──────────────────────────────────────────────
     await joinerPage.getByRole('button', { name: /record lap/i }).click();

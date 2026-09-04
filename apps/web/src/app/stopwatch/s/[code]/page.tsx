@@ -232,10 +232,14 @@ function JoinForm({ code, sessionName, onJoined }: JoinFormProps) {
           <p className="text-sm font-bold text-race-ink mb-4">
             Enter your name to join this timing session.
           </p>
-          <label className="block text-xs font-black uppercase tracking-wide">
+          <label
+            htmlFor="stopwatch-join-display-name"
+            className="block text-xs font-black uppercase tracking-wide"
+          >
             Your display name
           </label>
           <input
+            id="stopwatch-join-display-name"
             type="text"
             className="race-input mt-1"
             placeholder="e.g. Alex"
@@ -309,6 +313,24 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
   // Clock offset estimation (simplified NTP)
   const clockOffsetRef = useRef(0);
 
+  // Local clock-sync anchor: record_session_event returns a row from
+  // casual_session_events, which has no t0_server column (that lives on
+  // casual_sessions only) — so a broadcast "start" event's t0_server is
+  // normally absent. Mirrors the native client's clientT0Ref (#339): never
+  // gate the running tick loop on t0_server being present, or Start
+  // silently does nothing on this device while the badge still says "Live"
+  // (#431). t0_server (when available, e.g. from get_session_state) is used
+  // to refine the anchor; this ref is the fallback that always works.
+  const clientT0Ref = useRef<number | null>(null);
+
+  // The realtime channel effect deliberately does not depend on `events`
+  // (re-subscribing on every event would churn the channel), so broadcast
+  // handlers must read the current event list through this ref (#431).
+  const eventsRef = useRef(events);
+  useEffect(() => {
+    eventsRef.current = events;
+  }, [events]);
+
   const isOwner = participants.find((p) => p.id === stored.participant_id)?.is_owner ?? false;
   const laps = deriveLaps(events, participants);
   const bestLapMs = laps.length > 0 ? Math.min(...laps.map((l) => l.lapMs)) : null;
@@ -322,6 +344,8 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
       if (t0Server) {
         const elapsed = Date.now() + clockOffsetRef.current - t0Server.getTime();
         setDisplayMs(elapsed);
+      } else if (clientT0Ref.current !== null) {
+        setDisplayMs(Date.now() - clientT0Ref.current);
       }
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -336,7 +360,10 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
   }, []);
 
   useEffect(() => {
-    if (sessionStatus === "running" && t0Server) {
+    if (
+      sessionStatus === "running" &&
+      (t0Server || clientT0Ref.current !== null)
+    ) {
       startDisplayLoop();
     } else {
       stopDisplayLoop();
@@ -355,14 +382,16 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
       lastSequenceRef.current = evt.sequence;
     }
     if (evt.event_type === "start") {
-      setSessionStatus("running");
       if (evt.t0_server) setT0Server(new Date(evt.t0_server));
+      clientT0Ref.current = Date.now();
+      setSessionStatus("running");
     } else if (evt.event_type === "stop") {
       setSessionStatus("stopped");
       stopDisplayLoop();
     } else if (evt.event_type === "reset") {
       setSessionStatus("waiting");
       setT0Server(null);
+      clientT0Ref.current = null;
       setDisplayMs(0);
       stopDisplayLoop();
     }
@@ -421,7 +450,9 @@ function SharedSessionView({ code, stored, initialState }: SharedSessionViewProp
     // Respond to sync requests
     channel.on("broadcast", { event: "sync_request" }, ({ payload }) => {
       const { last_sequence } = payload as { last_sequence: number };
-      const missedEvents = events.filter((e) => e.sequence > last_sequence);
+      const missedEvents = eventsRef.current.filter(
+        (e) => e.sequence > last_sequence
+      );
       if (missedEvents.length > 0) {
         channel.send({
           type: "broadcast",
