@@ -44,6 +44,8 @@ import { useFonts } from "expo-font";
 import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { PaperProvider } from "react-native-paper";
+import { stopwatchTheme } from "./src/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "./src/supabase";
@@ -6330,7 +6332,9 @@ function RootNavigator() {
 export default function App() {
   return (
     <SafeAreaProvider>
-      <RootNavigator />
+      <PaperProvider theme={stopwatchTheme}>
+        <RootNavigator />
+      </PaperProvider>
     </SafeAreaProvider>
   );
 }
