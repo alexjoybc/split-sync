@@ -47,7 +47,7 @@ interface CasualSession {
   id: string;
   code: string;
   name: string | null;
-  status: "waiting" | "running" | "stopped";
+  status: "waiting" | "running" | "stopped" | "closed";
   created_at: string;
 }
 
@@ -201,10 +201,14 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
         {!shareCode ? (
           <div className="mt-5 space-y-4">
             <div>
-              <label className="block text-xs font-black uppercase tracking-wide">
+              <label
+                htmlFor="stopwatch-create-session-name"
+                className="block text-xs font-black uppercase tracking-wide"
+              >
                 Session name
               </label>
               <input
+                id="stopwatch-create-session-name"
                 type="text"
                 className="race-input mt-1"
                 placeholder="e.g. Saturday hill climb"
@@ -215,10 +219,14 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
               />
             </div>
             <div>
-              <label className="block text-xs font-black uppercase tracking-wide">
+              <label
+                htmlFor="stopwatch-create-display-name"
+                className="block text-xs font-black uppercase tracking-wide"
+              >
                 Your display name
               </label>
               <input
+                id="stopwatch-create-display-name"
                 type="text"
                 className="race-input mt-1"
                 placeholder="e.g. Alex"
@@ -286,41 +294,20 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
 interface SessionHistoryProps {
   sessions: CasualSession[];
   loading: boolean;
+  onClose: (session: CasualSession) => void;
+  onDelete: (session: CasualSession) => void;
+  actionPendingId: string | null;
 }
 
-function SessionHistory({ sessions, loading }: SessionHistoryProps) {
-  // confirmingDeleteId: the session currently showing the inline confirmation prompt
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
-  // deletingId: the session currently being deleted (RPC in-flight)
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  // deleteError: per-session inline error message
-  const [deleteError, setDeleteError] = useState<Record<string, string>>({});
-  // copiedId: tracks which session's share link was just copied
+function SessionHistory({
+  sessions,
+  loading,
+  onClose,
+  onDelete,
+  actionPendingId,
+}: SessionHistoryProps) {
+  // copiedId: tracks which session's share link was just copied (purely local UI, no lifting needed)
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  async function handleDelete(sessionId: string) {
-    setDeletingId(sessionId);
-    setConfirmingDeleteId(null);
-    setDeleteError((prev) => {
-      const next = { ...prev };
-      delete next[sessionId];
-      return next;
-    });
-    try {
-      const { error } = await supabase.rpc("delete_casual_session", {
-        p_session_id: sessionId,
-      });
-      if (error) throw error;
-      // Row disappears via the real-time subscription that re-renders the list.
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Could not delete session.";
-      setDeleteError((prev) => ({ ...prev, [sessionId]: msg }));
-    } finally {
-      setDeletingId(null);
-    }
-  }
-
   if (loading) {
     return (
       <section className="mt-10 w-full">
@@ -344,6 +331,7 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
   const statusLabel = (s: CasualSession["status"]) => {
     if (s === "running") return <span className="font-black uppercase text-race-red text-[10px] tracking-widest">Running</span>;
     if (s === "waiting") return <span className="font-black uppercase text-race-muted text-[10px] tracking-widest">Waiting</span>;
+    if (s === "closed") return <span className="font-black uppercase text-race-muted text-[10px] tracking-widest">Closed</span>;
     return <span className="font-black uppercase text-race-ink text-[10px] tracking-widest">Stopped</span>;
   };
 
@@ -398,7 +386,7 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
                     href={`/stopwatch/s/${s.code}`}
                     className="race-action text-xs px-2 py-1"
                   >
-                    Join
+                    {s.status === "closed" ? "View" : "Join"}
                   </Link>
                 )}
                 {s.status === "stopped" ? (
@@ -415,7 +403,7 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
                   >
                     {copiedId === s.id ? "Copied!" : "Share results"}
                   </button>
-                ) : (
+                ) : s.status !== "closed" ? (
                   <button
                     type="button"
                     className="race-action race-action--outline text-xs px-2 py-1"
@@ -426,66 +414,34 @@ function SessionHistory({ sessions, loading }: SessionHistoryProps) {
                   >
                     {copiedId === s.id ? "Copied!" : "Share"}
                   </button>
-                )}
-                {/* Delete button — shows inline confirmation before proceeding */}
-                {confirmingDeleteId === s.id ? (
-                  <span className="flex items-center gap-1">
-                    <span className="text-[10px] text-race-ink">Delete?</span>
-                    <button
-                      type="button"
-                      className="race-action text-xs px-2 py-1"
-                      disabled={deletingId === s.id}
-                      onClick={() => handleDelete(s.id)}
-                      aria-label={`Confirm delete session ${s.name ?? s.code}`}
-                      data-testid={`confirm-delete-${s.id}`}
-                    >
-                      {deletingId === s.id ? "…" : "Yes"}
-                    </button>
-                    <button
-                      type="button"
-                      className="race-action race-action--outline text-xs px-2 py-1"
-                      onClick={() => setConfirmingDeleteId(null)}
-                      aria-label="Cancel delete"
-                    >
-                      No
-                    </button>
-                  </span>
-                ) : (
+                ) : null}
+                {/* Close button — only for waiting/running sessions */}
+                {(s.status === "waiting" || s.status === "running") && (
                   <button
                     type="button"
-                    className="inline-flex items-center justify-center rounded border border-race-line p-1 text-race-muted transition-colors hover:border-race-red hover:text-race-red focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0B6FB3]"
-                    disabled={deletingId === s.id}
-                    onClick={() => {
-                      setDeleteError((prev) => {
-                        const next = { ...prev };
-                        delete next[s.id];
-                        return next;
-                      });
-                      setConfirmingDeleteId(s.id);
-                    }}
-                    aria-label={`Delete session ${s.name ?? s.code}`}
-                    data-testid={`delete-btn-${s.id}`}
+                    className="race-action race-action--outline text-xs px-2 py-1"
+                    disabled={actionPendingId === s.id}
+                    onClick={() => onClose(s)}
+                    aria-label={`Close session ${s.name ?? s.code}`}
+                    data-testid={`close-btn-${s.id}`}
                   >
-                    {deletingId === s.id ? (
-                      <span className="size-4 animate-spin rounded-full border-2 border-race-muted border-t-transparent" aria-hidden="true" />
-                    ) : (
-                      <TrashIcon className="size-4" aria-hidden="true" />
-                    )}
-                    <span className="sr-only">Delete session</span>
+                    Close
                   </button>
                 )}
+                {/* Delete button — via parent onDelete handler */}
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded border border-race-line p-1 text-race-muted transition-colors hover:border-race-red hover:text-race-red focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0B6FB3]"
+                  disabled={actionPendingId === s.id}
+                  onClick={() => onDelete(s)}
+                  aria-label={`Delete session ${s.name ?? s.code}`}
+                  data-testid={`delete-btn-${s.id}`}
+                >
+                  <TrashIcon className="size-4" aria-hidden="true" />
+                  <span className="sr-only">Delete session</span>
+                </button>
               </div>
             </div>
-            {/* Inline error */}
-            {deleteError[s.id] && (
-              <p
-                role="alert"
-                className="text-[10px] text-race-red"
-                data-testid={`delete-error-${s.id}`}
-              >
-                {deleteError[s.id]}
-              </p>
-            )}
           </div>
         ))}
       </div>
@@ -900,6 +856,65 @@ export default function StopwatchPage() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  // Session management action state (#345) — tracks which row has a
+  // close/delete request in flight so its buttons can disable individually.
+  const [sessionActionPendingId, setSessionActionPendingId] = useState<string | null>(null);
+
+  const fetchSessions = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("casual_sessions")
+      .select("id, code, name, status, created_at")
+      .order("created_at", { ascending: false })
+      .limit(20);
+    if (!error && data) {
+      setSessions(data as CasualSession[]);
+    }
+  }, []);
+
+  const handleCloseSession = useCallback(
+    async (session: CasualSession) => {
+      if (
+        !window.confirm(
+          `Close "${session.name ?? session.code}"? No one will be able to join or record new laps.`
+        )
+      ) {
+        return;
+      }
+      setSessionActionPendingId(session.id);
+      const { error } = await supabase.rpc("close_casual_session", {
+        p_session_id: session.id,
+      });
+      if (!error) {
+        setSessions((prev) =>
+          prev.map((s) => (s.id === session.id ? { ...s, status: "closed" } : s))
+        );
+      }
+      setSessionActionPendingId(null);
+    },
+    []
+  );
+
+  const handleDeleteSession = useCallback(
+    async (session: CasualSession) => {
+      if (
+        !window.confirm(
+          `Delete "${session.name ?? session.code}"? This permanently removes it and all its laps. This cannot be undone.`
+        )
+      ) {
+        return;
+      }
+      setSessionActionPendingId(session.id);
+      const { error } = await supabase.rpc("delete_casual_session", {
+        p_session_id: session.id,
+      });
+      if (!error) {
+        setSessions((prev) => prev.filter((s) => s.id !== session.id));
+      }
+      setSessionActionPendingId(null);
+    },
+    []
+  );
+
   // ---------------------------------------------------------------------------
   // Load session history when signed in (#182)
   // ---------------------------------------------------------------------------
@@ -910,17 +925,7 @@ export default function StopwatchPage() {
       return;
     }
     setSessionsLoading(true);
-    supabase
-      .from("casual_sessions")
-      .select("id, code, name, status, created_at")
-      .order("created_at", { ascending: false })
-      .limit(20)
-      .then(({ data, error }) => {
-        if (!error && data) {
-          setSessions(data as CasualSession[]);
-        }
-        setSessionsLoading(false);
-      });
+    fetchSessions().finally(() => setSessionsLoading(false));
 
     // Real-time subscription for live status updates
     const channel = supabase
@@ -933,14 +938,7 @@ export default function StopwatchPage() {
           table: "casual_sessions",
         },
         () => {
-          supabase
-            .from("casual_sessions")
-            .select("id, code, name, status, created_at")
-            .order("created_at", { ascending: false })
-            .limit(20)
-            .then(({ data, error }) => {
-              if (!error && data) setSessions(data as CasualSession[]);
-            });
+          fetchSessions();
         }
       )
       .subscribe();
@@ -948,7 +946,7 @@ export default function StopwatchPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, fetchSessions]);
 
   // ---------------------------------------------------------------------------
   // Persistence — restore on load, save on every state transition / lap
@@ -2124,7 +2122,13 @@ export default function StopwatchPage() {
           {/* ── Session history (signed-in only, #182) ─────────────────────── */}
           {user && !largeMode && (
             <div className="w-full">
-              <SessionHistory sessions={sessions} loading={sessionsLoading} />
+              <SessionHistory
+                sessions={sessions}
+                loading={sessionsLoading}
+                onClose={handleCloseSession}
+                onDelete={handleDeleteSession}
+                actionPendingId={sessionActionPendingId}
+              />
             </div>
           )}
 

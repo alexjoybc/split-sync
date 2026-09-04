@@ -604,7 +604,18 @@ export default function HelpPage() {
               Only the <strong>session creator</strong> (★) can Reset the clock.
             </li>
             <li>
-              Sessions expire after 4 hours (extended by each lap, up to 16 hours).
+              <strong>Closing a session</strong> (creator only, from{" "}
+              <strong>My Sessions</strong> on the web, the in-session menu, or the
+              app&apos;s session list) ends it immediately — no one can join or
+              record new laps afterward, but its results stay viewable. Anyone
+              still connected is notified right away.
+            </li>
+            <li>
+              <strong>Deleting a session</strong> (creator only) permanently
+              removes it and all its laps. This cannot be undone.
+            </li>
+            <li>
+              Sessions expire after 4 hours.
               A stopped session cannot be resumed — create a new one.
             </li>
             <li>

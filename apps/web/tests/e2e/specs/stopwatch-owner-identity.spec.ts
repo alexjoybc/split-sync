@@ -28,7 +28,7 @@ test.beforeEach(async () => {
   const supabaseUrl =
     process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
   try {
-    const res = await fetch(`${supabaseUrl}/health`, { signal: AbortSignal.timeout(2_000) });
+    const res = await fetch(`${supabaseUrl}/auth/v1/health`, { signal: AbortSignal.timeout(2_000) });
     if (!res.ok) {
       test.skip(true, 'Local Supabase not running — skipping owner identity tests');
     }

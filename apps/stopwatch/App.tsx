@@ -146,7 +146,7 @@ type AppScreen =
   | "session"
   | "solo";
 
-type SessionStatus = "waiting" | "running" | "stopped";
+type SessionStatus = "waiting" | "running" | "stopped" | "closed";
 type SessionEventType = "start" | "lap" | "stop" | "reset";
 
 interface CasualSession {
@@ -1329,6 +1329,8 @@ function HomeScreen({
 }) {
   const [sessions, setSessions] = useState<CasualSession[]>([]);
   const [loading, setLoading] = useState(true);
+  // Which session row has a close/delete request in flight (#345).
+  const [actionPendingId, setActionPendingId] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     const { data } = await supabase
@@ -1338,6 +1340,62 @@ function HomeScreen({
       .limit(20);
     if (data) setSessions(data as CasualSession[]);
     setLoading(false);
+  }, []);
+
+  const handleCloseSession = useCallback((session: CasualSession) => {
+    Alert.alert(
+      "Close session?",
+      `No one will be able to join or record new laps in "${session.name || "Untitled Session"}".`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Close session",
+          style: "destructive",
+          onPress: async () => {
+            setActionPendingId(session.id);
+            const { error } = await supabase.rpc("close_casual_session", {
+              p_session_id: session.id,
+            });
+            if (error) {
+              Alert.alert("Error", error.message ?? "Failed to close session.");
+            } else {
+              setSessions((prev) =>
+                prev.map((s) =>
+                  s.id === session.id ? { ...s, status: "closed" } : s
+                )
+              );
+            }
+            setActionPendingId(null);
+          },
+        },
+      ]
+    );
+  }, []);
+
+  const handleDeleteSession = useCallback((session: CasualSession) => {
+    Alert.alert(
+      "Delete session?",
+      `This permanently removes "${session.name || "Untitled Session"}" and all its laps. This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setActionPendingId(session.id);
+            const { error } = await supabase.rpc("delete_casual_session", {
+              p_session_id: session.id,
+            });
+            if (error) {
+              Alert.alert("Error", error.message ?? "Failed to delete session.");
+            } else {
+              setSessions((prev) => prev.filter((s) => s.id !== session.id));
+            }
+            setActionPendingId(null);
+          },
+        },
+      ]
+    );
   }, []);
 
   useEffect(() => {
@@ -1489,10 +1547,13 @@ function HomeScreen({
           </Text>
         ) : (
           sessions.map((session) => (
-            <View key={session.id} style={s.sessionRow}>
+            <View key={session.id} style={{ marginBottom: 8 }}>
               <Pressable
                 onPress={() => handleRejoin(session)}
-                style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+                style={({ pressed }) => [
+                  s.sessionRow,
+                  { marginBottom: 0, opacity: pressed ? 0.7 : 1 },
+                ]}
               >
                 <View style={{ flex: 1 }}>
                   <Text style={s.sessionName} numberOfLines={1}>
@@ -1515,7 +1576,7 @@ function HomeScreen({
                       },
                     ]}
                   >
-                    {session.status === "stopped" ? "View results →" : "Rejoin →"}
+                    {session.status === "stopped" ? "View results →" : session.status === "closed" ? "View →" : "Rejoin →"}
                   </Text>
                 </View>
                 <View
@@ -1526,6 +1587,9 @@ function HomeScreen({
                     session.status === "waiting" && {
                       backgroundColor: C.dimGray,
                     },
+                    session.status === "closed" && {
+                      backgroundColor: C.dimGray,
+                    },
                   ]}
                 >
                   <Text style={s.statusBadgeText}>
@@ -1533,17 +1597,45 @@ function HomeScreen({
                   </Text>
                 </View>
               </Pressable>
-              <Pressable
-                onPress={() => handleDelete(session)}
-                style={({ pressed }) => [
-                  s.deleteBtn,
-                  { opacity: pressed ? 0.6 : 1 },
-                ]}
-                accessibilityLabel="Delete session"
-                accessibilityRole="button"
+              <View
+                style={{
+                  flexDirection: "row",
+                  gap: 12,
+                  justifyContent: "flex-end",
+                  marginTop: 4,
+                }}
               >
-                <Text style={s.deleteBtnText}>🗑</Text>
-              </Pressable>
+                {session.status !== "closed" && (
+                  <Pressable
+                    onPress={() => handleCloseSession(session)}
+                    disabled={actionPendingId === session.id}
+                    hitSlop={8}
+                  >
+                    <Text
+                      style={[
+                        s.mutedText,
+                        { fontSize: 11, fontWeight: "700", opacity: actionPendingId === session.id ? 0.4 : 1 },
+                      ]}
+                    >
+                      Close
+                    </Text>
+                  </Pressable>
+                )}
+                <Pressable
+                  onPress={() => handleDeleteSession(session)}
+                  disabled={actionPendingId === session.id}
+                  hitSlop={8}
+                >
+                  <Text
+                    style={[
+                      { fontSize: 11, fontWeight: "700", color: C.red },
+                      { opacity: actionPendingId === session.id ? 0.4 : 1 },
+                    ]}
+                  >
+                    Delete
+                  </Text>
+                </Pressable>
+              </View>
             </View>
           ))
         )}
@@ -2371,6 +2463,18 @@ function SessionScreen({
           incoming.forEach(applyEvent);
         }
       )
+      .on("broadcast", { event: "session_closed" }, () => {
+        // Owner closed the session from this device or another one (#345).
+        setStatus("closed");
+        stopTick();
+      })
+      .on("broadcast", { event: "session_deleted" }, () => {
+        Alert.alert(
+          "Session deleted",
+          "The host deleted this session.",
+          [{ text: "OK", onPress: () => onBack() }]
+        );
+      })
       .subscribe((subscribeStatus) => {
         if (subscribeStatus === "SUBSCRIBED") {
           // Announce presence
@@ -2446,6 +2550,18 @@ function SessionScreen({
       setPendingQueue((q) => q.filter((e) => e.clientEventId !== clientEventId));
 
       if (error) {
+        if (error.message?.includes("SESSION_CLOSED")) {
+          // Permanent rejection — the host closed the session. Unlike
+          // transient/concurrency errors, retrying this on reconnect would
+          // fail forever, so drop it from the durable queue instead of
+          // leaving it to be replayed indefinitely (#345).
+          await removeFromDurableQueue(params.sessionCode, clientEventId);
+          setStatus("closed");
+          stopTick();
+          const remaining = await loadDurableQueue(params.sessionCode);
+          setDurableQueueDepth(remaining.length);
+          return;
+        }
         // Network error or concurrency rejection.
         // The event stays in the durable queue and will be replayed on reconnect.
         // Rebuild server state to stay consistent for concurrency errors.
@@ -2471,7 +2587,14 @@ function SessionScreen({
         applyEvent(accepted);
       }
     },
-    [params.sessionId, params.participantId, params.sessionCode, applyEvent, rebuildFromServer]
+    [
+      params.sessionId,
+      params.participantId,
+      params.sessionCode,
+      applyEvent,
+      rebuildFromServer,
+      stopTick,
+    ]
   );
 
   // ── Lock helpers ────────────────────────────────────────────────────────────
@@ -2563,6 +2686,70 @@ function SessionScreen({
     await sendEvent("reset");
   }, [params.isOwner, sendEvent]);
 
+  // ── Owner session management: close/delete (#345) ──────────────────────────
+  const handleCloseSession = useCallback(() => {
+    if (!params.isOwner) return;
+    Alert.alert(
+      "Close session?",
+      "No one will be able to join or record new laps.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Close session",
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await supabase.rpc("close_casual_session", {
+              p_session_id: params.sessionId,
+            });
+            if (error) {
+              Alert.alert("Error", error.message ?? "Failed to close session.");
+              return;
+            }
+            setStatus("closed");
+            stopTick();
+            // Notify connected peers immediately rather than waiting for
+            // them to hit SESSION_CLOSED on their next action.
+            channelRef.current?.send({
+              type: "broadcast",
+              event: "session_closed",
+              payload: {},
+            });
+          },
+        },
+      ]
+    );
+  }, [params.isOwner, params.sessionId, stopTick]);
+
+  const handleDeleteSession = useCallback(() => {
+    if (!params.isOwner) return;
+    Alert.alert(
+      "Delete session?",
+      "This permanently removes it and all its laps. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            channelRef.current?.send({
+              type: "broadcast",
+              event: "session_deleted",
+              payload: {},
+            });
+            const { error } = await supabase.rpc("delete_casual_session", {
+              p_session_id: params.sessionId,
+            });
+            if (error) {
+              Alert.alert("Error", error.message ?? "Failed to delete session.");
+              return;
+            }
+            onBack();
+          },
+        },
+      ]
+    );
+  }, [params.isOwner, params.sessionId, onBack]);
+
   // Laps in ascending order for export (#226)
   const exportLaps = useCallback(
     (): ExportLap[] => [...laps].reverse(),
@@ -2625,6 +2812,7 @@ function SessionScreen({
   const isRunning = status === "running";
   const isStopped = status === "stopped";
   const isWaiting = status === "waiting";
+  const isClosed = status === "closed";
   // Pending indicator: show spinner whenever there are unacknowledged events,
   // whether inflight (pendingQueue) or queued for replay (durableQueueDepth).
   const pendingCount = Math.max(pendingQueue.length, durableQueueDepth);
@@ -2766,6 +2954,13 @@ function SessionScreen({
             <Text style={s.statLabel}>AVG</Text>
             <Text style={s.statValue}>{fmtCompact(Math.round(avgMs!))}</Text>
           </View>
+        </View>
+      )}
+
+      {/* ── Closed banner (visible even if laps were already recorded) ── */}
+      {isClosed && lapCount > 0 && (
+        <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+          <Text style={s.mutedText}>This session was closed by the host.</Text>
         </View>
       )}
 
@@ -2923,7 +3118,9 @@ function SessionScreen({
       ) : (
         <View style={s.together}>
           <Text style={s.mutedText}>
-            {isWaiting
+            {isClosed
+              ? "This session was closed by the host."
+              : isWaiting
               ? "Waiting for the session to start…"
               : "No laps yet. Press LAP to record a split."}
           </Text>
@@ -2958,12 +3155,12 @@ function SessionScreen({
           </View>
         ) : (
           <DeviceBtn
-            label={isStopped ? "STOPPED" : "START"}
+            label={isClosed ? "CLOSED" : isStopped ? "STOPPED" : "START"}
             body={C.btnBlueBody}
             hi={C.btnBlueHi}
             lo={C.btnBlueLo}
             textColor={C.ink}
-            disabled={isStopped}
+            disabled={isStopped || isClosed}
             onPress={handleStart}
             flex={1.4}
           />
@@ -2977,11 +3174,37 @@ function SessionScreen({
             lo={C.btnPaperLo}
             textColor={C.ink}
             flex={1}
-            disabled={!params.isOwner || isWaiting}
+            disabled={!params.isOwner || isWaiting || isClosed}
             onPress={handleReset}
           />
         </View>
       </View>
+
+      {/* ── Owner session management (#345) ── */}
+      {params.isOwner && (
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 16,
+            paddingVertical: 6,
+            backgroundColor: C.casing,
+          }}
+        >
+          {!isClosed && (
+            <Pressable onPress={handleCloseSession} hitSlop={8}>
+              <Text style={{ color: C.faint, fontSize: 11, fontWeight: "700" }}>
+                Close session
+              </Text>
+            </Pressable>
+          )}
+          <Pressable onPress={handleDeleteSession} hitSlop={8}>
+            <Text style={{ color: C.red, fontSize: 11, fontWeight: "700" }}>
+              Delete session
+            </Text>
+          </Pressable>
+        </View>
+      )}
 
       {/* ── Lock hint toast ── */}
       {showLockHint && (

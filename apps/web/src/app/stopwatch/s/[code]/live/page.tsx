@@ -5,7 +5,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { formatLapTime, formatTime } from "@/lib/stopwatchFormat";
 
-type Status = "waiting" | "running" | "stopped";
+type Status = "waiting" | "running" | "stopped" | "closed";
 
 interface LiveEvent {
   event_type: "start" | "lap" | "stop" | "reset";
