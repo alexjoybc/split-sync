@@ -6,11 +6,39 @@
  * Implements the multi-session UX described in ADR 0024.
  * Reads/writes via soloSessionStorage.ts (the storage layer from #365).
  *
- * Displayed as a modal overlay; caller controls visibility.
+ * MD3 redesign (#444): uses `@material/web`'s `md-dialog` + `md-list` /
+ * `md-list-item` from the scoped stopwatch theme (`md3-theme.css`,
+ * `md3-components.ts`, ADR 0026) instead of the hand-rolled overlay. All
+ * create/rename/switch/delete/reorder behavior from the original panel is
+ * unchanged — this is a markup/styling pass only.
+ *
+ * A note on React 19 + `@material/web` custom elements: React 19 sets a
+ * prop as a DOM *property* on a custom element whenever that property
+ * already exists on the element instance (e.g. `open`, `value`,
+ * `maxLength`), and falls back to an attribute otherwise. `@material/web`
+ * text fields and `md-dialog` redispatch plain, composed, bubbling DOM
+ * events (`input`, `change`, `cancel`, `closed`) directly from the host
+ * element, so plain `onInput`/`value` JSX props work for controlled text
+ * fields. `md-dialog`'s `open` is a manual accessor (not a Lit
+ * `@property`), so it is set imperatively via property assignment — which
+ * is exactly what React does for a boolean JSX prop that matches an
+ * existing instance property. Closing is always driven through the
+ * element's own `close()` method (never by unmounting first) so the
+ * `closed` event — listened to imperatively via `ref` + `addEventListener`
+ * to sidestep any ambiguity in custom-event-name-to-JSX-prop mapping — is
+ * the single source of truth for telling the caller the panel is done.
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { TrashIcon, PencilIcon, Bars3Icon } from "@heroicons/react/20/solid";
+import { TrashIcon, PencilIcon, Bars3Icon, XMarkIcon, CheckIcon } from "@heroicons/react/20/solid";
+// `stopwatch/layout.tsx` (a Server Component) already imports
+// `./md3-components` for its side effect of registering `@material/web`
+// custom elements — but that registration only runs during SSR, since a
+// plain import in a Server Component is never included in the client
+// bundle. This file is the first screen to actually render `<md-*>`
+// elements, so it re-imports the registrations here to guarantee they run
+// in the browser wherever this client component's chunk is loaded.
+import "./md3-components";
 import {
   listSessions,
   createSession,
@@ -21,6 +49,74 @@ import {
   SESSION_CAP,
   type SoloSessionRecord,
 } from "./soloSessionStorage";
+
+// ---------------------------------------------------------------------------
+// `@material/web` custom element JSX typings
+// ---------------------------------------------------------------------------
+//
+// `apps/web` has no global JSX declarations for `@material/web` custom
+// elements yet (this is the first file in the repo to render them, rather
+// than only side-effect-import their definitions). Scoped to this file —
+// broaden into a shared `.d.ts` if a second stopwatch screen adopts these
+// same elements.
+
+type MdElementProps = React.DetailedHTMLProps<
+  React.HTMLAttributes<HTMLElement>,
+  HTMLElement
+>;
+
+type MdDialogProps = MdElementProps & {
+  open?: boolean;
+  quick?: boolean;
+  type?: "alert";
+  "aria-label"?: string;
+};
+
+type MdTextFieldProps = MdElementProps & {
+  value?: string;
+  label?: string;
+  maxLength?: number;
+  autofocus?: boolean;
+  onInput?: React.FormEventHandler<HTMLElement>;
+};
+
+type MdButtonProps = MdElementProps & {
+  disabled?: boolean;
+};
+
+type MdIconButtonProps = MdElementProps & {
+  disabled?: boolean;
+  "aria-label"?: string;
+  "aria-pressed"?: boolean | "true" | "false";
+};
+
+type MdListItemProps = MdElementProps & {
+  type?: "text" | "button" | "link";
+};
+
+// React 19's `react-jsx` runtime resolves `JSX.IntrinsicElements` from the
+// `JSX` namespace re-exported by the "react" module (not the old bare
+// global `JSX` namespace), so the augmentation has to target that module.
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "md-dialog": MdDialogProps;
+      "md-list": MdElementProps;
+      "md-list-item": MdListItemProps;
+      "md-icon-button": MdIconButtonProps;
+      "md-outlined-text-field": MdTextFieldProps;
+      "md-filled-button": MdButtonProps;
+      "md-outlined-button": MdButtonProps;
+      "md-text-button": MdButtonProps;
+    }
+  }
+}
+
+/** Minimal shape of the `md-dialog` custom element's public API we use. */
+interface MdDialogElement extends HTMLElement {
+  open: boolean;
+  close(returnValue?: string): void;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -93,8 +189,9 @@ export function SoloSessionSwitcher({
   const [keyboardDragId, setKeyboardDragId] = useState<string | null>(null);
   const keyboardDragOriginRef = useRef<string[]>([]);
 
-  const renameInputRef = useRef<HTMLInputElement>(null);
-  const newNameInputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<MdDialogElement | null>(null);
+  const renameInputRef = useRef<HTMLElement | null>(null);
+  const newNameInputRef = useRef<HTMLElement | null>(null);
 
   // Load session list in index order (user-defined after first reorder).
   const refresh = useCallback(() => {
@@ -109,7 +206,7 @@ export function SoloSessionSwitcher({
   useEffect(() => {
     if (renamingId && renameInputRef.current) {
       renameInputRef.current.focus();
-      renameInputRef.current.select();
+      (renameInputRef.current as unknown as { select?: () => void }).select?.();
     }
   }, [renamingId]);
 
@@ -119,6 +216,24 @@ export function SoloSessionSwitcher({
       newNameInputRef.current.focus();
     }
   }, [creating]);
+
+  // ── Dialog lifecycle ─────────────────────────────────────────────────────
+  //
+  // `md-dialog`'s `closed` event is the single point where we tell the
+  // caller the panel is done — every close path (✕ button, Escape, scrim
+  // click, or a completed switch/create/active-delete) goes through the
+  // element's own `close()` so this fires exactly once per close.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const handleClosed = () => onClose();
+    dialog.addEventListener("closed", handleClosed);
+    return () => dialog.removeEventListener("closed", handleClosed);
+  }, [onClose]);
+
+  const requestClose = useCallback(() => {
+    dialogRef.current?.close();
+  }, []);
 
   const atCap = sessions.length >= SESSION_CAP;
 
@@ -132,8 +247,8 @@ export function SoloSessionSwitcher({
     setCreating(false);
     refresh();
     onSwitch(session.id);
-    onClose();
-  }, [newName, sessions.length, refresh, onSwitch, onClose]);
+    requestClose();
+  }, [newName, sessions.length, refresh, onSwitch, requestClose]);
 
   // ── Rename ──────────────────────────────────────────────────────────────────
 
@@ -176,12 +291,12 @@ export function SoloSessionSwitcher({
           const fallback = createSession("Session 1");
           if (fallback) onSwitch(fallback.id);
         }
-        onClose();
+        requestClose();
       } else {
         refresh();
       }
     },
-    [activeSessionId, onSwitch, onClose, refresh]
+    [activeSessionId, onSwitch, requestClose, refresh]
   );
 
   // ── Drag-to-reorder ─────────────────────────────────────────────────────────
@@ -302,68 +417,56 @@ export function SoloSessionSwitcher({
   const handleSwitchAndClose = useCallback(
     (id: string) => {
       if (id === activeSessionId) {
-        onClose();
+        requestClose();
         return;
       }
       onSwitch(id);
-      onClose();
+      requestClose();
     },
-    [activeSessionId, onSwitch, onClose]
+    [activeSessionId, onSwitch, requestClose]
   );
-
-  // ── Keyboard: close on Escape ────────────────────────────────────────────────
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    /* Backdrop — clicking it closes the panel */
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-race-ink/60 sm:items-center sm:px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="solo-session-panel-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
+    <md-dialog
+      ref={dialogRef}
+      open
+      quick
+      aria-label="Sessions"
+      data-testid="solo-session-dialog"
     >
-      <div className="w-full max-w-sm border-2 border-race-ink bg-race-paper sm:max-w-md">
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between border-b-2 border-race-ink px-4 py-3">
-          <div>
-            <p className="race-kicker">Solo stopwatch</p>
-            <h2
-              id="solo-session-panel-title"
-              className="text-lg font-black text-race-ink"
-            >
-              Sessions
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded p-1 text-race-muted transition-colors hover:text-race-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
-            aria-label="Close sessions panel"
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <div slot="headline" className="flex items-center justify-between gap-2">
+        <div>
+          <p
+            className="text-[10px] font-black uppercase tracking-widest"
+            style={{ color: "var(--md-sys-color-on-surface-variant)" }}
           >
-            ✕
-          </button>
+            Solo stopwatch
+          </p>
+          <span>Sessions</span>
         </div>
+        <md-icon-button onClick={requestClose} aria-label="Close sessions panel">
+          <XMarkIcon className="size-5" aria-hidden="true" />
+        </md-icon-button>
+      </div>
 
-        {/* ── Session list ─────────────────────────────────────────────────── */}
-        <div
-          className="max-h-[52vh] divide-y divide-race-line overflow-y-auto"
-          role="list"
-          aria-label="Solo sessions"
-        >
+      {/* ── Session list ─────────────────────────────────────────────────── */}
+      <div slot="content">
+        {/* `role="list"` is set explicitly in addition to `md-list`'s own
+            `ElementInternals`-based role: Chromium's accessibility tree
+            (and by extension Playwright's `getByRole`) does not reliably
+            pick up the internals-assigned role here, so tests / assistive
+            tech relying on `role="list"` need the plain attribute too. */}
+        <md-list role="list" aria-label="Solo sessions">
           {sessions.length === 0 && (
-            <p className="p-4 text-sm text-race-muted">No sessions yet.</p>
+            <p
+              className="p-4 text-sm"
+              style={{ color: "var(--md-sys-color-on-surface-variant)" }}
+            >
+              No sessions yet.
+            </p>
           )}
 
           {sessions.map((session) => {
@@ -371,28 +474,43 @@ export function SoloSessionSwitcher({
             const { label: statusLabel, running: isRunning } =
               sessionStatus(session);
             const isDragTarget = dragOverId === session.id;
-
             const isKeyboardDragging = keyboardDragId === session.id;
+            const isRenaming = renamingId === session.id;
 
             return (
-              <div
+              <md-list-item
                 key={session.id}
-                role="listitem"
+                type="text"
                 draggable
-                onDragStart={(e) => handleDragStart(e, session.id)}
-                onDragOver={(e) => handleDragOver(e, session.id)}
-                onDrop={(e) => handleDrop(e, session.id)}
+                onDragStart={(e) =>
+                  handleDragStart(e as unknown as React.DragEvent<HTMLElement>, session.id)
+                }
+                onDragOver={(e) =>
+                  handleDragOver(e as unknown as React.DragEvent<HTMLElement>, session.id)
+                }
+                onDrop={(e) =>
+                  handleDrop(e as unknown as React.DragEvent<HTMLElement>, session.id)
+                }
                 onDragEnd={handleDragEnd}
-                className={`flex items-center gap-1 px-2 py-3 transition-colors ${
-                  isActive ? "bg-race-panel-alt" : "hover:bg-race-panel"
-                } ${isDragTarget || isKeyboardDragging ? "outline outline-2 outline-[var(--race-blue-primary)]" : ""}`}
+                style={
+                  isDragTarget || isKeyboardDragging
+                    ? { outline: "2px solid var(--md-sys-color-primary)" }
+                    : isActive
+                    ? { background: "var(--md-sys-color-surface-container-high)" }
+                    : undefined
+                }
                 data-testid={`solo-session-row-${session.id}`}
               >
                 {/* ── Drag handle ── */}
                 <span
+                  slot="start"
                   tabIndex={0}
                   role="button"
-                  className="shrink-0 cursor-grab touch-none text-race-muted active:cursor-grabbing focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
+                  className="inline-flex shrink-0 cursor-grab touch-none active:cursor-grabbing focus-visible:outline focus-visible:outline-2"
+                  style={{
+                    color: "var(--md-sys-color-on-surface-variant)",
+                    outlineColor: "var(--md-sys-color-primary)",
+                  }}
                   aria-label={`Drag to reorder ${session.name}${isKeyboardDragging ? ": picked up — use Arrow keys to move, Enter to drop, Escape to cancel" : ""}`}
                   aria-pressed={isKeyboardDragging}
                   title="Drag to reorder"
@@ -401,236 +519,229 @@ export function SoloSessionSwitcher({
                   <Bars3Icon className="size-4" aria-hidden="true" />
                 </span>
 
-                <div className="min-w-0 flex-1">
-                {renamingId === session.id ? (
+                {isRenaming ? (
                   /* ── Rename mode ── */
-                  <div className="flex items-center gap-2">
-                    <input
+                  <div slot="headline" className="flex items-center gap-2">
+                    <md-outlined-text-field
                       ref={renameInputRef}
-                      type="text"
                       value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
+                      onInput={(e) =>
+                        setRenameValue((e.target as HTMLInputElement).value)
+                      }
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleCommitRename(session.id);
                         if (e.key === "Escape") handleCancelRename();
                       }}
                       maxLength={80}
-                      className="race-input flex-1 py-1 text-sm"
+                      label="Session name"
                       aria-label="Session name"
+                      className="flex-1"
                       data-testid={`rename-input-${session.id}`}
                     />
-                    <button
-                      type="button"
+                    <md-icon-button
                       onClick={() => handleCommitRename(session.id)}
-                      className="inline-flex shrink-0 items-center justify-center rounded border border-race-blue-primary p-1 text-race-blue-primary transition-colors hover:bg-race-blue-primary hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
                       aria-label="Save session name"
                       data-testid={`rename-save-${session.id}`}
                     >
-                      {/* checkmark */}
-                      <svg
+                      <CheckIcon
                         className="size-4"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
                         aria-hidden="true"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
+                        style={{ color: "var(--md-sys-color-primary)" }}
+                      />
+                    </md-icon-button>
+                    <md-icon-button
                       onClick={handleCancelRename}
-                      className="inline-flex shrink-0 items-center justify-center rounded border border-race-line p-1 text-race-muted transition-colors hover:border-race-ink hover:text-race-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
                       aria-label="Cancel rename"
                       data-testid={`rename-cancel-${session.id}`}
                     >
-                      {/* ✕ */}
-                      <svg
-                        className="size-4"
-                        viewBox="0 0 20 20"
-                        fill="currentColor"
-                        aria-hidden="true"
-                      >
-                        <path
-                          fillRule="evenodd"
-                          d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </button>
+                      <XMarkIcon className="size-4" aria-hidden="true" />
+                    </md-icon-button>
                   </div>
                 ) : (
-                  /* ── Normal mode ── */
-                  <div className="flex items-center gap-2">
-                    {/* Session info — clicking switches to this session */}
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 rounded text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
-                      onClick={() => handleSwitchAndClose(session.id)}
-                      aria-label={`${isActive ? "Current session:" : "Switch to"} ${session.name}`}
-                      data-testid={`session-switch-${session.id}`}
-                    >
-                      <div className="flex items-center gap-2">
+                  <>
+                    {/* ── Normal mode: headline + switch action ── */}
+                    <div slot="headline">
+                      <button
+                        type="button"
+                        className="flex min-w-0 items-center gap-2 rounded text-left focus-visible:outline focus-visible:outline-2"
+                        style={{ outlineColor: "var(--md-sys-color-primary)" }}
+                        onClick={() => handleSwitchAndClose(session.id)}
+                        aria-label={`${isActive ? "Current session:" : "Switch to"} ${session.name}`}
+                        data-testid={`session-switch-${session.id}`}
+                      >
                         <span
-                          className={`truncate text-sm font-bold ${
-                            isActive
-                              ? "text-race-blue-primary"
-                              : "text-race-ink"
-                          }`}
+                          className="truncate text-sm font-bold"
+                          style={{
+                            color: isActive
+                              ? "var(--md-sys-color-primary)"
+                              : "var(--md-sys-color-on-surface)",
+                          }}
                         >
                           {session.name}
                         </span>
                         {isActive && (
                           <span
-                            className="shrink-0 border border-race-blue-primary px-1 text-[9px] font-black uppercase tracking-widest text-race-blue-primary"
+                            className="shrink-0 border px-1 text-[9px] font-black uppercase tracking-widest"
+                            style={{
+                              borderColor: "var(--md-sys-color-primary)",
+                              color: "var(--md-sys-color-primary)",
+                            }}
                             aria-label="Active"
                           >
                             ACTIVE
                           </span>
                         )}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-2">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-race-muted">
-                          {session.mode === "stopwatch" ? "SW" : "TIMER"}
-                        </span>
-                        <span
-                          className={`text-[10px] font-black uppercase tracking-wider ${
-                            isRunning ? "text-race-red" : "text-race-muted"
-                          }`}
-                          aria-label={`Status: ${statusLabel}`}
-                        >
-                          {statusLabel}
-                        </span>
-                        <span className="text-[10px] text-race-muted">
-                          {timeAgo(session.lastUsedAt)}
-                        </span>
-                      </div>
-                    </button>
-
-                    {/* Rename button */}
-                    <button
-                      type="button"
-                      onClick={() => handleStartRename(session)}
-                      className="inline-flex shrink-0 items-center justify-center rounded border border-race-line p-1 text-race-muted transition-colors hover:border-race-ink hover:text-race-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
-                      aria-label={`Rename "${session.name}"`}
-                      data-testid={`rename-btn-${session.id}`}
-                    >
-                      <PencilIcon className="size-4" aria-hidden="true" />
-                      <span className="sr-only">Rename session</span>
-                    </button>
-
-                    {/* Delete button / inline confirmation */}
-                    {confirmingDeleteId === session.id ? (
-                      <span className="flex shrink-0 items-center gap-1">
-                        <span className="text-[10px] font-bold text-race-ink">
-                          Delete?
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteConfirm(session.id)}
-                          className="border-2 border-race-red bg-race-red px-2 py-0.5 text-[10px] font-black uppercase text-white transition-colors hover:border-race-ink hover:bg-race-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
-                          aria-label={`Confirm delete "${session.name}"`}
-                          data-testid={`confirm-delete-solo-${session.id}`}
-                        >
-                          Yes
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmingDeleteId(null)}
-                          className="border-2 border-race-ink px-2 py-0.5 text-[10px] font-black uppercase text-race-ink transition-colors hover:bg-race-ink hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
-                          aria-label="Cancel delete"
-                        >
-                          No
-                        </button>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setConfirmingDeleteId(session.id);
-                          setRenamingId(null);
-                        }}
-                        className="inline-flex shrink-0 items-center justify-center rounded border border-race-line p-1 text-race-muted transition-colors hover:border-race-red hover:text-race-red focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
-                        aria-label={`Delete "${session.name}"`}
-                        data-testid={`delete-solo-btn-${session.id}`}
-                      >
-                        <TrashIcon className="size-4" aria-hidden="true" />
-                        <span className="sr-only">Delete session</span>
                       </button>
-                    )}
-                  </div>
+                    </div>
+
+                    <div
+                      slot="supporting-text"
+                      className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider"
+                    >
+                      <span style={{ color: "var(--md-sys-color-on-surface-variant)" }}>
+                        {session.mode === "stopwatch" ? "SW" : "TIMER"}
+                      </span>
+                      <span
+                        style={{
+                          color: isRunning
+                            ? "var(--md-sys-color-error)"
+                            : "var(--md-sys-color-on-surface-variant)",
+                        }}
+                        aria-label={`Status: ${statusLabel}`}
+                      >
+                        {statusLabel}
+                      </span>
+                      <span
+                        className="normal-case font-semibold tracking-normal"
+                        style={{ color: "var(--md-sys-color-on-surface-variant)" }}
+                      >
+                        {timeAgo(session.lastUsedAt)}
+                      </span>
+                    </div>
+
+                    {/* ── Rename / delete actions ── */}
+                    <div slot="end" className="flex shrink-0 items-center gap-1">
+                      <md-icon-button
+                        onClick={() => handleStartRename(session)}
+                        aria-label={`Rename "${session.name}"`}
+                        data-testid={`rename-btn-${session.id}`}
+                      >
+                        <PencilIcon className="size-4" aria-hidden="true" />
+                      </md-icon-button>
+
+                      {confirmingDeleteId === session.id ? (
+                        <span className="flex shrink-0 items-center gap-1">
+                          <span
+                            className="text-[10px] font-bold"
+                            style={{ color: "var(--md-sys-color-on-surface)" }}
+                          >
+                            Delete?
+                          </span>
+                          <md-filled-button
+                            onClick={() => handleDeleteConfirm(session.id)}
+                            aria-label={`Confirm delete "${session.name}"`}
+                            data-testid={`confirm-delete-solo-${session.id}`}
+                            style={
+                              {
+                                "--md-filled-button-container-color":
+                                  "var(--md-sys-color-error)",
+                                "--md-filled-button-label-text-color":
+                                  "var(--md-sys-color-on-error)",
+                              } as React.CSSProperties
+                            }
+                          >
+                            Yes
+                          </md-filled-button>
+                          <md-text-button
+                            onClick={() => setConfirmingDeleteId(null)}
+                            aria-label="Cancel delete"
+                          >
+                            No
+                          </md-text-button>
+                        </span>
+                      ) : (
+                        <md-icon-button
+                          onClick={() => {
+                            setConfirmingDeleteId(session.id);
+                            setRenamingId(null);
+                          }}
+                          aria-label={`Delete "${session.name}"`}
+                          data-testid={`delete-solo-btn-${session.id}`}
+                          style={
+                            {
+                              "--md-icon-button-icon-color":
+                                "var(--md-sys-color-error)",
+                            } as React.CSSProperties
+                          }
+                        >
+                          <TrashIcon className="size-4" aria-hidden="true" />
+                        </md-icon-button>
+                      )}
+                    </div>
+                  </>
                 )}
-                </div>
-              </div>
+              </md-list-item>
             );
           })}
-        </div>
+        </md-list>
+      </div>
 
-        {/* ── Create new session ───────────────────────────────────────────── */}
-        <div className="border-t-2 border-race-ink p-4">
-          {creating ? (
-            <div className="flex items-center gap-2">
-              <input
-                ref={newNameInputRef}
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreate();
-                  if (e.key === "Escape") {
-                    setCreating(false);
-                    setNewName("");
-                  }
-                }}
-                placeholder={`Session ${sessions.length + 1}`}
-                maxLength={80}
-                className="race-input flex-1 py-1 text-sm"
-                aria-label="New session name"
-                data-testid="new-session-name-input"
-              />
-              <button
-                type="button"
-                onClick={handleCreate}
-                className="race-action shrink-0 px-3 py-1 text-xs"
-                data-testid="create-session-confirm-btn"
-              >
-                Create
-              </button>
-              <button
-                type="button"
-                onClick={() => {
+      {/* ── Create new session ───────────────────────────────────────────── */}
+      <div slot="actions" className="w-full">
+        {creating ? (
+          <div className="flex w-full items-center gap-2">
+            <md-outlined-text-field
+              ref={newNameInputRef}
+              value={newName}
+              onInput={(e) => setNewName((e.target as HTMLInputElement).value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreate();
+                if (e.key === "Escape") {
                   setCreating(false);
                   setNewName("");
-                }}
-                className="race-action race-action--outline shrink-0 px-3 py-1 text-xs"
-              >
-                Cancel
-              </button>
-            </div>
-          ) : atCap ? (
-            <p
-              className="text-xs font-semibold text-race-muted"
-              role="status"
-              data-testid="session-cap-message"
+                }
+              }}
+              label={`Session ${sessions.length + 1}`}
+              aria-label="New session name"
+              maxLength={80}
+              className="flex-1"
+              data-testid="new-session-name-input"
+            />
+            <md-filled-button
+              onClick={handleCreate}
+              data-testid="create-session-confirm-btn"
             >
-              Maximum {SESSION_CAP} sessions reached. Delete a session to create
-              a new one.
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="race-action w-full text-xs"
-              data-testid="open-create-session-btn"
+              Create
+            </md-filled-button>
+            <md-outlined-button
+              onClick={() => {
+                setCreating(false);
+                setNewName("");
+              }}
             >
-              + New session
-            </button>
-          )}
-        </div>
+              Cancel
+            </md-outlined-button>
+          </div>
+        ) : atCap ? (
+          <p
+            className="text-xs font-semibold"
+            role="status"
+            style={{ color: "var(--md-sys-color-on-surface-variant)" }}
+            data-testid="session-cap-message"
+          >
+            Maximum {SESSION_CAP} sessions reached. Delete a session to create
+            a new one.
+          </p>
+        ) : (
+          <md-filled-button
+            onClick={() => setCreating(true)}
+            className="w-full"
+            data-testid="open-create-session-btn"
+          >
+            + New session
+          </md-filled-button>
+        )}
       </div>
-    </div>
+    </md-dialog>
   );
 }
