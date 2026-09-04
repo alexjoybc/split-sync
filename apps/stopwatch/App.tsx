@@ -4471,6 +4471,23 @@ function SoloScreen({
   );
 }
 
+// ── Countdown timer wall-clock readout helpers (#421) ─────────────────────────
+
+/** Format a wall-clock epoch ms as a short time string, e.g. "2:14 PM". */
+function fmtWallTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Format elapsed ms as "Xs ago" or "Xm ago" for the time-since-alarm readout. */
+function fmtTimeSince(elapsedMs: number): string {
+  const secs = Math.floor(elapsedMs / 1000);
+  if (secs < 60) return `${secs}s ago`;
+  return `${Math.floor(secs / 60)}m ago`;
+}
+
 // ── Countdown timer persistence (#232 — survives app kill via wall-clock) ─────
 const TIMER_STORAGE_KEY = "solo_timer_v1";
 const TIMER_DURATION_STORAGE_KEY = "timer_duration_v1";
@@ -4536,6 +4553,12 @@ function TimerScreen({
   const [durationMs, setDurationMs] = useState(TIMER_DEFAULT_DURATION_MS);
   const [remainingMs, setRemainingMs] = useState(TIMER_DEFAULT_DURATION_MS);
   const [finishedWhileAway, setFinishedWhileAway] = useState(false);
+
+  // Wall-clock readouts (#421): start time, ETA, time-since-alarm
+  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
+  const [alarmFiredAt, setAlarmFiredAt] = useState<number | null>(null);
+  const [timeSinceAlarmMs, setTimeSinceAlarmMs] = useState(0);
+  const alarmReadoutTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Duration inputs (H : MM : SS)
   const [hh, setHh] = useState("0");
@@ -4643,6 +4666,8 @@ function TimerScreen({
     // Auto-reset to the ORIGINAL duration — ready to restart with one tap.
     remainingRef.current = durationRef.current;
     setRemainingMs(durationRef.current);
+    // Record when the alarm fired for the time-since-alarm readout (#421).
+    setAlarmFiredAt(Date.now());
     setTimerState("alerting");
     // Auto-enter fullscreen so the alert is visible from a distance (#422).
     setFsVisible(true);
@@ -4741,7 +4766,34 @@ function TimerScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => () => { stopTick(); stopAlarm(); }, [stopTick, stopAlarm]);
+  // Live time-since-alarm counter (#421) — updates every second while alerting.
+  useEffect(() => {
+    const isAlertingNow = timerState === "alerting";
+    if (!isAlertingNow || alarmFiredAt === null) {
+      if (alarmReadoutTickRef.current !== null) {
+        clearInterval(alarmReadoutTickRef.current);
+        alarmReadoutTickRef.current = null;
+      }
+      return;
+    }
+    const fired = alarmFiredAt;
+    setTimeSinceAlarmMs(Date.now() - fired);
+    alarmReadoutTickRef.current = setInterval(() => {
+      setTimeSinceAlarmMs(Date.now() - fired);
+    }, 1000);
+    return () => {
+      if (alarmReadoutTickRef.current !== null) {
+        clearInterval(alarmReadoutTickRef.current);
+        alarmReadoutTickRef.current = null;
+      }
+    };
+  }, [timerState, alarmFiredAt]);
+
+  useEffect(() => () => {
+    stopTick();
+    stopAlarm();
+    if (alarmReadoutTickRef.current !== null) clearInterval(alarmReadoutTickRef.current);
+  }, [stopTick, stopAlarm]);
 
   // ── Controls ────────────────────────────────────────────────────────────────
   const commitDurationInputs = useCallback(
@@ -4765,6 +4817,12 @@ function TimerScreen({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setFinishedWhileAway(false);
     stopAlarm();
+    // Record start time for fresh rounds; clear alarm data (#421).
+    if (timerState !== "paused") {
+      setStartedAtMs(Date.now());
+    }
+    setAlarmFiredAt(null);
+    setTimeSinceAlarmMs(0);
     const startFrom =
       timerState === "paused" ? remainingRef.current : durationRef.current;
     if (startFrom <= 0) return;
@@ -4796,6 +4854,10 @@ function TimerScreen({
     setTimerState("idle");
     setFinishedWhileAway(false);
     clearPersistedTimer();
+    // Clear wall-clock readouts (#421).
+    setStartedAtMs(null);
+    setAlarmFiredAt(null);
+    setTimeSinceAlarmMs(0);
   }, [stopTick, stopAlarm, clearPersistedTimer]);
 
   /** Single tap silences the completion alert without restarting. */
@@ -4803,6 +4865,10 @@ function TimerScreen({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     stopAlarm();
     setTimerState("idle");
+    // Clear alarm readouts (#421).
+    setAlarmFiredAt(null);
+    setTimeSinceAlarmMs(0);
+    setStartedAtMs(null);
   }, [stopAlarm]);
 
   const isRunning = timerState === "running";
@@ -4893,8 +4959,39 @@ function TimerScreen({
               ? "RESET TO SET VALUE — START TO GO AGAIN"
               : "COUNTDOWN TIMER"}
           </Text>
+          {/* ── Wall-clock readouts (#421) ── */}
+          {isAlerting && alarmFiredAt !== null && (
+            <Text
+              style={s.instrLabel}
+              accessibilityLabel={`Rang ${fmtTimeSince(timeSinceAlarmMs)}`}
+            >
+              {`RANG ${fmtTimeSince(timeSinceAlarmMs).toUpperCase()}`}
+            </Text>
+          )}
+          {!isAlerting && startedAtMs !== null && endAtWallRef.current !== null && (
+             <Text
+               style={s.instrLabel}
+               accessibilityLabel={`Finishes at ${fmtWallTime(endAtWallRef.current)}`}
+             >
+               {`FINISHES ${fmtWallTime(endAtWallRef.current)}`}
+             </Text>
+           )}
         </View>
       </View>
+
+      {/* ── Start time readout (#421): shown while running or paused ── */}
+      {(isRunning || isPaused) && startedAtMs !== null && (
+        <View style={s.startReadoutRow}>
+          <Text style={s.instrLabel}>
+            {`STARTED ${fmtWallTime(startedAtMs)}`}
+          </Text>
+          {isPaused && (
+            <Text style={s.instrLabel}>
+              {`ETA ${fmtWallTime(Date.now() + remainingMs)}`}
+            </Text>
+          )}
+        </View>
+      )}
 
       {/* ── Mode toggle (#232) — shown only in idle ── */}
       {isIdle && <ModeToggleStrip mode="timer" onSelect={onSelectMode} />}
@@ -6191,6 +6288,14 @@ const s = StyleSheet.create({
   },
   instrLabel: { color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 2.5 },
   instrMain:  { paddingHorizontal: 20, paddingBottom: 10 },
+  // Wall-clock start/ETA readout row (#421)
+  startReadoutRow: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 4,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
   instrFooter: {
     flexDirection: "row",
     alignItems: "center",
