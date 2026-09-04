@@ -3043,7 +3043,7 @@ function SessionScreen({
             <ActivityIndicator size="small" color={C.yellow} />
           )}
           {/* Lock toggle: tap to lock, double-tap to unlock.
-              Icon-only, same footprint as the sound control button. */}
+              Text-only chip, same size/style as the VOL button. */}
           <Pressable
             onPress={handleLockTap}
             hitSlop={8}
@@ -3052,7 +3052,7 @@ function SessionScreen({
             accessibilityRole="button"
           >
             <Text style={[s.lockPillText, isLocked && s.lockPillTextLocked]}>
-              {isLocked ? "🔒" : "🔓"}
+              {isLocked ? "UNLOCK" : "LOCK"}
             </Text>
           </Pressable>
           <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
@@ -3951,7 +3951,7 @@ function SoloScreen({
         </View>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
           {/* Lock toggle: tap to lock, double-tap to unlock.
-              Icon-only, same footprint as the sound control button. */}
+              Text-only chip, same size/style as the VOL button. */}
           <Pressable
             onPress={handleLockTap}
             hitSlop={8}
@@ -3960,7 +3960,7 @@ function SoloScreen({
             accessibilityRole="button"
           >
             <Text style={[s.lockPillText, isLocked && s.lockPillTextLocked]}>
-              {isLocked ? "🔒" : "🔓"}
+              {isLocked ? "UNLOCK" : "LOCK"}
             </Text>
           </Pressable>
           <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
@@ -6284,26 +6284,29 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // Lock toggle — same 44×44 icon-only footprint as cueBtn/iconBtn.
-  // Locked state is shown by both the closed-padlock glyph (shape, not just
-  // color) and a red fill, so it stays legible without a text label (#340).
+  // Lock toggle — same compact text-chip footprint as the VOL button
+  // (VolumeKeyToggle), so the header row reads as one consistent control
+  // style. Locked state is shown by both the text ("LOCK"/"UNLOCK") and a
+  // red fill so it stays legible without an icon (#340).
   lockPill: {
-    width: ICON_BTN_SIZE,
-    height: ICON_BTN_SIZE,
-    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 10,
     borderWidth: 1.5,
     borderColor: C.dimGray,
-    alignItems: "center",
-    justifyContent: "center",
+    marginRight: 6,
   },
   lockPillLocked: {
     borderColor: C.red,
     backgroundColor: C.red,
   },
   lockPillText: {
-    fontSize: 18,
+    fontSize: 9,
     fontWeight: "900" as const,
-    color: C.dimGray,
+    letterSpacing: 1.5,
+    color: C.casingMuted,
   },
   lockPillTextLocked: {
     color: C.white,
