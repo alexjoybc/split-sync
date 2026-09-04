@@ -45,12 +45,20 @@ import * as Haptics from "expo-haptics";
 import { useKeepAwake } from "expo-keep-awake";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import {
+  ActivityIndicator as PaperActivityIndicator,
   Appbar,
   Button,
+  Card,
   Chip,
+  Divider,
+  HelperText,
+  List,
   PaperProvider,
   Surface,
+  Text as PaperText,
+  TextInput as PaperTextInput,
   TouchableRipple,
+  useTheme,
 } from "react-native-paper";
 import { stopwatchTheme } from "./src/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -1336,6 +1344,7 @@ function LoginScreen({
   onLogin: () => void;
   onSolo: () => void;
 }) {
+  const theme = useTheme();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1395,116 +1404,124 @@ function LoginScreen({
   // nothing useful a sign-in form can do — go straight to a solo-only prompt.
   if (!isSupabaseConfigured) {
     return (
-      <SafeAreaView style={s.screen}>
+      <SafeAreaView style={[s.screen, { backgroundColor: theme.colors.background }]}>
         <StatusBar barStyle="light-content" backgroundColor={C.casing} />
-        <CasingBar title="STOPWATCH" />
+        <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+          <Appbar.Content title="Stopwatch" />
+        </Appbar.Header>
         <View style={{ flex: 1, justifyContent: "center", padding: 20 }}>
-          <Text style={s.screenTitle}>Solo mode only</Text>
-          <Text style={[s.mutedText, { marginBottom: 28 }]}>
-            Shared timing sessions aren&apos;t configured for this build. You
-            can still use the solo stopwatch.
-          </Text>
-          <Pressable onPress={onSolo} style={s.primaryBtn}>
-            <Text style={s.primaryBtnText}>CONTINUE SOLO</Text>
-          </Pressable>
+          <Card mode="outlined">
+            <Card.Content>
+              <PaperText variant="headlineSmall" style={{ marginBottom: 8 }}>
+                Solo mode only
+              </PaperText>
+              <PaperText variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 20 }}>
+                Shared timing sessions aren&apos;t configured for this build.
+                You can still use the solo stopwatch.
+              </PaperText>
+              <Button mode="contained" onPress={onSolo}>
+                Continue solo
+              </Button>
+            </Card.Content>
+          </Card>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={s.screen}>
+    <SafeAreaView style={[s.screen, { backgroundColor: theme.colors.background }]}>
       <StatusBar barStyle="light-content" backgroundColor={C.casing} />
-      <CasingBar title="SIGN IN" />
+      <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+        <Appbar.Content title="Sign in" />
+      </Appbar.Header>
 
       <ScrollView
-        contentContainerStyle={{ padding: 20, paddingTop: 32 }}
+        contentContainerStyle={{ padding: 20, paddingTop: 28 }}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={s.screenTitle}>Session Creator</Text>
-        <Text style={[s.mutedText, { marginBottom: 28 }]}>
-          Sign in to create and manage shared timing sessions. Joining a session
-          requires no account.
-        </Text>
+        <PaperText variant="headlineSmall" style={{ marginBottom: 8 }}>
+          Session Creator
+        </PaperText>
+        <PaperText variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 24 }}>
+          Sign in to create and manage shared timing sessions. Joining a
+          session requires no account.
+        </PaperText>
 
-        <Pressable
+        <Button
+          mode="outlined"
           onPress={handleGoogleSignIn}
+          loading={googleLoading}
           disabled={googleLoading || loading}
-          style={({ pressed }) => [
-            s.googleBtn,
-            { opacity: pressed || googleLoading || loading ? 0.7 : 1 },
-          ]}
+          style={{ marginBottom: 20 }}
         >
-          {googleLoading ? (
-            <ActivityIndicator color={C.ink} />
-          ) : (
-            <Text style={s.googleBtnText}>Continue with Google</Text>
-          )}
-        </Pressable>
+          Continue with Google
+        </Button>
 
         <View style={s.dividerRow}>
-          <View style={s.dividerLine} />
-          <Text style={s.dividerText}>OR</Text>
-          <View style={s.dividerLine} />
+          <Divider style={{ flex: 1 }} />
+          <PaperText variant="labelSmall" style={{ marginHorizontal: 12, color: theme.colors.onSurfaceVariant }}>
+            OR
+          </PaperText>
+          <Divider style={{ flex: 1 }} />
         </View>
 
-        <LabeledInput
-          label="EMAIL"
+        <PaperTextInput
+          mode="outlined"
+          label="Email"
           value={email}
           onChangeText={setEmail}
           placeholder="you@example.com"
           keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={{ marginBottom: 14 }}
         />
-        <LabeledInput
-          label="PASSWORD"
+        <PaperTextInput
+          mode="outlined"
+          label="Password"
           value={password}
           onChangeText={setPassword}
-          placeholder="••••••••"
           secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={{ marginBottom: 4 }}
         />
 
-        {error && (
-          <View style={s.errorBox}>
-            <Text style={s.errorText}>{error}</Text>
-          </View>
-        )}
+        <HelperText type="error" visible={!!error}>
+          {error}
+        </HelperText>
 
-        <Pressable
+        <Button
+          mode="contained"
           onPress={handleSignIn}
+          loading={loading}
           disabled={loading}
-          style={({ pressed }) => [
-            s.primaryBtn,
-            { opacity: pressed || loading ? 0.7 : 1 },
-          ]}
+          style={{ marginTop: 8, marginBottom: 16 }}
         >
-          {loading ? (
-            <ActivityIndicator color={C.white} />
-          ) : (
-            <Text style={s.primaryBtnText}>SIGN IN</Text>
-          )}
-        </Pressable>
+          Sign in
+        </Button>
 
-        <Pressable onPress={onSolo} style={s.ghostBtn}>
-          <Text style={s.ghostBtnText}>Use without account →</Text>
-        </Pressable>
+        <Button mode="text" onPress={onSolo}>
+          Use without account →
+        </Button>
 
-        <Pressable
+        <Button
+          mode="text"
+          compact
+          style={{ marginTop: 4 }}
           onPress={() => ExpoLinking.openURL("https://splitsync.org/help")}
-          style={[s.ghostBtn, { marginTop: 8 }]}
         >
-          <Text style={[s.ghostBtnText, { color: C.muted, fontSize: 12 }]}>
-            ℹ  Help &amp; about
-          </Text>
-        </Pressable>
+          Help &amp; about
+        </Button>
 
-        <Pressable
+        <Button
+          mode="text"
+          compact
           onPress={() => ExpoLinking.openURL("https://splitsync.org/privacy")}
-          style={[s.ghostBtn, { marginTop: 4 }]}
         >
-          <Text style={[s.ghostBtnText, { color: C.muted, fontSize: 11 }]}>
-            Privacy Policy
-          </Text>
-        </Pressable>
+          Privacy Policy
+        </Button>
       </ScrollView>
     </SafeAreaView>
   );
@@ -1526,6 +1543,7 @@ function HomeScreen({
   onRejoinSession: (params: SessionNavParams) => void;
   onSignOut: () => void;
 }) {
+  const theme = useTheme();
   const [sessions, setSessions] = useState<CasualSession[]>([]);
   const [loading, setLoading] = useState(true);
   // Which session row has a close/delete request in flight (#345).
@@ -1614,35 +1632,6 @@ function HomeScreen({
     };
   }, [fetchSessions]);
 
-  const handleDelete = useCallback(
-    (session: CasualSession) => {
-      Alert.alert(
-        "Delete session?",
-        "This cannot be undone.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: async () => {
-              // Optimistically remove from local state
-              setSessions((prev) => prev.filter((s) => s.id !== session.id));
-              const { error } = await supabase.rpc("delete_casual_session", {
-                p_session_id: session.id,
-              });
-              if (error) {
-                // Rollback: re-fetch to restore the row
-                fetchSessions();
-                Alert.alert("Error", "Could not delete session.");
-              }
-            },
-          },
-        ]
-      );
-    },
-    [fetchSessions]
-  );
-
   const handleRejoin = useCallback(
     async (session: CasualSession) => {
       // Stopped sessions have no interactive controls — send directly to public results page.
@@ -1701,167 +1690,146 @@ function HomeScreen({
     ? `Hi, ${userEmail.split("@")[0]}`
     : "Hi";
 
+  // Session status → MD3 theme color roles. Every state also renders its own
+  // text label (WCAG 1.4.1) — color is never the only signal.
+  const statusColors: Record<
+    CasualSession["status"],
+    { background: string; text: string; label: string }
+  > = {
+    running: {
+      background: theme.colors.errorContainer,
+      text: theme.colors.onErrorContainer,
+      label: "Running",
+    },
+    stopped: {
+      background: theme.colors.inverseSurface,
+      text: theme.colors.inverseOnSurface,
+      label: "Stopped",
+    },
+    waiting: {
+      background: theme.colors.surfaceVariant,
+      text: theme.colors.onSurfaceVariant,
+      label: "Waiting",
+    },
+    closed: {
+      background: theme.colors.surfaceVariant,
+      text: theme.colors.onSurfaceVariant,
+      label: "Closed",
+    },
+  };
+
   return (
-    <SafeAreaView style={s.screen}>
+    <SafeAreaView style={[s.screen, { backgroundColor: theme.colors.background }]}>
       <StatusBar barStyle="light-content" backgroundColor={C.casing} />
-      <CasingBar title="STOPWATCH" />
+      <Appbar.Header style={{ backgroundColor: theme.colors.surface }} elevated>
+        <Appbar.Content title="Stopwatch" />
+      </Appbar.Header>
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-        <Text style={[s.screenTitle, { marginBottom: 4 }]}>{greeting}</Text>
-        <Text style={[s.mutedText, { marginBottom: 24 }]}>
+        <PaperText variant="headlineSmall" style={{ marginBottom: 4 }}>
+          {greeting}
+        </PaperText>
+        <PaperText variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 24 }}>
           Create a shared timing session or go solo.
-        </Text>
+        </PaperText>
 
         {/* Primary actions */}
-        <Pressable
-          onPress={onNewSession}
-          style={({ pressed }) => [
-            s.primaryBtn,
-            { marginBottom: 10, opacity: pressed ? 0.8 : 1 },
-          ]}
-        >
-          <Text style={s.primaryBtnText}>+ NEW SESSION</Text>
-        </Pressable>
+        <Button mode="contained" onPress={onNewSession} style={{ marginBottom: 10 }}>
+          + New session
+        </Button>
 
-        <Pressable
-          onPress={onSolo}
-          style={({ pressed }) => [
-            s.secondaryBtn,
-            { marginBottom: 28, opacity: pressed ? 0.8 : 1 },
-          ]}
-        >
-          <Text style={s.secondaryBtnText}>⏱  Solo Stopwatch</Text>
-        </Pressable>
+        <Button mode="outlined" onPress={onSolo} style={{ marginBottom: 28 }}>
+          Solo stopwatch
+        </Button>
 
         {/* Session history */}
-        <View style={s.sectionHeader}>
-          <Text style={s.sectionTitle}>MY SESSIONS</Text>
-        </View>
+        <PaperText variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+          MY SESSIONS
+        </PaperText>
 
         {loading ? (
-          <ActivityIndicator color={C.red} style={{ marginTop: 24 }} />
+          <PaperActivityIndicator style={{ marginTop: 24 }} />
         ) : sessions.length === 0 ? (
-          <Text style={[s.mutedText, { marginTop: 16, textAlign: "center" }]}>
+          <PaperText
+            variant="bodyMedium"
+            style={{ marginTop: 16, textAlign: "center", color: theme.colors.onSurfaceVariant }}
+          >
             No sessions yet. Create one above.
-          </Text>
+          </PaperText>
         ) : (
-          sessions.map((session) => (
-            <View key={session.id} style={{ marginBottom: 8 }}>
-              <Pressable
-                onPress={() => handleRejoin(session)}
-                style={({ pressed }) => [
-                  s.sessionRow,
-                  { marginBottom: 0, opacity: pressed ? 0.7 : 1 },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={s.sessionName} numberOfLines={1}>
-                    {session.name || "Untitled Session"}
-                  </Text>
-                  <Text style={[s.mutedText, { fontSize: 11, marginTop: 2 }]}>
-                    {fmtAge(session.created_at)} · Code{" "}
-                    <Text style={{ color: C.ink, fontWeight: "700" }}>
-                      {session.code}
-                    </Text>
-                  </Text>
-                  <Text
-                    style={[
-                      s.mutedText,
-                      {
-                        fontSize: 11,
-                        marginTop: 3,
-                        color: palette.bluePrimary,
-                        fontWeight: "600",
-                      },
-                    ]}
-                  >
-                    {session.status === "stopped" ? "View results →" : session.status === "closed" ? "View →" : "Rejoin →"}
-                  </Text>
-                </View>
-                <View
-                  style={[
-                    s.statusBadge,
-                    session.status === "running" && { backgroundColor: C.red },
-                    session.status === "stopped" && { backgroundColor: C.ink },
-                    session.status === "waiting" && {
-                      backgroundColor: C.dimGray,
-                    },
-                    session.status === "closed" && {
-                      backgroundColor: C.dimGray,
-                    },
-                  ]}
-                >
-                  <Text style={s.statusBadgeText}>
-                    {session.status.toUpperCase()}
-                  </Text>
-                </View>
-              </Pressable>
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 12,
-                  justifyContent: "flex-end",
-                  marginTop: 4,
-                }}
-              >
-                {session.status !== "closed" && (
-                  <Pressable
-                    onPress={() => handleCloseSession(session)}
-                    disabled={actionPendingId === session.id}
-                    hitSlop={8}
-                  >
-                    <Text
-                      style={[
-                        s.mutedText,
-                        { fontSize: 11, fontWeight: "700", opacity: actionPendingId === session.id ? 0.4 : 1 },
-                      ]}
+          sessions.map((session) => {
+            const status = statusColors[session.status];
+            const actionLabel =
+              session.status === "stopped"
+                ? "View results →"
+                : session.status === "closed"
+                ? "View →"
+                : "Rejoin →";
+            return (
+              <Card key={session.id} mode="outlined" style={{ marginBottom: 10 }}>
+                <List.Item
+                  title={session.name || "Untitled Session"}
+                  titleNumberOfLines={1}
+                  onPress={() => handleRejoin(session)}
+                  description={() => (
+                    <View>
+                      <PaperText variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                        {fmtAge(session.created_at)} · Code {session.code}
+                      </PaperText>
+                      <PaperText variant="bodySmall" style={{ color: theme.colors.primary, fontWeight: "600", marginTop: 2 }}>
+                        {actionLabel}
+                      </PaperText>
+                    </View>
+                  )}
+                  right={() => (
+                    <Chip
+                      compact
+                      style={{ backgroundColor: status.background, alignSelf: "center" }}
+                      textStyle={{ color: status.text, fontWeight: "700", fontSize: 11 }}
+                    >
+                      {status.label}
+                    </Chip>
+                  )}
+                />
+                <View style={s.sessionActionsRow}>
+                  {session.status !== "closed" && (
+                    <Button
+                      mode="text"
+                      compact
+                      disabled={actionPendingId === session.id}
+                      onPress={() => handleCloseSession(session)}
                     >
                       Close
-                    </Text>
-                  </Pressable>
-                )}
-                <Pressable
-                  onPress={() => handleDeleteSession(session)}
-                  disabled={actionPendingId === session.id}
-                  hitSlop={8}
-                >
-                  <Text
-                    style={[
-                      { fontSize: 11, fontWeight: "700", color: C.red },
-                      { opacity: actionPendingId === session.id ? 0.4 : 1 },
-                    ]}
+                    </Button>
+                  )}
+                  <Button
+                    mode="text"
+                    compact
+                    textColor={theme.colors.error}
+                    disabled={actionPendingId === session.id}
+                    onPress={() => handleDeleteSession(session)}
                   >
                     Delete
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          ))
+                  </Button>
+                </View>
+              </Card>
+            );
+          })
         )}
 
         {/* Sign out */}
-        <Pressable
-          onPress={onSignOut}
-          style={({ pressed }) => [
-            s.ghostBtn,
-            { marginTop: 32, opacity: pressed ? 0.6 : 1 },
-          ]}
-        >
-          <Text style={[s.ghostBtnText, { color: C.muted }]}>Sign Out</Text>
-        </Pressable>
+        <Button mode="text" onPress={onSignOut} style={{ marginTop: 32 }}>
+          Sign out
+        </Button>
 
         {/* Help */}
-        <Pressable
+        <Button
+          mode="text"
+          compact
           onPress={() => ExpoLinking.openURL("https://splitsync.org/help")}
-          style={({ pressed }) => [
-            s.ghostBtn,
-            { marginTop: 4, opacity: pressed ? 0.6 : 1 },
-          ]}
         >
-          <Text style={[s.ghostBtnText, { color: C.muted, fontSize: 12 }]}>
-            ℹ  Help &amp; about
-          </Text>
-        </Pressable>
+          Help &amp; about
+        </Button>
       </ScrollView>
     </SafeAreaView>
   );
@@ -6782,6 +6750,13 @@ const s = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
     letterSpacing: 1.5,
+  },
+  // MD3 HomeScreen session card actions row (#436).
+  sessionActionsRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 8,
+    paddingBottom: 4,
   },
 
   // Lock hint toast — floating above the button bar
