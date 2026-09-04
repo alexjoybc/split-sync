@@ -5022,8 +5022,8 @@ function TimerScreen({
     <SafeAreaView style={s.screen}>
       <StatusBar barStyle="light-content" backgroundColor={C.casing} />
 
-      {/* ── Top bar (#414) ── */}
-      <View style={s.topBar}>
+      {/* ── Top bar (#414, MD3 chrome #440) ── */}
+      <Appbar.Header style={s.topBar} statusBarHeight={0} elevated={false} mode="small">
         <TopBarButton label="‹ BACK" onPress={onBack} variant="blue" accessibilityLabel="Back" />
         <TopBarButton
           label="SESSIONS"
@@ -5047,7 +5047,7 @@ function TimerScreen({
           }
           variant={isRunning || isAlerting || isPaused ? "yellow" : "grey"}
         />
-      </View>
+      </Appbar.Header>
 
       {/* ── Fullscreen overlay (#422) ── */}
       <FullscreenOverlay
@@ -5112,13 +5112,15 @@ function TimerScreen({
       {/* ── Mode toggle (#232) — shown only in idle ── */}
       {isIdle && <ModeToggleStrip mode="timer" onSelect={onSelectMode} />}
 
-      {/* ── Duration inputs (idle only) ── */}
+      {/* ── Duration inputs (idle only) — MD3 chrome #440 ── */}
       {isIdle && (
-        <View style={s.cuePanel}>
+        <Card mode="outlined" style={s.cuePanel}>
           <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
             <Text style={s.cueLabel}>DURATION (H : MM : SS)</Text>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <TextInput
+              <PaperTextInput
+                mode="outlined"
+                dense
                 value={hh}
                 onChangeText={(t) => {
                   const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
@@ -5126,12 +5128,15 @@ function TimerScreen({
                   commitDurationInputs(clean, mm, ss);
                 }}
                 keyboardType="number-pad"
-                style={s.cueInput}
+                style={s.timerInput}
+                contentStyle={s.timerInputContent}
                 accessibilityLabel="Timer hours"
                 maxLength={2}
               />
               <Text style={s.cueColon}>:</Text>
-              <TextInput
+              <PaperTextInput
+                mode="outlined"
+                dense
                 value={mm}
                 onChangeText={(t) => {
                   const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
@@ -5139,12 +5144,15 @@ function TimerScreen({
                   commitDurationInputs(hh, clean, ss);
                 }}
                 keyboardType="number-pad"
-                style={s.cueInput}
+                style={s.timerInput}
+                contentStyle={s.timerInputContent}
                 accessibilityLabel="Timer minutes"
                 maxLength={2}
               />
               <Text style={s.cueColon}>:</Text>
-              <TextInput
+              <PaperTextInput
+                mode="outlined"
+                dense
                 value={ss}
                 onChangeText={(t) => {
                   const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
@@ -5152,7 +5160,8 @@ function TimerScreen({
                   commitDurationInputs(hh, mm, clean);
                 }}
                 keyboardType="number-pad"
-                style={s.cueInput}
+                style={s.timerInput}
+                contentStyle={s.timerInputContent}
                 accessibilityLabel="Timer seconds"
                 maxLength={2}
               />
@@ -5160,20 +5169,20 @@ function TimerScreen({
           </View>
           <View style={s.cueRow}>
             <Text style={s.cueLabel}>SOUND ON COMPLETION</Text>
-            <CueSwitch
-              on={cueSettings.soundEnabled}
-              label="Sound on timer completion"
-              onToggle={() =>
+            <PaperSwitch
+              value={cueSettings.soundEnabled}
+              accessibilityLabel="Sound on timer completion"
+              onValueChange={() =>
                 updateCueSettings({ soundEnabled: !cueSettings.soundEnabled })
               }
             />
           </View>
           <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
             <Text style={s.cueLabel}>VIBRATION ON COMPLETION</Text>
-            <CueSwitch
-              on={cueSettings.vibrationEnabled}
-              label="Vibration on timer completion"
-              onToggle={() =>
+            <PaperSwitch
+              value={cueSettings.vibrationEnabled}
+              accessibilityLabel="Vibration on timer completion"
+              onValueChange={() =>
                 updateCueSettings({ vibrationEnabled: !cueSettings.vibrationEnabled })
               }
             />
@@ -5192,13 +5201,12 @@ function TimerScreen({
           </Text>
 
           {/* ── Repeat / Pomodoro mode (ADR 0025) ──────────────────────── */}
-          <View style={[s.cueRow, { borderTopWidth: 1, borderTopColor: C.ink }]}>
-            <Text style={s.cueLabel}>REPEAT MODE</Text>
-            <CueSwitch
-              on={repeatEnabled}
-              label="Enable repeat / Pomodoro mode"
-              onToggle={() => {
-                const on = !repeatEnabled;
+          <View style={[s.cueRow, { borderTopWidth: 1, borderTopColor: C.ink, flexDirection: "column", alignItems: "stretch", gap: 8 }]}>
+            <Text style={s.cueLabel}>MODE</Text>
+            <SegmentedButtons
+              value={repeatEnabled ? "repeat" : "single"}
+              onValueChange={(value) => {
+                const on = value === "repeat";
                 setRepeatEnabled(on);
                 repeatEnabledRef.current = on;
                 persistRepeatConfig(
@@ -5207,6 +5215,10 @@ function TimerScreen({
                     : null
                 );
               }}
+              buttons={[
+                { value: "single", label: "SINGLE", accessibilityLabel: "Single countdown" },
+                { value: "repeat", label: "REPEAT", accessibilityLabel: "Enable repeat / Pomodoro mode" },
+              ]}
             />
           </View>
           {repeatEnabled && (
@@ -5214,7 +5226,9 @@ function TimerScreen({
               <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
                 <Text style={s.cueLabel}>REST (H : MM : SS)</Text>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                  <TextInput
+                  <PaperTextInput
+                    mode="outlined"
+                    dense
                     value={restHh}
                     onChangeText={(t) => {
                       const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
@@ -5222,12 +5236,15 @@ function TimerScreen({
                       commitRestDurationInputs(clean, restMm, restSs);
                     }}
                     keyboardType="number-pad"
-                    style={s.cueInput}
+                    style={s.timerInput}
+                    contentStyle={s.timerInputContent}
                     accessibilityLabel="Rest hours"
                     maxLength={2}
                   />
                   <Text style={s.cueColon}>:</Text>
-                  <TextInput
+                  <PaperTextInput
+                    mode="outlined"
+                    dense
                     value={restMm}
                     onChangeText={(t) => {
                       const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
@@ -5235,12 +5252,15 @@ function TimerScreen({
                       commitRestDurationInputs(restHh, clean, restSs);
                     }}
                     keyboardType="number-pad"
-                    style={s.cueInput}
+                    style={s.timerInput}
+                    contentStyle={s.timerInputContent}
                     accessibilityLabel="Rest minutes"
                     maxLength={2}
                   />
                   <Text style={s.cueColon}>:</Text>
-                  <TextInput
+                  <PaperTextInput
+                    mode="outlined"
+                    dense
                     value={restSs}
                     onChangeText={(t) => {
                       const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
@@ -5248,7 +5268,8 @@ function TimerScreen({
                       commitRestDurationInputs(restHh, restMm, clean);
                     }}
                     keyboardType="number-pad"
-                    style={s.cueInput}
+                    style={s.timerInput}
+                    contentStyle={s.timerInputContent}
                     accessibilityLabel="Rest seconds"
                     maxLength={2}
                   />
@@ -5256,7 +5277,9 @@ function TimerScreen({
               </View>
               <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
                 <Text style={s.cueLabel}>CYCLES (blank = ∞)</Text>
-                <TextInput
+                <PaperTextInput
+                  mode="outlined"
+                  dense
                   value={repeatCountStr}
                   onChangeText={(t) => {
                     const raw = t.replace(/[^0-9]/g, "").slice(0, 2);
@@ -5274,8 +5297,8 @@ function TimerScreen({
                   }}
                   keyboardType="number-pad"
                   placeholder="∞"
-                  placeholderTextColor={C.muted}
-                  style={[s.cueInput, { width: 50 }]}
+                  style={[s.timerInput, { width: 60 }]}
+                  contentStyle={s.timerInputContent}
                   accessibilityLabel="Repeat cycles (blank for infinite)"
                   maxLength={2}
                 />
@@ -5286,7 +5309,7 @@ function TimerScreen({
               </Text>
             </>
           )}
-        </View>
+        </Card>
       )}
 
       {finishedWhileAway && (
@@ -6828,6 +6851,10 @@ const s = StyleSheet.create({
     textAlign: "center",
   },
   cueColon: { fontSize: 14, fontWeight: "900", color: C.ink },
+  // MD3 duration/rest inputs on the Timer screen (#440) — react-native-paper
+  // TextInput, sized to sit compactly next to the H : MM : SS colons.
+  timerInput: { width: 56, height: 40, textAlign: "center" },
+  timerInputContent: { textAlign: "center" },
   cueHint: {
     fontSize: 10,
     fontWeight: "600",
