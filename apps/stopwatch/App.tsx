@@ -856,78 +856,76 @@ function CasingBar({
   );
 }
 
-// Volume-key toggle chip shown in the casing header
-function VolumeKeyToggle({
-  enabled,
-  onToggle,
+// ── Top bar redesign (#414) ──────────────────────────────────────────────────
+// A single row of evenly distributed, identically sized buttons using a
+// 3-color scheme: grey = neutral toggle (resting state), blue = primary
+// navigation, yellow = active/warning state (locked, running).
+type TopBarVariant = "grey" | "blue" | "yellow";
+
+function topBarColors(variant: TopBarVariant) {
+  switch (variant) {
+    case "blue":
+      return { bg: C.bluePrimary, fg: C.white };
+    case "yellow":
+      return { bg: C.yellow, fg: C.ink };
+    default:
+      return { bg: C.dark, fg: C.casingMuted };
+  }
+}
+
+function TopBarButton({
+  label,
+  onPress,
+  variant,
+  accessibilityLabel,
+  testID,
 }: {
-  enabled: boolean;
-  onToggle: () => void;
+  label: string;
+  onPress: () => void;
+  variant: TopBarVariant;
+  accessibilityLabel?: string;
+  testID?: string;
 }) {
+  const { bg, fg } = topBarColors(variant);
   return (
     <Pressable
-      onPress={onToggle}
+      onPress={onPress}
+      hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={enabled ? "Volume keys active — tap to disable" : "Volume keys disabled — tap to enable"}
-      hitSlop={8}
-      style={({ pressed }) => ({
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 3,
-        paddingHorizontal: 7,
-        paddingVertical: 3,
-        borderRadius: 10,
-        borderWidth: 1.5,
-        borderColor: enabled ? C.lcd : C.dark,
-        backgroundColor: enabled ? C.lcdBg : "transparent",
-        opacity: pressed ? 0.7 : 1,
-        marginRight: 6,
-      })}
+      accessibilityLabel={accessibilityLabel ?? label}
+      testID={testID}
+      style={({ pressed }) => [
+        s.topBarBtn,
+        { backgroundColor: bg, opacity: pressed ? 0.75 : 1 },
+      ]}
     >
-      <Text
-        style={{
-          color: enabled ? C.lcd : C.casingMuted,
-          fontSize: 9,
-          fontWeight: "900",
-          letterSpacing: 1.5,
-        }}
-      >
-        {enabled ? "VOL●" : "VOL○"}
+      <Text style={[s.topBarBtnText, { color: fg }]} numberOfLines={1}>
+        {label}
       </Text>
     </Pressable>
   );
 }
 
-// Status pill
-function StatusPill({ status }: { status: SessionStatus | "ready" }) {
-  const isRunning = status === "running";
-  const isStopped = status === "stopped";
-  const isWaiting = status === "waiting";
+// Non-pressable status indicator, same footprint as TopBarButton so it sits
+// evenly in the row.
+function TopBarStatus({
+  label,
+  variant,
+  pending,
+}: {
+  label: string;
+  variant: TopBarVariant;
+  pending?: boolean;
+}) {
+  const { bg, fg } = topBarColors(variant);
   return (
-    <View
-      style={[
-        s.pill,
-        isRunning && { backgroundColor: C.red, borderColor: C.red },
-        isStopped && { backgroundColor: C.ink, borderColor: C.ink },
-        isWaiting && { backgroundColor: C.dark, borderColor: C.dark },
-      ]}
-    >
-      <Text
-        style={[
-          s.pillTxt,
-          isRunning && { color: C.white },
-          isStopped && { color: C.white },
-          isWaiting && { color: C.inactive },
-        ]}
-      >
-        {isRunning
-          ? "● RUN"
-          : isStopped
-          ? "■ STOP"
-          : isWaiting
-          ? "◌ WAIT"
-          : "READY"}
+    <View style={[s.topBarBtn, { backgroundColor: bg }]}>
+      <Text style={[s.topBarBtnText, { color: fg }]} numberOfLines={1}>
+        {label}
       </Text>
+      {pending && (
+        <View style={s.topBarPendingDot} accessibilityLabel="Syncing" />
+      )}
     </View>
   );
 }
@@ -1155,28 +1153,6 @@ function useDoubleTap(
       }, delay);
     }
   }, [onDoubleTap, onSingleTap, delay]);
-}
-
-// ♪ toggle button for the casing bar
-function CueBarButton({
-  active,
-  onPress,
-}: {
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      accessible
-      accessibilityRole="button"
-      accessibilityLabel="Sound settings"
-      hitSlop={8}
-      style={s.cueBtn}
-    >
-      <Text style={[s.cueBtnText, active && { color: C.yellow }]}>♪</Text>
-    </Pressable>
-  );
 }
 
 // Subtle SplitSync logo footer — shown at the bottom of control-dense screens
@@ -3028,40 +3004,37 @@ function SessionScreen({
     <SafeAreaView style={s.screen}>
       <StatusBar barStyle="light-content" backgroundColor={C.casing} />
 
-      {/* ── Casing top ── */}
-      <View style={s.casing}>
-        <View style={s.casingLeft}>
-          <Pressable onPress={onBack} hitSlop={8} style={s.iconBtn}>
-            <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
-          </Pressable>
-          <Text style={s.casingTitle} numberOfLines={1}>
-            {params.sessionName.toUpperCase().slice(0, 16)}
-          </Text>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-          {pendingCount > 0 && (
-            <ActivityIndicator size="small" color={C.yellow} />
-          )}
-          {/* Lock toggle: tap to lock, double-tap to unlock.
-              Text-only chip, same size/style as the VOL button. */}
-          <Pressable
-            onPress={handleLockTap}
-            hitSlop={8}
-            style={[s.lockPill, isLocked && s.lockPillLocked]}
-            accessibilityLabel={isLocked ? "Controls locked — double-tap to unlock" : "Tap to lock controls"}
-            accessibilityRole="button"
-          >
-            <Text style={[s.lockPillText, isLocked && s.lockPillTextLocked]}>
-              {isLocked ? "UNLOCK" : "LOCK"}
-            </Text>
-          </Pressable>
-          <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
-          <CueBarButton
-            active={cueSettings.soundEnabled || cueSettings.targetEnabled}
-            onPress={() => setShowCuePanel((v) => !v)}
-          />
-          <StatusPill status={status} />
-        </View>
+      {/* ── Top bar (#414) ── */}
+      <View style={s.topBar}>
+        <TopBarButton label="‹ BACK" onPress={onBack} variant="blue" accessibilityLabel="Back" />
+        <TopBarButton
+          label={isLocked ? "UNLOCK" : "LOCK"}
+          onPress={handleLockTap}
+          variant={isLocked ? "yellow" : "grey"}
+          accessibilityLabel={isLocked ? "Controls locked — double-tap to unlock" : "Tap to lock controls"}
+        />
+        <TopBarButton
+          label={volumeKeysEnabled ? "VOL ON" : "VOL OFF"}
+          onPress={toggleVolumeKeys}
+          variant={volumeKeysEnabled ? "yellow" : "grey"}
+          accessibilityLabel={volumeKeysEnabled ? "Volume keys active — tap to disable" : "Volume keys disabled — tap to enable"}
+        />
+        <TopBarButton
+          label="CUES"
+          onPress={() => setShowCuePanel((v) => !v)}
+          variant={cueSettings.soundEnabled || cueSettings.targetEnabled ? "yellow" : "grey"}
+          accessibilityLabel="Sound cue settings"
+        />
+        <TopBarStatus
+          label={
+            status === "running" ? "● RUN"
+              : status === "stopped" ? "■ STOP"
+              : status === "waiting" ? "◌ WAIT"
+              : "READY"
+          }
+          variant={status === "running" ? "yellow" : "grey"}
+          pending={pendingCount > 0}
+        />
       </View>
 
       {/* ── Sound cue settings (#227) ── */}
@@ -3919,78 +3892,42 @@ function SoloScreen({
     <SafeAreaView style={s.screen}>
       <StatusBar barStyle="light-content" backgroundColor={C.casing} />
 
-      {/* ── Device top casing ── */}
-      <View style={s.casing}>
-        <View style={s.casingLeft}>
-          <Pressable onPress={onBack} hitSlop={8} style={s.iconBtn}>
-            <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
-          </Pressable>
-          <Text style={s.casingTitle}>STOPWATCH</Text>
-          {/* Sessions switcher button */}
-          <Pressable
-            onPress={onOpenSessions}
-            hitSlop={{ top: 16, bottom: 16, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel="Open sessions list"
-            style={({ pressed }) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 3,
-              paddingHorizontal: 7,
-              paddingVertical: 10,
-              borderRadius: 10,
-              borderWidth: 1.5,
-              borderColor: C.dark,
-              opacity: pressed ? 0.6 : 1,
-            })}
-          >
-            <Text style={{ color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 1.5 }}>
-              ≡ SESSIONS
-            </Text>
-          </Pressable>
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
-          {/* Lock toggle: tap to lock, double-tap to unlock.
-              Text-only chip, same size/style as the VOL button. */}
-          <Pressable
-            onPress={handleLockTap}
-            hitSlop={8}
-            style={[s.lockPill, isLocked && s.lockPillLocked]}
-            accessibilityLabel={isLocked ? "Controls locked — double-tap to unlock" : "Tap to lock controls"}
-            accessibilityRole="button"
-          >
-            <Text style={[s.lockPillText, isLocked && s.lockPillTextLocked]}>
-              {isLocked ? "UNLOCK" : "LOCK"}
-            </Text>
-          </Pressable>
-          <VolumeKeyToggle enabled={volumeKeysEnabled} onToggle={toggleVolumeKeys} />
-          <CueBarButton
-            active={cueSettings.soundEnabled || cueSettings.targetEnabled}
-            onPress={() => setShowCuePanel((v) => !v)}
-          />
-          <View
-            style={[
-              s.pill,
-              isRunning   && { backgroundColor: C.red,    borderColor: C.red },
-              isPaused    && { backgroundColor: C.yellow, borderColor: C.yellow },
-              isCountdown && { backgroundColor: C.red,    borderColor: C.red },
-            ]}
-          >
-            <Text
-              style={[
-                s.pillTxt,
-                isRunning   && { color: C.white },
-                isPaused    && { color: C.ink },
-                isCountdown && { color: C.white },
-              ]}
-            >
-              {isRunning   ? "● RUN"
-               : isPaused  ? "‖ PAUSED"
-               : isCountdown ? `◷ ${countdownSec}`
-               : "READY"}
-            </Text>
-          </View>
-        </View>
+      {/* ── Top bar (#414) ── */}
+      <View style={s.topBar}>
+        <TopBarButton label="‹ BACK" onPress={onBack} variant="blue" accessibilityLabel="Back" />
+        <TopBarButton
+          label="SESSIONS"
+          onPress={onOpenSessions}
+          variant="blue"
+          accessibilityLabel="Open sessions list"
+        />
+        <TopBarButton
+          label={isLocked ? "UNLOCK" : "LOCK"}
+          onPress={handleLockTap}
+          variant={isLocked ? "yellow" : "grey"}
+          accessibilityLabel={isLocked ? "Controls locked — double-tap to unlock" : "Tap to lock controls"}
+        />
+        <TopBarButton
+          label={volumeKeysEnabled ? "VOL ON" : "VOL OFF"}
+          onPress={toggleVolumeKeys}
+          variant={volumeKeysEnabled ? "yellow" : "grey"}
+          accessibilityLabel={volumeKeysEnabled ? "Volume keys active — tap to disable" : "Volume keys disabled — tap to enable"}
+        />
+        <TopBarButton
+          label="CUES"
+          onPress={() => setShowCuePanel((v) => !v)}
+          variant={cueSettings.soundEnabled || cueSettings.targetEnabled ? "yellow" : "grey"}
+          accessibilityLabel="Sound cue settings"
+        />
+        <TopBarStatus
+          label={
+            isRunning ? "● RUN"
+              : isPaused ? "‖ PAUSE"
+              : isCountdown ? `◷ ${countdownSec}`
+              : "READY"
+          }
+          variant={isRunning || isCountdown || isPaused ? "yellow" : "grey"}
+        />
       </View>
 
       {/* ── Sound cue settings (#227) ── */}
@@ -4690,61 +4627,24 @@ function TimerScreen({
     <SafeAreaView style={s.screen}>
       <StatusBar barStyle="light-content" backgroundColor={C.casing} />
 
-      {/* ── Device top casing ── */}
-      <View style={s.casing}>
-        <View style={s.casingLeft}>
-          <Pressable onPress={onBack} hitSlop={8} style={s.iconBtn}>
-            <Text style={{ color: C.faint, fontSize: 20 }}>‹</Text>
-          </Pressable>
-          <Text style={s.casingTitle}>TIMER</Text>
-          {/* Sessions switcher button */}
-          <Pressable
-            onPress={onOpenSessions}
-            hitSlop={{ top: 16, bottom: 16, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel="Open sessions list"
-            style={({ pressed }) => ({
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 3,
-              paddingHorizontal: 7,
-              paddingVertical: 10,
-              borderRadius: 10,
-              borderWidth: 1.5,
-              borderColor: C.dark,
-              opacity: pressed ? 0.6 : 1,
-            })}
-          >
-            <Text style={{ color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 1.5 }}>
-              ≡ SESSIONS
-            </Text>
-          </Pressable>
-        </View>
-        <View
-          style={[
-            s.pill,
-            isRunning && { backgroundColor: C.red, borderColor: C.red },
-            isPaused && { backgroundColor: C.yellow, borderColor: C.yellow },
-            isAlerting && { backgroundColor: C.red, borderColor: C.red },
-          ]}
-        >
-          <Text
-            style={[
-              s.pillTxt,
-              isRunning && { color: C.white },
-              isPaused && { color: C.ink },
-              isAlerting && { color: C.white },
-            ]}
-          >
-            {isRunning
-              ? "▼ RUN"
-              : isPaused
-              ? "‖ PAUSED"
-              : isAlerting
-              ? "◉ DONE"
-              : "READY"}
-          </Text>
-        </View>
+      {/* ── Top bar (#414) ── */}
+      <View style={s.topBar}>
+        <TopBarButton label="‹ BACK" onPress={onBack} variant="blue" accessibilityLabel="Back" />
+        <TopBarButton
+          label="SESSIONS"
+          onPress={onOpenSessions}
+          variant="blue"
+          accessibilityLabel="Open sessions list"
+        />
+        <TopBarStatus
+          label={
+            isRunning ? "▼ RUN"
+              : isPaused ? "‖ PAUSE"
+              : isAlerting ? "◉ DONE"
+              : "READY"
+          }
+          variant={isRunning || isAlerting || isPaused ? "yellow" : "grey"}
+        />
       </View>
 
       {/* ── LCD instrument panel — remaining time ── */}
@@ -5898,14 +5798,37 @@ const s = StyleSheet.create({
   logoSplit: { color: C.white, fontSize: 13, fontWeight: "900", letterSpacing: 1 },
   logoSync:  { color: C.yellow, fontSize: 13, fontWeight: "900", letterSpacing: 1 },
   casingTitle: { color: C.casingMuted, fontSize: 10, fontWeight: "900", letterSpacing: 3 },
-  pill: {
-    borderWidth: 1.5,
-    borderColor: C.dark,
-    borderRadius: 20,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
+
+  // Redesigned top bar (#414) — one evenly distributed row of identically
+  // sized buttons, no title text or logo (branding stays in LogoFooter).
+  topBar: {
+    backgroundColor: C.casing,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    gap: 6,
+    borderBottomWidth: 3,
+    borderColor: C.casingBorder,
   },
-  pillTxt: { color: C.casingMuted, fontSize: 10, fontWeight: "900", letterSpacing: 1.5 },
+  topBarBtn: {
+    flex: 1,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 8,
+    paddingHorizontal: 4,
+  },
+  topBarBtnText: { fontSize: 11, fontWeight: "900", letterSpacing: 1 },
+  topBarPendingDot: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: C.white,
+  },
 
   // LCD instrument panel
   instrument: {
@@ -6276,42 +6199,6 @@ const s = StyleSheet.create({
     overflow: "hidden",
   } as const,
 
-  // Icon-only button — shared 44×44 pt touch target
-  iconBtn: {
-    width: ICON_BTN_SIZE,
-    height: ICON_BTN_SIZE,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // Lock toggle — same compact text-chip footprint as the VOL button
-  // (VolumeKeyToggle), so the header row reads as one consistent control
-  // style. Locked state is shown by both the text ("LOCK"/"UNLOCK") and a
-  // red fill so it stays legible without an icon (#340).
-  lockPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: C.dimGray,
-    marginRight: 6,
-  },
-  lockPillLocked: {
-    borderColor: C.red,
-    backgroundColor: C.red,
-  },
-  lockPillText: {
-    fontSize: 9,
-    fontWeight: "900" as const,
-    letterSpacing: 1.5,
-    color: C.casingMuted,
-  },
-  lockPillTextLocked: {
-    color: C.white,
-  },
-
   // Logo footer — subtle centered brand element on control-dense screens
   logoFooter: {
     alignItems: "center",
@@ -6322,13 +6209,6 @@ const s = StyleSheet.create({
   },
 
   // Sound cues (#227)
-  cueBtn: {
-    width: ICON_BTN_SIZE,
-    height: ICON_BTN_SIZE,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cueBtnText: { color: C.casingMuted, fontSize: 26, fontWeight: "900" },
   cuePanel: {
     backgroundColor: C.panelBg,
     borderBottomWidth: 2,
