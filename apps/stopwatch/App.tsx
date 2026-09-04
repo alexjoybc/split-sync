@@ -72,7 +72,7 @@ import {
   reorderSessions,
   SESSION_CAP,
 } from "./src/storage/sessionStorage";
-import type { PersistedStopwatchState, PersistedTimerState, SoloSessionMeta, SoloSessionPayload } from "./src/storage/sessionStorage";
+import type { PersistedStopwatchState, PersistedTimerState, RepeatConfig, SoloSessionMeta, SoloSessionPayload } from "./src/storage/sessionStorage";
 
 // Required so the in-app browser session used for Google sign-in resolves
 // its promise when redirected back into the app.
@@ -133,7 +133,6 @@ const C = {
   btnBlueBody:  '#5BC8F5', btnBlueHi:  '#8DDBFB', btnBlueLo:  '#2E86C1',
 };
 
-// ── Session color tags ────────────────────────────────────────────────────────
 /**
  * Palette-derived colors selectable as session accent tags.
  * All values come from packages/palette/src/index.ts (AGENTS.md rule).
@@ -3539,7 +3538,6 @@ function SoloScreen({
   onGoShared,
   activeSessionId,
   onOpenSessions,
-  sessionColor,
 }: {
   fontsLoaded: boolean;
   onBack: () => void;
@@ -3547,8 +3545,6 @@ function SoloScreen({
   onGoShared: () => void;
   activeSessionId: string | null;
   onOpenSessions: () => void;
-  /** Optional palette-derived accent color for this session (WCAG 1.4.1: supplement only). */
-  sessionColor?: string;
 }) {
   useKeepAwake();
   const { width, height } = useWindowDimensions();
@@ -4027,38 +4023,12 @@ function SoloScreen({
       {/* ── Top bar (#414) ── */}
       <View style={s.topBar}>
         <TopBarButton label="‹ BACK" onPress={onBack} variant="blue" accessibilityLabel="Back" />
-        {/* SESSIONS button with optional color-tag dot (WCAG 1.4.1: dot supplements name) */}
-        <Pressable
+        <TopBarButton
+          label="SESSIONS"
           onPress={onOpenSessions}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={
-            sessionColor
-              ? `Open sessions list (color: ${SESSION_COLORS.find((c) => c.value === sessionColor)?.label ?? "tagged"})`
-              : "Open sessions list"
-          }
-          style={({ pressed }) => [
-            s.topBarBtn,
-            { backgroundColor: C.bluePrimary, opacity: pressed ? 0.75 : 1 },
-          ]}
-        >
-          <Text style={[s.topBarBtnText, { color: C.white }]} numberOfLines={1}>
-            SESSIONS
-          </Text>
-          {sessionColor && (
-            <View
-              style={[
-                s.sessionColorDot,
-                {
-                  backgroundColor: sessionColor,
-                  borderColor: sessionColor === palette.yellow ? C.ink : C.white,
-                },
-              ]}
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-            />
-          )}
-        </Pressable>
+          variant="blue"
+          accessibilityLabel="Open sessions list"
+        />
         <TopBarButton
           label={isLocked ? "UNLOCK" : "LOCK"}
           onPress={handleLockTap}
@@ -4473,27 +4443,12 @@ function SoloScreen({
   );
 }
 
-// ── Countdown timer wall-clock readout helpers (#421) ─────────────────────────
-
-/** Format a wall-clock epoch ms as a short time string, e.g. "2:14 PM". */
-function fmtWallTime(ms: number): string {
-  return new Date(ms).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-/** Format elapsed ms as "Xs ago" or "Xm ago" for the time-since-alarm readout. */
-function fmtTimeSince(elapsedMs: number): string {
-  const secs = Math.floor(elapsedMs / 1000);
-  if (secs < 60) return `${secs}s ago`;
-  return `${Math.floor(secs / 60)}m ago`;
-}
-
 // ── Countdown timer persistence (#232 — survives app kill via wall-clock) ─────
 const TIMER_STORAGE_KEY = "solo_timer_v1";
 const TIMER_DURATION_STORAGE_KEY = "timer_duration_v1";
 const TIMER_DEFAULT_DURATION_MS = 5 * 60_000;
+/** Fallback AsyncStorage key for repeat config when no active session is set. */
+const TIMER_REPEAT_CONFIG_KEY = "timer_repeat_config_v1";
 
 type PersistedTimer = {
   /** Only running/paused are persisted; idle clears storage. */
@@ -4556,16 +4511,28 @@ function TimerScreen({
   const [remainingMs, setRemainingMs] = useState(TIMER_DEFAULT_DURATION_MS);
   const [finishedWhileAway, setFinishedWhileAway] = useState(false);
 
-  // Wall-clock readouts (#421): start time, ETA, time-since-alarm
-  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
-  const [alarmFiredAt, setAlarmFiredAt] = useState<number | null>(null);
-  const [timeSinceAlarmMs, setTimeSinceAlarmMs] = useState(0);
-  const alarmReadoutTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   // Duration inputs (H : MM : SS)
   const [hh, setHh] = useState("0");
   const [mm, setMm] = useState("05");
   const [ss, setSs] = useState("00");
+
+  // ── Repeat / Pomodoro mode (ADR 0025) ────────────────────────────────────────
+  const [repeatEnabled, setRepeatEnabled] = useState(false);
+  const [restDurationMs, setRestDurationMs] = useState(60_000);
+  const [restHh, setRestHh] = useState("0");
+  const [restMm, setRestMm] = useState("01");
+  const [restSs, setRestSs] = useState("00");
+  const [repeatCount, setRepeatCount] = useState<number | null>(null);
+  const [repeatCountStr, setRepeatCountStr] = useState("");
+  const [currentPhase, setCurrentPhase] = useState<"work" | "rest">("work");
+  const [completedCycles, setCompletedCycles] = useState(0);
+
+  // Repeat refs — mirror state for use inside callbacks
+  const repeatEnabledRef = useRef(false);
+  const repeatCountRef = useRef<number | null>(null);
+  const restDurationMsRef = useRef(60_000);
+  const currentPhaseRef = useRef<"work" | "rest">("work");
+  const completedCyclesRef = useRef(0);
 
   // Timing refs — wall-clock anchors, never accumulated intervals
   const endAtWallRef = useRef<number | null>(null);
@@ -4575,6 +4542,8 @@ function TimerScreen({
   const alarmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const alarmCountRef = useRef(0);
   const appState = useRef<AppStateStatus>(AppState.currentState);
+  // Ref to latest startTick — avoids circular useCallback dep with complete.
+  const startTickRef = useRef<() => void>(() => undefined);
 
   // Sound cues (#227) — completion alarm respects the shared soundEnabled flag
   const { cueSettings, cueRef, updateCueSettings } = useCueSettings();
@@ -4584,6 +4553,13 @@ function TimerScreen({
     setHh(String(Math.floor(totalSeconds / 3600)));
     setMm(p2(Math.floor((totalSeconds % 3600) / 60)));
     setSs(p2(totalSeconds % 60));
+  }, []);
+
+  const setRestDurationInputsFromMs = useCallback((ms: number) => {
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    setRestHh(String(Math.floor(totalSeconds / 3600)));
+    setRestMm(p2(Math.floor((totalSeconds % 3600) / 60)));
+    setRestSs(p2(totalSeconds % 60));
   }, []);
 
   const applyDuration = useCallback((ms: number) => {
@@ -4622,6 +4598,28 @@ function TimerScreen({
         .catch(() => undefined);
     } else {
       AsyncStorage.removeItem(TIMER_STORAGE_KEY).catch(() => undefined);
+    }
+  }, [activeSessionId]);
+
+  const persistRepeatConfig = useCallback((config: RepeatConfig | null) => {
+    if (activeSessionId) {
+      getSession(activeSessionId)
+        .then((current) => {
+          const next = { ...(current ?? {}) };
+          if (config === null) {
+            delete next.repeatConfig;
+          } else {
+            next.repeatConfig = config;
+          }
+          return updateSession(activeSessionId, next);
+        })
+        .catch(() => undefined);
+    } else {
+      if (config === null) {
+        AsyncStorage.removeItem(TIMER_REPEAT_CONFIG_KEY).catch(() => undefined);
+      } else {
+        AsyncStorage.setItem(TIMER_REPEAT_CONFIG_KEY, JSON.stringify(config)).catch(() => undefined);
+      }
     }
   }, [activeSessionId]);
 
@@ -4667,16 +4665,76 @@ function TimerScreen({
   const complete = useCallback(() => {
     stopTick();
     endAtWallRef.current = null;
-    // Auto-reset to the ORIGINAL duration — ready to restart with one tap.
-    remainingRef.current = durationRef.current;
-    setRemainingMs(durationRef.current);
-    // Record when the alarm fired for the time-since-alarm readout (#421).
-    setAlarmFiredAt(Date.now());
-    setTimerState("alerting");
-    // Auto-enter fullscreen so the alert is visible from a distance (#422).
-    setFsVisible(true);
-    clearPersistedTimer();
-    startAlarm();
+
+    if (!repeatEnabledRef.current) {
+      // ── Original single-shot behavior ──────────────────────────────────────
+      remainingRef.current = durationRef.current;
+      setRemainingMs(durationRef.current);
+      setTimerState("alerting");
+      // Auto-enter fullscreen so the alert is visible from a distance (#422).
+      setFsVisible(true);
+      clearPersistedTimer();
+      startAlarm();
+      return;
+    }
+
+    // ── Repeat mode: transition based on current phase ─────────────────────
+    if (currentPhaseRef.current === "work") {
+      const newCycles = completedCyclesRef.current + 1;
+      completedCyclesRef.current = newCycles;
+      setCompletedCycles(newCycles);
+
+      const isLastCycle =
+        repeatCountRef.current !== null && newCycles >= repeatCountRef.current;
+
+      if (isLastCycle) {
+        // Final cycle complete — reset and alert.
+        currentPhaseRef.current = "work";
+        setCurrentPhase("work");
+        completedCyclesRef.current = 0;
+        setCompletedCycles(0);
+        remainingRef.current = durationRef.current;
+        setRemainingMs(durationRef.current);
+        setTimerState("alerting");
+        // Auto-enter fullscreen so the alert is visible from a distance (#422).
+        setFsVisible(true);
+        clearPersistedTimer();
+        startAlarm();
+      } else {
+        // Work phase done — start rest phase automatically.
+        const restMs = restDurationMsRef.current;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (restMs <= 0) {
+          // No rest: start next work phase immediately.
+          currentPhaseRef.current = "work";
+          setCurrentPhase("work");
+          endAtWallRef.current = Date.now() + durationRef.current;
+          remainingRef.current = durationRef.current;
+          setRemainingMs(durationRef.current);
+          setTimerState("running");
+          startTickRef.current();
+        } else {
+          // Start rest phase.
+          currentPhaseRef.current = "rest";
+          setCurrentPhase("rest");
+          endAtWallRef.current = Date.now() + restMs;
+          remainingRef.current = restMs;
+          setRemainingMs(restMs);
+          setTimerState("running");
+          startTickRef.current();
+        }
+      }
+    } else {
+      // Rest phase done — start next work phase.
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      currentPhaseRef.current = "work";
+      setCurrentPhase("work");
+      endAtWallRef.current = Date.now() + durationRef.current;
+      remainingRef.current = durationRef.current;
+      setRemainingMs(durationRef.current);
+      setTimerState("running");
+      startTickRef.current();
+    }
   }, [stopTick, clearPersistedTimer, startAlarm]);
 
   const startTick = useCallback(() => {
@@ -4692,6 +4750,12 @@ function TimerScreen({
       }
     }, 50);
   }, [stopTick, complete]);
+
+  // Keep startTickRef current so complete() can call it without circular dep.
+  // useEffect without deps runs after every render.
+  useEffect(() => {
+    startTickRef.current = startTick;
+  });
 
   // Foregrounding: snap remaining from the wall-clock anchor; if the timer
   // crossed zero while backgrounded, complete now (the alarm fires on return).
@@ -4724,17 +4788,44 @@ function TimerScreen({
           return t ? JSON.stringify(t) : null;
         })
       : AsyncStorage.getItem(TIMER_STORAGE_KEY);
+    const loadRepeatConfigRaw = activeSessionId
+      ? getSession(activeSessionId).then((payload) => {
+          const r = payload?.repeatConfig;
+          return r ? JSON.stringify(r) : null;
+        })
+      : AsyncStorage.getItem(TIMER_REPEAT_CONFIG_KEY);
     Promise.all([
       AsyncStorage.getItem(TIMER_DURATION_STORAGE_KEY),
       loadTimerRaw,
+      loadRepeatConfigRaw,
     ])
-      .then(([rawDuration, rawTimer]) => {
+      .then(([rawDuration, rawTimer, rawRepeat]) => {
         if (cancelled) return;
 
         const parsedDuration = rawDuration !== null ? Number(rawDuration) : NaN;
         if (Number.isFinite(parsedDuration) && parsedDuration > 0) {
           applyDuration(parsedDuration);
           setDurationInputsFromMs(parsedDuration);
+        }
+
+        // Restore repeat config.
+        if (rawRepeat) {
+          try {
+            const rc = JSON.parse(rawRepeat) as RepeatConfig;
+            if (typeof rc.restDurationMs === "number") {
+              setRepeatEnabled(true);
+              repeatEnabledRef.current = true;
+              setRestDurationMs(rc.restDurationMs);
+              restDurationMsRef.current = rc.restDurationMs;
+              setRestDurationInputsFromMs(rc.restDurationMs);
+              const n = rc.repeatCount;
+              setRepeatCount(n);
+              repeatCountRef.current = n;
+              setRepeatCountStr(n === null ? "" : String(n));
+            }
+          } catch {
+            // Corrupt — ignore.
+          }
         }
 
         const saved = parsePersistedTimer(rawTimer);
@@ -4770,34 +4861,7 @@ function TimerScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Live time-since-alarm counter (#421) — updates every second while alerting.
-  useEffect(() => {
-    const isAlertingNow = timerState === "alerting";
-    if (!isAlertingNow || alarmFiredAt === null) {
-      if (alarmReadoutTickRef.current !== null) {
-        clearInterval(alarmReadoutTickRef.current);
-        alarmReadoutTickRef.current = null;
-      }
-      return;
-    }
-    const fired = alarmFiredAt;
-    setTimeSinceAlarmMs(Date.now() - fired);
-    alarmReadoutTickRef.current = setInterval(() => {
-      setTimeSinceAlarmMs(Date.now() - fired);
-    }, 1000);
-    return () => {
-      if (alarmReadoutTickRef.current !== null) {
-        clearInterval(alarmReadoutTickRef.current);
-        alarmReadoutTickRef.current = null;
-      }
-    };
-  }, [timerState, alarmFiredAt]);
-
-  useEffect(() => () => {
-    stopTick();
-    stopAlarm();
-    if (alarmReadoutTickRef.current !== null) clearInterval(alarmReadoutTickRef.current);
-  }, [stopTick, stopAlarm]);
+  useEffect(() => () => { stopTick(); stopAlarm(); }, [stopTick, stopAlarm]);
 
   // ── Controls ────────────────────────────────────────────────────────────────
   const commitDurationInputs = useCallback(
@@ -4816,17 +4880,31 @@ function TimerScreen({
     [applyDuration]
   );
 
+  const commitRestDurationInputs = useCallback(
+    (hStr: string, mStr: string, sStr: string) => {
+      const h = parseInt(hStr, 10) || 0;
+      const m = Math.min(parseInt(mStr, 10) || 0, 59);
+      const sec = Math.min(parseInt(sStr, 10) || 0, 59);
+      const ms = h * 3_600_000 + m * 60_000 + sec * 1_000;
+      setRestDurationMs(ms);
+      restDurationMsRef.current = ms;
+      persistRepeatConfig({ restDurationMs: ms, repeatCount: repeatCountRef.current });
+    },
+    [persistRepeatConfig]
+  );
+
   const handleStart = useCallback(() => {
     if (durationRef.current <= 0) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setFinishedWhileAway(false);
     stopAlarm();
-    // Record start time for fresh rounds; clear alarm data (#421).
-    if (timerState !== "paused") {
-      setStartedAtMs(Date.now());
+    // Reset cycle tracking when starting fresh from idle or alerting.
+    if (timerState === "idle" || timerState === "alerting") {
+      currentPhaseRef.current = "work";
+      setCurrentPhase("work");
+      completedCyclesRef.current = 0;
+      setCompletedCycles(0);
     }
-    setAlarmFiredAt(null);
-    setTimeSinceAlarmMs(0);
     const startFrom =
       timerState === "paused" ? remainingRef.current : durationRef.current;
     if (startFrom <= 0) return;
@@ -4858,10 +4936,11 @@ function TimerScreen({
     setTimerState("idle");
     setFinishedWhileAway(false);
     clearPersistedTimer();
-    // Clear wall-clock readouts (#421).
-    setStartedAtMs(null);
-    setAlarmFiredAt(null);
-    setTimeSinceAlarmMs(0);
+    // Reset repeat cycle tracking.
+    currentPhaseRef.current = "work";
+    setCurrentPhase("work");
+    completedCyclesRef.current = 0;
+    setCompletedCycles(0);
   }, [stopTick, stopAlarm, clearPersistedTimer]);
 
   /** Single tap silences the completion alert without restarting. */
@@ -4869,10 +4948,6 @@ function TimerScreen({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     stopAlarm();
     setTimerState("idle");
-    // Clear alarm readouts (#421).
-    setAlarmFiredAt(null);
-    setTimeSinceAlarmMs(0);
-    setStartedAtMs(null);
   }, [stopAlarm]);
 
   const isRunning = timerState === "running";
@@ -4935,10 +5010,16 @@ function TimerScreen({
       <View style={s.instrument}>
         <View style={s.instrHeader}>
           <Text style={s.instrLabel}>
-            {isAlerting ? "TIME'S UP" : "TIME REMAINING"}
+            {isAlerting
+              ? "TIME'S UP"
+              : repeatEnabled && (isRunning || isPaused)
+              ? `${currentPhase === "work" ? "WORK" : "REST"} — TIME REMAINING`
+              : "TIME REMAINING"}
           </Text>
           <Text style={s.instrLabel}>
-            SET {fmtParts(durationMs).main}
+            {repeatEnabled && (isRunning || isPaused)
+              ? `CYCLE ${currentPhase === "work" ? completedCycles + 1 : completedCycles}${repeatCount !== null ? ` OF ${repeatCount}` : ""}`
+              : `SET ${fmtParts(durationMs).main}`}
           </Text>
         </View>
         <View
@@ -4963,39 +5044,8 @@ function TimerScreen({
               ? "RESET TO SET VALUE — START TO GO AGAIN"
               : "COUNTDOWN TIMER"}
           </Text>
-          {/* ── Wall-clock readouts (#421) ── */}
-          {isAlerting && alarmFiredAt !== null && (
-            <Text
-              style={s.instrLabel}
-              accessibilityLabel={`Rang ${fmtTimeSince(timeSinceAlarmMs)}`}
-            >
-              {`RANG ${fmtTimeSince(timeSinceAlarmMs).toUpperCase()}`}
-            </Text>
-          )}
-          {!isAlerting && startedAtMs !== null && endAtWallRef.current !== null && (
-             <Text
-               style={s.instrLabel}
-               accessibilityLabel={`Finishes at ${fmtWallTime(endAtWallRef.current)}`}
-             >
-               {`FINISHES ${fmtWallTime(endAtWallRef.current)}`}
-             </Text>
-           )}
         </View>
       </View>
-
-      {/* ── Start time readout (#421): shown while running or paused ── */}
-      {(isRunning || isPaused) && startedAtMs !== null && (
-        <View style={s.startReadoutRow}>
-          <Text style={s.instrLabel}>
-            {`STARTED ${fmtWallTime(startedAtMs)}`}
-          </Text>
-          {isPaused && (
-            <Text style={s.instrLabel}>
-              {`ETA ${fmtWallTime(Date.now() + remainingMs)}`}
-            </Text>
-          )}
-        </View>
-      )}
 
       {/* ── Mode toggle (#232) — shown only in idle ── */}
       {isIdle && <ModeToggleStrip mode="timer" onSelect={onSelectMode} />}
@@ -5078,6 +5128,102 @@ function TimerScreen({
               ? "Vibration off — sound only."
               : null}
           </Text>
+
+          {/* ── Repeat / Pomodoro mode (ADR 0025) ──────────────────────── */}
+          <View style={[s.cueRow, { borderTopWidth: 1, borderTopColor: C.ink }]}>
+            <Text style={s.cueLabel}>REPEAT MODE</Text>
+            <CueSwitch
+              on={repeatEnabled}
+              label="Enable repeat / Pomodoro mode"
+              onToggle={() => {
+                const on = !repeatEnabled;
+                setRepeatEnabled(on);
+                repeatEnabledRef.current = on;
+                persistRepeatConfig(
+                  on
+                    ? { restDurationMs: restDurationMsRef.current, repeatCount: repeatCountRef.current }
+                    : null
+                );
+              }}
+            />
+          </View>
+          {repeatEnabled && (
+            <>
+              <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
+                <Text style={s.cueLabel}>REST (H : MM : SS)</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <TextInput
+                    value={restHh}
+                    onChangeText={(t) => {
+                      const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
+                      setRestHh(clean);
+                      commitRestDurationInputs(clean, restMm, restSs);
+                    }}
+                    keyboardType="number-pad"
+                    style={s.cueInput}
+                    accessibilityLabel="Rest hours"
+                    maxLength={2}
+                  />
+                  <Text style={s.cueColon}>:</Text>
+                  <TextInput
+                    value={restMm}
+                    onChangeText={(t) => {
+                      const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
+                      setRestMm(clean);
+                      commitRestDurationInputs(restHh, clean, restSs);
+                    }}
+                    keyboardType="number-pad"
+                    style={s.cueInput}
+                    accessibilityLabel="Rest minutes"
+                    maxLength={2}
+                  />
+                  <Text style={s.cueColon}>:</Text>
+                  <TextInput
+                    value={restSs}
+                    onChangeText={(t) => {
+                      const clean = t.replace(/[^0-9]/g, "").slice(0, 2);
+                      setRestSs(clean);
+                      commitRestDurationInputs(restHh, restMm, clean);
+                    }}
+                    keyboardType="number-pad"
+                    style={s.cueInput}
+                    accessibilityLabel="Rest seconds"
+                    maxLength={2}
+                  />
+                </View>
+              </View>
+              <View style={[s.cueRow, { borderBottomWidth: 0 }]}>
+                <Text style={s.cueLabel}>CYCLES (blank = ∞)</Text>
+                <TextInput
+                  value={repeatCountStr}
+                  onChangeText={(t) => {
+                    const raw = t.replace(/[^0-9]/g, "").slice(0, 2);
+                    setRepeatCountStr(raw);
+                    const n =
+                      raw === ""
+                        ? null
+                        : Math.max(1, Math.min(99, parseInt(raw, 10)));
+                    setRepeatCount(n);
+                    repeatCountRef.current = n;
+                    persistRepeatConfig({
+                      restDurationMs: restDurationMsRef.current,
+                      repeatCount: n,
+                    });
+                  }}
+                  keyboardType="number-pad"
+                  placeholder="∞"
+                  placeholderTextColor={C.muted}
+                  style={[s.cueInput, { width: 50 }]}
+                  accessibilityLabel="Repeat cycles (blank for infinite)"
+                  maxLength={2}
+                />
+              </View>
+              <Text style={s.cueHint}>
+                Work uses the duration above. Rest follows automatically. Stop is
+                always available.
+              </Text>
+            </>
+          )}
         </View>
       )}
 
@@ -5170,36 +5316,28 @@ function NameInputModal({
   visible,
   title,
   initialValue,
-  initialColor,
   placeholder,
-  showColorPicker = false,
   onConfirm,
   onCancel,
 }: {
   visible: boolean;
   title: string;
   initialValue: string;
-  initialColor?: string;
   placeholder: string;
-  showColorPicker?: boolean;
-  onConfirm: (name: string, color?: string) => void;
+  onConfirm: (name: string) => void;
   onCancel: () => void;
 }) {
   const [value, setValue] = useState(initialValue);
-  const [selectedColor, setSelectedColor] = useState<string | undefined>(initialColor);
 
   // Reset the input value whenever the modal opens with a new initialValue
   useEffect(() => {
-    if (visible) {
-      setValue(initialValue);
-      setSelectedColor(initialColor);
-    }
-  }, [visible, initialValue, initialColor]);
+    if (visible) setValue(initialValue);
+  }, [visible, initialValue]);
 
   const handleConfirm = useCallback(() => {
     const trimmed = value.trim();
-    if (trimmed) onConfirm(trimmed, showColorPicker ? selectedColor : undefined);
-  }, [value, onConfirm, showColorPicker, selectedColor]);
+    if (trimmed) onConfirm(trimmed);
+  }, [value, onConfirm]);
 
   return (
     <Modal
@@ -5223,52 +5361,6 @@ function NameInputModal({
             returnKeyType="done"
             maxLength={50}
           />
-          {showColorPicker && (
-            <View style={nm.colorPickerSection}>
-              <Text style={nm.colorPickerLabel}>COLOR TAG</Text>
-              <View style={nm.colorPickerRow}>
-                {/* "None" swatch */}
-                <Pressable
-                  onPress={() => setSelectedColor(undefined)}
-                  accessibilityRole="radio"
-                  accessibilityLabel="No color"
-                  accessibilityState={{ checked: selectedColor === undefined }}
-                  style={[
-                    nm.colorSwatch,
-                    nm.colorSwatchNone,
-                    selectedColor === undefined && nm.colorSwatchSelected,
-                  ]}
-                >
-                  {selectedColor === undefined && (
-                    <Text style={nm.colorSwatchCheck}>✓</Text>
-                  )}
-                </Pressable>
-                {SESSION_COLORS.map(({ label, value: hex }) => {
-                  const isSelected = selectedColor === hex;
-                  // Yellow swatch needs dark checkmark for contrast
-                  const checkColor = hex === palette.yellow ? C.ink : C.white;
-                  return (
-                    <Pressable
-                      key={hex}
-                      onPress={() => setSelectedColor(hex)}
-                      accessibilityRole="radio"
-                      accessibilityLabel={label}
-                      accessibilityState={{ checked: isSelected }}
-                      style={[
-                        nm.colorSwatch,
-                        { backgroundColor: hex },
-                        isSelected && nm.colorSwatchSelected,
-                      ]}
-                    >
-                      {isSelected && (
-                        <Text style={[nm.colorSwatchCheck, { color: checkColor }]}>✓</Text>
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          )}
           <View style={nm.actions}>
             <Pressable
               onPress={onCancel}
@@ -5360,43 +5452,6 @@ const nm = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
-  colorPickerSection: {
-    marginBottom: 16,
-  },
-  colorPickerLabel: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.5,
-    color: C.muted,
-    marginBottom: 8,
-  },
-  colorPickerRow: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  colorSwatch: {
-    width: 32,
-    height: 32,
-    borderRadius: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: C.line,
-  },
-  colorSwatchNone: {
-    backgroundColor: C.white,
-    borderStyle: "dashed",
-  },
-  colorSwatchSelected: {
-    borderColor: C.ink,
-    borderWidth: 2.5,
-  },
-  colorSwatchCheck: {
-    color: C.white,
-    fontSize: 14,
-    fontWeight: "900",
-  },
 });
 
 // ── Session switcher modal (ADR 0024 / issue #366) ─────────────────────────────
@@ -5422,7 +5477,6 @@ function SessionSwitcherModal({
   const [nameModal, setNameModal] = useState<{
     mode: "create" | "rename";
     initialValue: string;
-    initialColor?: string;
     sessionId?: string;
   } | null>(null);
 
@@ -5554,11 +5608,11 @@ function SessionSwitcherModal({
   }, [sessions.length]);
 
   const handleCreateConfirm = useCallback(
-    async (name: string, color?: string) => {
+    async (name: string) => {
       setNameModal(null);
       const id = generateUUID();
       try {
-        await createSession(id, name, "stopwatch", color);
+        await createSession(id, name, "stopwatch");
         await loadAll();
       } catch (err) {
         Alert.alert(
@@ -5575,19 +5629,16 @@ function SessionSwitcherModal({
     setNameModal({
       mode: "rename",
       initialValue: meta.name,
-      initialColor: meta.color,
       sessionId: meta.id,
     });
   }, []);
 
   const handleRenameConfirm = useCallback(
-    async (name: string, color?: string) => {
+    async (name: string) => {
       const id = nameModal?.sessionId;
       setNameModal(null);
       if (!id) return;
-      // Persist color: if undefined, clear it by spreading an explicit undefined
-      // which JSON.stringify omits, effectively removing the field from storage.
-      await updateSessionMeta(id, { name, color });
+      await updateSessionMeta(id, { name });
       await loadAll();
     },
     [nameModal, loadAll]
@@ -5817,9 +5868,7 @@ function SessionSwitcherModal({
         visible={nameModal !== null}
         title={nameModal?.mode === "create" ? "New Session" : "Rename Session"}
         initialValue={nameModal?.initialValue ?? ""}
-        initialColor={nameModal?.initialColor}
         placeholder="Session name"
-        showColorPicker
         onConfirm={
           nameModal?.mode === "create" ? handleCreateConfirm : handleRenameConfirm
         }
@@ -6026,7 +6075,6 @@ function SoloContainer({
   const [mode, setMode] = useState<SoloMode>("stopwatch");
   const [modeLoaded, setModeLoaded] = useState(false);
   const [activeSessionId, setActiveSessionIdState] = useState<string | null>(null);
-  const [sessionColor, setSessionColor] = useState<string | undefined>(undefined);
   const [showSwitcher, setShowSwitcher] = useState(false);
 
   useEffect(() => {
@@ -6034,14 +6082,11 @@ function SoloContainer({
     resolveActiveSession(generateUUID)
       .then(async (id) => {
         setActiveSessionIdState(id);
-        // Load mode and color from the session meta in the index
+        // Load the mode from the session meta in the index
         const index = await loadIndex();
         const meta = index.find((m) => m.id === id);
         if (meta && (meta.mode === "timer" || meta.mode === "stopwatch")) {
           setMode(meta.mode);
-        }
-        if (meta?.color) {
-          setSessionColor(meta.color);
         }
         setModeLoaded(true);
       })
@@ -6060,18 +6105,10 @@ function SoloContainer({
    * Updating `activeSessionId` changes the `key` prop of the child screen,
    * which triggers a remount and re-reads the new session's persisted state.
    */
-  const handleSessionSwitch = useCallback(async (id: string, newMode: SoloMode) => {
+  const handleSessionSwitch = useCallback((id: string, newMode: SoloMode) => {
     setMode(newMode);
     setActiveSessionIdState(id);
     setShowSwitcher(false);
-    // Load the color for the newly switched-to session
-    try {
-      const index = await loadIndex();
-      const meta = index.find((m) => m.id === id);
-      setSessionColor(meta?.color);
-    } catch {
-      setSessionColor(undefined);
-    }
   }, []);
 
   const handleOpenSwitcher = useCallback(() => {
@@ -6100,7 +6137,6 @@ function SoloContainer({
           onGoShared={onGoShared}
           activeSessionId={activeSessionId}
           onOpenSessions={handleOpenSwitcher}
-          sessionColor={sessionColor}
         />
       )}
       <SessionSwitcherModal
@@ -6391,16 +6427,6 @@ const s = StyleSheet.create({
     paddingHorizontal: 4,
   },
   topBarBtnText: { fontSize: 11, fontWeight: "900", letterSpacing: 1 },
-  /** Small colored dot shown on the SESSIONS button when a session has a color tag. */
-  sessionColorDot: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    borderWidth: 1.5,
-  },
   topBarPendingDot: {
     position: "absolute",
     top: 4,
@@ -6426,14 +6452,6 @@ const s = StyleSheet.create({
   },
   instrLabel: { color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 2.5 },
   instrMain:  { paddingHorizontal: 20, paddingBottom: 10 },
-  // Wall-clock start/ETA readout row (#421)
-  startReadoutRow: {
-    paddingHorizontal: 20,
-    paddingTop: 4,
-    paddingBottom: 4,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
   instrFooter: {
     flexDirection: "row",
     alignItems: "center",

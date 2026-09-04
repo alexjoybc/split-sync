@@ -53,6 +53,17 @@ export interface TimerPersistedState {
   remainingMs: number | null;
 }
 
+/**
+ * Repeat/Pomodoro config for the countdown timer (ADR 0025).
+ * Stored per-session so it survives app restarts within the solo-session model.
+ */
+export interface RepeatConfig {
+  /** Rest/delay phase duration in ms. 0 means no rest (back-to-back work phases). */
+  restDurationMs: number;
+  /** Number of complete cycles (work+rest). null means infinite. */
+  repeatCount: number | null;
+}
+
 export interface SoloSessionRecord {
   id: string;
   name: string;
@@ -66,6 +77,11 @@ export interface SoloSessionRecord {
    * the timer input is pre-filled even after a reset (when timerState is null).
    */
   timerDurationMs: number;
+  /**
+   * Optional repeat/Pomodoro config. Undefined means repeat mode is off.
+   * Persisted per-session (ADR 0025).
+   */
+  repeatConfig?: RepeatConfig;
   /** ISO timestamp of the last time this session was written. */
   lastUsedAt: string;
   /** ISO timestamp of session creation. */
@@ -401,6 +417,26 @@ export function writeActiveTimerDurationMs(durationMs: number): void {
   const id = getActiveSessionId();
   if (!id) return;
   updateSession(id, { timerDurationMs: durationMs });
+}
+
+/**
+ * Read the repeat/Pomodoro config for the currently-active session.
+ * Returns null when repeat mode is off or no session is active.
+ */
+export function readActiveRepeatConfig(): RepeatConfig | null {
+  const id = getActiveSessionId();
+  if (!id) return null;
+  return getSession(id)?.repeatConfig ?? null;
+}
+
+/**
+ * Persist (or clear) the repeat/Pomodoro config for the currently-active session.
+ * Pass null to disable repeat mode.
+ */
+export function writeActiveRepeatConfig(config: RepeatConfig | null): void {
+  const id = getActiveSessionId();
+  if (!id) return;
+  updateSession(id, { repeatConfig: config ?? undefined });
 }
 
 /** Read the solo mode (stopwatch | timer) for the currently-active session. */
