@@ -24,6 +24,7 @@ import {
   AppState,
   FlatList,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   Share,
@@ -68,6 +69,7 @@ import {
   listSessions,
   createSession,
   deleteSession,
+  reorderSessions,
   SESSION_CAP,
 } from "./src/storage/sessionStorage";
 import type { PersistedStopwatchState, PersistedTimerState, SoloSessionMeta, SoloSessionPayload } from "./src/storage/sessionStorage";
@@ -5424,6 +5426,87 @@ function SessionSwitcherModal({
     sessionId?: string;
   } | null>(null);
 
+  // ── Drag-to-reorder state ─────────────────────────────────────────────────
+  /** Local session order — updated optimistically during drag before persistence. */
+  const [localSessions, setLocalSessions] = useState<SoloSessionMeta[]>([]);
+  /** ID of the session currently being dragged (null when not dragging). */
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  /**
+   * Accumulated dy for the current drag gesture (used to detect threshold
+   * crossings). Stored in a ref to avoid triggering re-renders on every frame.
+   */
+  const dragAccumRef = useRef(0);
+  /**
+   * Cache of PanResponder objects, keyed by session ID.
+   * PanResponders are created lazily and reused so that native gesture
+   * handlers are stable across renders.
+   */
+  const panRespondersRef = useRef<Map<string, ReturnType<typeof PanResponder.create>>>(new Map());
+
+  /** Item height in pts — matches ssm.row minHeight. */
+  const DRAG_ITEM_H = 66;
+
+  /** Sync localSessions from the authoritative sessions state. */
+  useEffect(() => {
+    setLocalSessions(sessions);
+  }, [sessions]);
+
+  /**
+   * Return (and lazily create) a stable PanResponder for the given session ID.
+   *
+   * Closure variables used inside the PanResponder handlers:
+   *   - `sessionId` — the stable ID string (never changes for a given session)
+   *   - `dragAccumRef` — mutable ref, always current
+   *   - `setDraggingId` / `setLocalSessions` — stable React state setters
+   *   - `Haptics` — stable module reference
+   *   - `reorderSessions` — stable module-level function
+   */
+  function getOrCreatePanResponder(sessionId: string): ReturnType<typeof PanResponder.create> {
+    if (!panRespondersRef.current.has(sessionId)) {
+      panRespondersRef.current.set(
+        sessionId,
+        PanResponder.create({
+          onStartShouldSetPanResponder: () => true,
+          onMoveShouldSetPanResponder: (_, { dy }) => Math.abs(dy) > 2,
+          onPanResponderGrant: () => {
+            dragAccumRef.current = 0;
+            setDraggingId(sessionId);
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          },
+          onPanResponderMove: (_, { dy }) => {
+            const delta = dy - dragAccumRef.current;
+            if (Math.abs(delta) > DRAG_ITEM_H / 2) {
+              const dir = delta > 0 ? 1 : -1;
+              setLocalSessions((prev) => {
+                const idx = prev.findIndex((s) => s.id === sessionId);
+                if (idx === -1) return prev;
+                const newIdx = Math.max(0, Math.min(prev.length - 1, idx + dir));
+                if (newIdx === idx) return prev;
+                const next = [...prev];
+                [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+                return next;
+              });
+              dragAccumRef.current = dy;
+              void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }
+          },
+          onPanResponderRelease: () => {
+            setDraggingId(null);
+            setLocalSessions((prev) => {
+              // Persist the new order fire-and-forget
+              reorderSessions(prev.map((s) => s.id)).catch(() => undefined);
+              return prev;
+            });
+          },
+          onPanResponderTerminate: () => {
+            setDraggingId(null);
+          },
+        })
+      );
+    }
+    return panRespondersRef.current.get(sessionId)!;
+  }
+
   // Load sessions + payloads (for running/paused indicator) when modal opens
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -5600,19 +5683,28 @@ function SessionSwitcherModal({
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={sessions}
-            keyExtractor={(m) => m.id}
+          <ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingVertical: 4 }}
-            renderItem={({ item }) => {
+            scrollEnabled={draggingId === null}
+          >
+            {localSessions.map((item) => {
               const isActive = item.id === activeSessionId;
+              const isDragging = item.id === draggingId;
               const runState = sessionRunState(item);
               const modeLabel = item.mode === "timer" ? "⏲ TIMER" : "⏱ SW";
               const sessionColor = item.color;
+              const dragHandlers = getOrCreatePanResponder(item.id).panHandlers;
 
               return (
-                <View style={[ssm.row, isActive && ssm.rowActive]}>
+                <View
+                  key={item.id}
+                  style={[
+                    ssm.row,
+                    isActive && ssm.rowActive,
+                    isDragging && ssm.rowDragging,
+                  ]}
+                >
                   {/* Color accent strip — left edge */}
                   {sessionColor && (
                     <View
@@ -5620,6 +5712,16 @@ function SessionSwitcherModal({
                       accessibilityLabel={`Color tag: ${SESSION_COLORS.find((c) => c.value === sessionColor)?.label ?? "Custom"}`}
                     />
                   )}
+                  {/* Drag handle */}
+                  <View
+                    {...dragHandlers}
+                    style={ssm.dragHandle}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Drag to reorder ${item.name}`}
+                  >
+                    <Text style={ssm.dragHandleText}>≡</Text>
+                  </View>
+
                   {/* Main tap area — switches session */}
                   <Pressable
                     onPress={() => handleSwitch(item)}
@@ -5686,8 +5788,8 @@ function SessionSwitcherModal({
                   </View>
                 </View>
               );
-            }}
-          />
+            })}
+          </ScrollView>
         )}
 
         {/* Create button */}
@@ -5783,6 +5885,23 @@ const ssm = StyleSheet.create({
   colorStrip: {
     width: 5,
     alignSelf: "stretch",
+  },
+  rowDragging: {
+    opacity: 0.75,
+    backgroundColor: C.panelBg,
+  },
+  dragHandle: {
+    width: ICON_BTN_SIZE,
+    height: 66,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingLeft: 8,
+  },
+  dragHandleText: {
+    fontSize: 20,
+    color: C.muted,
+    fontWeight: "900",
+    letterSpacing: 1,
   },
   rowMain: {
     flex: 1,

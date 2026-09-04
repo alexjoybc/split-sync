@@ -248,6 +248,36 @@ export async function listSessions(): Promise<SoloSessionIndex> {
   return loadIndex();
 }
 
+/**
+ * Persist a new session order.
+ *
+ * `orderedIds` must be a permutation of (a subset of) the current index IDs.
+ * - IDs that appear in `orderedIds` are placed in that order.
+ * - IDs that exist in the index but are absent from `orderedIds` are appended
+ *   at the end (safety net — guards against partial lists).
+ * - IDs in `orderedIds` that do not exist in the current index are silently
+ *   dropped.
+ */
+export async function reorderSessions(orderedIds: string[]): Promise<void> {
+  const index = await loadIndex();
+  const indexById = new Map(index.map((m) => [m.id, m]));
+
+  // Reordered sessions (only those that exist in the current index)
+  const reordered: SoloSessionMeta[] = orderedIds
+    .filter((id) => indexById.has(id))
+    .map((id) => indexById.get(id)!);
+
+  // Append any sessions that were not referenced by orderedIds
+  const mentioned = new Set(orderedIds);
+  for (const meta of index) {
+    if (!mentioned.has(meta.id)) {
+      reordered.push(meta);
+    }
+  }
+
+  await saveIndex(reordered);
+}
+
 // ── Migration ─────────────────────────────────────────────────────────────────
 
 /**
