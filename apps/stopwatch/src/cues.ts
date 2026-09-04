@@ -28,12 +28,19 @@ export interface CueSettings {
   targetEnabled: boolean;
   /** Target time in milliseconds (mm:ss granularity in the UI). */
   targetMs: number;
+  /**
+   * Haptic vibration on countdown-timer completion. ON by default so existing
+   * users keep the current behaviour (vibrate-only was already the signal when
+   * sound was off).
+   */
+  vibrationEnabled: boolean;
 }
 
 export const DEFAULT_CUE_SETTINGS: CueSettings = {
   soundEnabled: false,
   targetEnabled: false,
   targetMs: 60_000,
+  vibrationEnabled: true,
 };
 
 const STORAGE_KEY = "cue_settings_v1";
@@ -50,6 +57,8 @@ export async function loadCueSettings(): Promise<CueSettings> {
         typeof parsed.targetMs === "number" && parsed.targetMs > 0
           ? parsed.targetMs
           : DEFAULT_CUE_SETTINGS.targetMs,
+      // Default true so existing users keep the current always-on behaviour.
+      vibrationEnabled: parsed.vibrationEnabled !== false,
     };
   } catch {
     return { ...DEFAULT_CUE_SETTINGS };

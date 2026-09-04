@@ -105,6 +105,35 @@ function setSoundEnabled(enabled: boolean) {
   }
 }
 
+/**
+ * Whether vibration is enabled for the countdown timer completion alert.
+ * Defaults to true so existing users keep the current behaviour.
+ */
+function isVibrationEnabled(): boolean {
+  try {
+    const raw = window.localStorage.getItem(CUE_STORAGE_KEY);
+    if (!raw) return true; // default on
+    const parsed = JSON.parse(raw) as { vibrationEnabled?: unknown };
+    // Explicit false opt-out; anything else (missing key, true) stays on.
+    return parsed.vibrationEnabled !== false;
+  } catch {
+    return true;
+  }
+}
+
+function setVibrationEnabled(enabled: boolean) {
+  try {
+    const raw = window.localStorage.getItem(CUE_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    window.localStorage.setItem(
+      CUE_STORAGE_KEY,
+      JSON.stringify({ ...parsed, vibrationEnabled: enabled })
+    );
+  } catch {
+    // Non-fatal.
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Countdown beep — square-wave oscillator (same design as page.tsx)
 // ---------------------------------------------------------------------------
@@ -199,6 +228,7 @@ export default function CountdownTimer() {
   /** Set when a persisted running timer finished while the page was closed. */
   const [finishedWhileAway, setFinishedWhileAway] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
+  const [vibrationOn, setVibrationOn] = useState(true);
   /**
    * Fullscreen countdown overlay.
    * null  = hidden
@@ -352,12 +382,13 @@ export default function CountdownTimer() {
   }, []);
 
   const startAlarm = useCallback(() => {
-    // Vibrate where supported, regardless of the sound setting (vibrate-only
-    // is the completion signal when sound cues are off).
-    try {
-      navigator.vibrate?.([200, 100, 200, 100, 400]);
-    } catch {
-      // Ignore.
+    // Vibrate only when the vibration setting is on (default).
+    if (isVibrationEnabled()) {
+      try {
+        navigator.vibrate?.([200, 100, 200, 100, 400]);
+      } catch {
+        // Ignore.
+      }
     }
     if (!isSoundEnabled()) return;
     playAlarmOnce();
@@ -495,6 +526,7 @@ export default function CountdownTimer() {
 
   useEffect(() => {
     setSoundOn(isSoundEnabled());
+    setVibrationOn(isVibrationEnabled());
 
     // Last-used duration — read from the active session (falls back to default).
     const restoredDuration = readActiveTimerDurationMs();
@@ -648,6 +680,11 @@ export default function CountdownTimer() {
   const handleSoundToggle = useCallback((enabled: boolean) => {
     setSoundOn(enabled);
     setSoundEnabled(enabled);
+  }, []);
+
+  const handleVibrationToggle = useCallback((enabled: boolean) => {
+    setVibrationOn(enabled);
+    setVibrationEnabled(enabled);
   }, []);
 
   const handlePrimary = useCallback(() => {
@@ -974,30 +1011,44 @@ export default function CountdownTimer() {
         {manualFsMode ? "Exit fullscreen" : "Fullscreen"}
       </button>
 
-      {/* ── Sound setting (#227 — same flag as the stopwatch cues) ───────── */}
+      {/* ── Alert settings (#227 / #420) ─────────────────────────────────── */}
       <section
         className="mt-8 w-full border-t-2 border-race-ink pt-4"
-        aria-label="Timer sound settings"
+        aria-label="Timer alert settings"
       >
-        <p className="race-kicker mb-3">Sound</p>
+        <p className="race-kicker mb-3">Alert</p>
+
         <label className="flex items-center justify-between gap-3 text-sm font-semibold">
-          <span>
-            Sound on completion
-            <span className="ml-1 text-xs font-semibold text-race-muted">
-              (off = vibrate/visual only)
-            </span>
-          </span>
+          <span>Sound on completion</span>
           <input
             type="checkbox"
-            className="h-4 w-4 accent-[var(--race-red)]"
+            className="h-4 w-4 accent-[var(--race-blue-primary)]"
             checked={soundOn}
             onChange={(e) => handleSoundToggle(e.target.checked)}
             data-testid="timer-sound-toggle"
           />
         </label>
-        <p className="mt-2 text-xs text-race-muted">
+
+        <label className="mt-3 flex items-center justify-between gap-3 text-sm font-semibold">
+          <span>Vibration on completion</span>
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[var(--race-blue-primary)]"
+            checked={vibrationOn}
+            onChange={(e) => handleVibrationToggle(e.target.checked)}
+            data-testid="timer-vibration-toggle"
+          />
+        </label>
+
+        <p className="mt-3 text-xs text-race-muted">
           The alert repeats a few times, then goes quiet on its own — one tap
           on Dismiss (or Start) silences it immediately.
+          {!soundOn && !vibrationOn && (
+            <strong className="ml-1 text-race-ink">
+              Both sound and vibration are off — watch for the visual{" "}
+              &ldquo;Time&apos;s up&rdquo; alert on screen.
+            </strong>
+          )}
         </p>
       </section>
     </div>
