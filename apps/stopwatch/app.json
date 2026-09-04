@@ -55,7 +55,8 @@
       "expo-web-browser",
       "./plugins/withRemoveSystemAlertWindow",
       "./plugins/withGradleJvmMemory",
-      "./plugins/withProguardCleanup"
+      "./plugins/withProguardCleanup",
+      "./plugins/withReleaseR8Optimization"
     ]
   }
 }

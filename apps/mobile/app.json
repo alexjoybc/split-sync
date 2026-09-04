@@ -31,7 +31,8 @@
     "plugins": [
       "expo-web-browser",
       "expo-font",
-      "./plugins/withProguardCleanup"
+      "./plugins/withProguardCleanup",
+      "./plugins/withReleaseR8Optimization"
     ]
   }
 }
