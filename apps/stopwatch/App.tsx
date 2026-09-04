@@ -4755,16 +4755,19 @@ function TimerScreen({
             </Text>
           )}
           {!isAlerting && startedAtMs !== null && endAtWallRef.current !== null && (
-            <Text style={s.instrLabel}>
-              {`→ ${fmtWallTime(endAtWallRef.current)}`}
-            </Text>
-          )}
+             <Text
+               style={s.instrLabel}
+               accessibilityLabel={`Finishes at ${fmtWallTime(endAtWallRef.current)}`}
+             >
+               {`FINISHES ${fmtWallTime(endAtWallRef.current)}`}
+             </Text>
+           )}
         </View>
       </View>
 
       {/* ── Start time readout (#421): shown while running or paused ── */}
       {(isRunning || isPaused) && startedAtMs !== null && (
-        <View style={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 4, flexDirection: "row", justifyContent: "space-between" }}>
+        <View style={s.startReadoutRow}>
           <Text style={s.instrLabel}>
             {`STARTED ${fmtWallTime(startedAtMs)}`}
           </Text>
@@ -5939,6 +5942,14 @@ const s = StyleSheet.create({
   },
   instrLabel: { color: C.casingMuted, fontSize: 9, fontWeight: "900", letterSpacing: 2.5 },
   instrMain:  { paddingHorizontal: 20, paddingBottom: 10 },
+  // Wall-clock start/ETA readout row (#421)
+  startReadoutRow: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 4,
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
   instrFooter: {
     flexDirection: "row",
     alignItems: "center",

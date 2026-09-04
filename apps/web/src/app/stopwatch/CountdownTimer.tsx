@@ -212,7 +212,7 @@ export default function CountdownTimer() {
   const [etaMs, setEtaMs] = useState<number | null>(null);
   const [alarmFiredAtMs, setAlarmFiredAtMs] = useState<number | null>(null);
   const [timeSinceAlarmMs, setTimeSinceAlarmMs] = useState(0);
-  const alarmTickRef2 = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeSinceAlarmTickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Timing refs — wall-clock anchors, never accumulated intervals
   const endAtWallRef = useRef<number | null>(null); // Date.now() at zero, while running
@@ -443,21 +443,21 @@ export default function CountdownTimer() {
   useEffect(() => {
     const alerting = state === "alerting";
     if (!alerting || alarmFiredAtMs === null) {
-      if (alarmTickRef2.current !== null) {
-        clearInterval(alarmTickRef2.current);
-        alarmTickRef2.current = null;
+      if (timeSinceAlarmTickRef.current !== null) {
+        clearInterval(timeSinceAlarmTickRef.current);
+        timeSinceAlarmTickRef.current = null;
       }
       return;
     }
     const fired = alarmFiredAtMs;
     setTimeSinceAlarmMs(Date.now() - fired);
-    alarmTickRef2.current = setInterval(() => {
+    timeSinceAlarmTickRef.current = setInterval(() => {
       setTimeSinceAlarmMs(Date.now() - fired);
     }, 1000);
     return () => {
-      if (alarmTickRef2.current !== null) {
-        clearInterval(alarmTickRef2.current);
-        alarmTickRef2.current = null;
+      if (timeSinceAlarmTickRef.current !== null) {
+        clearInterval(timeSinceAlarmTickRef.current);
+        timeSinceAlarmTickRef.current = null;
       }
     };
   }, [state, alarmFiredAtMs]);
@@ -515,7 +515,7 @@ export default function CountdownTimer() {
       stopTick();
       stopAlarm();
       if (goTimerRef.current !== null) clearTimeout(goTimerRef.current);
-      if (alarmTickRef2.current !== null) clearInterval(alarmTickRef2.current);
+      if (timeSinceAlarmTickRef.current !== null) clearInterval(timeSinceAlarmTickRef.current);
     },
     [stopTick, stopAlarm]
   );
