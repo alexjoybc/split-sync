@@ -243,6 +243,33 @@ export function updateSession(
 }
 
 /**
+ * Persist a new session order.
+ *
+ * `orderedIds` must be a permutation of (a subset of) the current index IDs.
+ * - IDs that appear in `orderedIds` are placed in that order.
+ * - IDs that exist in the index but are absent from `orderedIds` are appended
+ *   at the end (safety net).
+ * - IDs in `orderedIds` that are not in the current index are silently dropped.
+ */
+export function reorderSessions(orderedIds: string[]): void {
+  const index = readIndex();
+  const existingSet = new Set(index.ids);
+
+  // Reordered IDs (only those that exist)
+  const newIds = orderedIds.filter((id) => existingSet.has(id));
+
+  // Append any IDs from the old index that were not mentioned
+  const mentioned = new Set(orderedIds);
+  for (const id of index.ids) {
+    if (!mentioned.has(id)) {
+      newIds.push(id);
+    }
+  }
+
+  writeIndex({ ids: newIds });
+}
+
+/**
  * Delete a session and remove it from the index.
  * If the deleted session was the active one, the active pointer is cleared.
  */

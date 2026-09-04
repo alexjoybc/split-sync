@@ -10,12 +10,13 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { TrashIcon, PencilIcon } from "@heroicons/react/20/solid";
+import { TrashIcon, PencilIcon, Bars3Icon } from "@heroicons/react/20/solid";
 import {
   listSessions,
   createSession,
   updateSession,
   deleteSession,
+  reorderSessions,
   getActiveSessionId,
   SESSION_CAP,
   type SoloSessionRecord,
@@ -84,12 +85,16 @@ export function SoloSessionSwitcher({
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
 
+  // Drag-to-reorder state
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const dragSourceIdRef = useRef<string | null>(null);
+
   const renameInputRef = useRef<HTMLInputElement>(null);
   const newNameInputRef = useRef<HTMLInputElement>(null);
 
-  // Load session list (newest first for display).
+  // Load session list in index order (user-defined after first reorder).
   const refresh = useCallback(() => {
-    setSessions([...listSessions()].reverse());
+    setSessions(listSessions());
   }, []);
 
   useEffect(() => {
@@ -175,6 +180,55 @@ export function SoloSessionSwitcher({
     [activeSessionId, onSwitch, onClose, refresh]
   );
 
+  // ── Drag-to-reorder ─────────────────────────────────────────────────────────
+
+  const handleDragStart = useCallback(
+    (e: React.DragEvent<HTMLElement>, sessionId: string) => {
+      dragSourceIdRef.current = sessionId;
+      e.dataTransfer.effectAllowed = "move";
+      // Minimal ghost text so the browser default ghost is readable
+      e.dataTransfer.setData("text/plain", sessionId);
+    },
+    []
+  );
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent<HTMLElement>, sessionId: string) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (sessionId !== dragOverId) setDragOverId(sessionId);
+    },
+    [dragOverId]
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent<HTMLElement>, targetId: string) => {
+      e.preventDefault();
+      setDragOverId(null);
+      const sourceId = dragSourceIdRef.current;
+      dragSourceIdRef.current = null;
+      if (!sourceId || sourceId === targetId) return;
+
+      setSessions((prev) => {
+        const srcIdx = prev.findIndex((s) => s.id === sourceId);
+        const tgtIdx = prev.findIndex((s) => s.id === targetId);
+        if (srcIdx === -1 || tgtIdx === -1) return prev;
+        const next = [...prev];
+        const [moved] = next.splice(srcIdx, 1);
+        next.splice(tgtIdx, 0, moved);
+        // Persist the new order
+        reorderSessions(next.map((s) => s.id));
+        return next;
+      });
+    },
+    []
+  );
+
+  const handleDragEnd = useCallback(() => {
+    dragSourceIdRef.current = null;
+    setDragOverId(null);
+  }, []);
+
   // ── Switch ──────────────────────────────────────────────────────────────────
 
   const handleSwitchAndClose = useCallback(
@@ -248,16 +302,33 @@ export function SoloSessionSwitcher({
             const isActive = session.id === activeSessionId;
             const { label: statusLabel, running: isRunning } =
               sessionStatus(session);
+            const isDragTarget = dragOverId === session.id;
 
             return (
               <div
                 key={session.id}
                 role="listitem"
-                className={`px-4 py-3 transition-colors ${
+                draggable
+                onDragStart={(e) => handleDragStart(e, session.id)}
+                onDragOver={(e) => handleDragOver(e, session.id)}
+                onDrop={(e) => handleDrop(e, session.id)}
+                onDragEnd={handleDragEnd}
+                className={`flex items-center gap-1 px-2 py-3 transition-colors ${
                   isActive ? "bg-race-panel-alt" : "hover:bg-race-panel"
-                }`}
+                } ${isDragTarget ? "outline outline-2 outline-[var(--race-blue-primary)]" : ""}`}
                 data-testid={`solo-session-row-${session.id}`}
               >
+                {/* ── Drag handle ── */}
+                <span
+                  className="shrink-0 cursor-grab touch-none text-race-muted active:cursor-grabbing"
+                  aria-label="Drag to reorder"
+                  aria-hidden="true"
+                  title="Drag to reorder"
+                >
+                  <Bars3Icon className="size-4" />
+                </span>
+
+                <div className="min-w-0 flex-1">
                 {renamingId === session.id ? (
                   /* ── Rename mode ── */
                   <div className="flex items-center gap-2">
@@ -419,6 +490,7 @@ export function SoloSessionSwitcher({
                     )}
                   </div>
                 )}
+                </div>
               </div>
             );
           })}

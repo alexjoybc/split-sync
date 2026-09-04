@@ -533,6 +533,12 @@ export default function HelpPage() {
                   <strong>Enter</strong> (or click ✓).
                 </li>
                 <li>
+                  <strong>Reorder:</strong> drag the{" "}
+                  <strong>≡ handle</strong> on the left of any row up or down
+                  to rearrange the list. The order is saved immediately and
+                  persists across browser restarts.
+                </li>
+                <li>
                   <strong>Delete:</strong> click the trash icon, then confirm
                   with <strong>Yes</strong>. A confirmation is always required.
                   Deleting the active session automatically switches to the
