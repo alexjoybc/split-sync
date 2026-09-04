@@ -56,12 +56,18 @@ import {
 //
 // `apps/web` has no global JSX declarations for `@material/web` custom
 // elements yet (this is the first file in the repo to render them, rather
-// than only side-effect-import their definitions). Scoped to this file —
-// broaden into a shared `.d.ts` if a second stopwatch screen adopts these
-// same elements.
+// than only side-effect-import their definitions). This became the shared
+// declaration for these tags once `stopwatch/page.tsx` (#442) started
+// rendering the same elements — TypeScript requires every file augmenting
+// `JSX.IntrinsicElements` for the same tag to use an identical type, so a
+// second file can't redeclare its own narrower shape for a tag already
+// declared here. The `[prop: string]: unknown` index signature below is
+// intentionally permissive so other stopwatch screens' additional
+// attributes on these same tags (e.g. `placeholder`, `readOnly`, native
+// `type="button"`) still type check without needing to touch this file.
 
 type MdElementProps = React.DetailedHTMLProps<
-  React.HTMLAttributes<HTMLElement>,
+  React.HTMLAttributes<HTMLElement> & { [prop: string]: unknown },
   HTMLElement
 >;
 

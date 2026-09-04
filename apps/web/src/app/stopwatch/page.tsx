@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
@@ -24,6 +25,62 @@ import {
   type Lap as SessionLap,
 } from "./soloSessionStorage";
 import { SoloSessionSwitcher } from "./SoloSessionSwitcher";
+// `./md3-components` registers `@material/web`'s custom elements as a side
+// effect; it must be imported from a Client Component to actually run in
+// the browser (see the comment at the top of md3-components.ts). This
+// mirrors the same import already used by SoloSessionSwitcher.tsx (#444)
+// and CountdownTimer.tsx (#443) — `./md3-registry-safety`, imported first
+// inside md3-components.ts, makes `customElements.define()` idempotent so
+// it's safe for more than one client component to import this module.
+import "./md3-components";
+
+// ---------------------------------------------------------------------------
+// @material/web JSX typings (#442)
+// ---------------------------------------------------------------------------
+//
+// `@material/web` ships no React/JSX type bindings — its custom elements
+// (registered as side effects by ./md3-components.ts) are plain Web
+// Components. React 19 renders unknown-tag-with-a-hyphen elements as real
+// custom elements (properties set directly on the DOM node rather than
+// stringified attributes), so `<md-outlined-text-field value={x} .../>`
+// works correctly, but TypeScript has no built-in knowledge of these tags.
+//
+// `SoloSessionSwitcher.tsx` (#444) already declares the shared
+// `declare module "react" { namespace JSX { interface IntrinsicElements` augmentation
+// for most of the tags this page also renders (`md-dialog`,
+// `md-outlined-text-field`, `md-filled-button`, `md-outlined-button`,
+// `md-text-button`, `md-icon-button`, `md-list`, `md-list-item`) — TS
+// interface merging requires every file augmenting the same key to use an
+// identical type, so this file only adds the two tags SoloSessionSwitcher.tsx
+// doesn't already cover (`md-filled-tonal-button`, `md-divider`) rather than
+// redeclaring the rest. `SoloSessionSwitcher.tsx`'s prop types carry a
+// permissive `[prop: string]: unknown` index signature precisely so this
+// page's additional attributes (e.g. `placeholder`, `readOnly`, `type`) type
+// check against the shared declaration.
+type Md3ElementProps<E extends HTMLElement = HTMLElement> = React.DetailedHTMLProps<
+  React.HTMLAttributes<E> & { [attr: string]: unknown },
+  E
+>;
+
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "md-filled-tonal-button": Md3ElementProps;
+      "md-divider": Md3ElementProps;
+    }
+  }
+}
+
+/**
+ * Reads the live value off a `@material/web` text field's native "input"
+ * event. The event bubbles out of the field's shadow DOM already retargeted
+ * at the host custom element (native `input` events are `composed: true`),
+ * so `e.target` here is the `<md-outlined-text-field>` itself — which
+ * mirrors the typed value on its own `.value` property.
+ */
+function md3FieldValue(e: React.FormEvent<HTMLElement>): string {
+  return (e.target as HTMLElement & { value: string }).value;
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -122,10 +179,24 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
   const [shareCode, setShareCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const router = useRouter();
+  const dialogRef = useRef<HTMLElement | null>(null);
 
   const shareUrl = shareCode
     ? `https://splitsync.org/stopwatch/s/${shareCode}`
     : null;
+
+  // md-dialog dismisses on scrim-click/Escape by firing a non-bubbling
+  // native "cancel" event — React's delegated event system only observes
+  // bubbling events, so this can't be a JSX `onCancel` prop. Bind it
+  // imperatively via ref instead, mirroring the `onClose` behavior of the
+  // explicit close button below (#442).
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const handleCancel = () => onClose();
+    dialog.addEventListener("cancel", handleCancel);
+    return () => dialog.removeEventListener("cancel", handleCancel);
+  }, [onClose]);
 
   const handleCreate = async () => {
     if (!name.trim() || !displayName.trim()) return;
@@ -174,116 +245,84 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-race-ink/60 px-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-session-title"
-    >
-      <div className="w-full max-w-sm border-2 border-race-ink bg-race-paper p-6">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="race-kicker">Shared stopwatch</p>
-            <h2 id="create-session-title" className="race-title text-xl">
-              Time together
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-race-muted hover:text-race-ink"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
-
+    <md-dialog ref={dialogRef} open className="sw-md3-dialog">
+      <div slot="headline">Time together</div>
+      <form
+        slot="content"
+        method="dialog"
+        className="flex flex-col gap-4"
+        onSubmit={(e) => e.preventDefault()}
+      >
+        <p className="race-kicker">Shared stopwatch</p>
         {!shareCode ? (
-          <div className="mt-5 space-y-4">
-            <div>
-              <label
-                htmlFor="stopwatch-create-session-name"
-                className="block text-xs font-black uppercase tracking-wide"
-              >
-                Session name
-              </label>
-              <input
-                id="stopwatch-create-session-name"
-                type="text"
-                className="race-input mt-1"
-                placeholder="e.g. Saturday hill climb"
-                maxLength={80}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="stopwatch-create-display-name"
-                className="block text-xs font-black uppercase tracking-wide"
-              >
-                Your display name
-              </label>
-              <input
-                id="stopwatch-create-display-name"
-                type="text"
-                className="race-input mt-1"
-                placeholder="e.g. Alex"
-                maxLength={30}
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-              />
-            </div>
+          <>
+            <md-outlined-text-field
+              label="Session name"
+              placeholder="e.g. Saturday hill climb"
+              maxLength={80}
+              value={name}
+              onInput={(e: React.FormEvent<HTMLElement>) => setName(md3FieldValue(e))}
+              autofocus
+            />
+            <md-outlined-text-field
+              label="Your display name"
+              placeholder="e.g. Alex"
+              maxLength={30}
+              value={displayName}
+              onInput={(e: React.FormEvent<HTMLElement>) =>
+                setDisplayName(md3FieldValue(e))
+              }
+            />
             {error && (
-              <p className="text-sm font-bold text-race-red">{error}</p>
+              <p className="text-sm font-bold text-[color:var(--md-sys-color-error)]">
+                {error}
+              </p>
             )}
-            <button
-              type="button"
-              className="race-action w-full disabled:opacity-50"
-              disabled={!name.trim() || !displayName.trim() || loading}
-              onClick={handleCreate}
-            >
-              {loading ? "Creating…" : "Create session"}
-            </button>
-          </div>
+          </>
         ) : (
-          <div className="mt-5 space-y-4">
-            <p className="text-sm font-bold text-race-ink">
+          <>
+            <p className="text-sm font-bold text-[color:var(--md-sys-color-on-surface)]">
               Session created! Share this link:
             </p>
             <div className="flex items-center gap-2">
-              <input
-                type="text"
+              <md-outlined-text-field
+                className="flex-1"
+                label="Share link"
                 readOnly
                 value={shareUrl ?? ""}
-                className="race-input flex-1 text-xs"
               />
-              <button
-                type="button"
-                className="race-action shrink-0 text-xs"
-                onClick={handleCopy}
-              >
+              <md-outlined-button type="button" onClick={handleCopy}>
                 {copied ? "Copied!" : "Copy"}
-              </button>
+              </md-outlined-button>
             </div>
-            <p className="text-xs text-race-muted">
+            <p className="text-xs text-[color:var(--md-sys-color-on-surface-variant)]">
               Code:{" "}
-              <span className="font-black tracking-widest text-race-ink">
+              <span className="font-black tracking-widest text-[color:var(--md-sys-color-on-surface)]">
                 {shareCode}
               </span>
             </p>
-            <button
-              type="button"
-              className="race-action w-full"
-              onClick={handleJoin}
-            >
-              Open session →
-            </button>
-          </div>
+          </>
+        )}
+      </form>
+      <div slot="actions" className="flex w-full items-center justify-between">
+        <md-icon-button type="button" aria-label="Close" onClick={onClose}>
+          ✕
+        </md-icon-button>
+        {!shareCode ? (
+          <md-filled-button
+            type="button"
+            disabled={!name.trim() || !displayName.trim() || loading}
+            onClick={handleCreate}
+          >
+            {loading ? "Creating…" : "Create session"}
+          </md-filled-button>
+        ) : (
+          <md-filled-button type="button" onClick={handleJoin}>
+            Open session →
+          </md-filled-button>
         )}
       </div>
-    </div>
+    </md-dialog>
   );
 }
 
@@ -345,106 +384,102 @@ function SessionHistory({
     setTimeout(() => setCopiedId((prev) => (prev === id ? null : prev)), 2000);
   };
 
+  // MD3 text-button-styled Next.js Links (#442) — kept as real `<Link>`
+  // elements (not `<md-text-button>`) so navigation stays client-side/SPA
+  // routed; styled with the scoped MD3 tokens for visual parity with the
+  // real `@material/web` buttons alongside them.
+  const linkActionClass =
+    "inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-medium text-[color:var(--md-sys-color-primary)] transition-colors hover:bg-[color:var(--md-sys-color-primary-container)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--md-sys-color-primary)]";
+
   return (
     <section
       className="mt-10 w-full border-t-2 border-race-ink pt-4"
       aria-label="My timing sessions"
     >
       <p className="race-kicker mb-3">My Sessions</p>
-      <div className="divide-y divide-race-line">
+      <md-list>
         {sessions.map((s) => (
-          <div
+          <md-list-item
             key={s.id}
-            className="flex flex-col gap-1 py-3"
+            type="text"
             data-testid={`session-row-${s.id}`}
           >
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-bold text-race-ink">
-                  {s.name ?? "(unnamed)"}
-                </p>
-                <div className="mt-0.5 flex items-center gap-2">
-                  {statusLabel(s.status)}
-                  <span className="text-[10px] text-race-muted">
-                    {s.status === "running" ? "" : timeAgo(s.created_at)}
-                  </span>
-                  <span className="text-[10px] font-semibold text-race-muted">
-                    code: {s.code}
-                  </span>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {s.status === "stopped" ? (
-                  <Link
-                    href={`/stopwatch/s/${s.code}/results`}
-                    className="race-action text-xs px-2 py-1"
-                  >
-                    Results
-                  </Link>
-                ) : (
-                  <Link
-                    href={`/stopwatch/s/${s.code}`}
-                    className="race-action text-xs px-2 py-1"
-                  >
-                    {s.status === "closed" ? "View" : "Join"}
-                  </Link>
-                )}
-                {s.status === "stopped" ? (
-                  <button
-                    type="button"
-                    className="race-action race-action--outline text-xs px-2 py-1"
-                    onClick={() =>
-                      handleCopy(
-                        s.id,
-                        `https://splitsync.org/stopwatch/s/${s.code}/results`
-                      )
-                    }
-                    aria-label={`Copy share results link for session ${s.name ?? s.code}`}
-                  >
-                    {copiedId === s.id ? "Copied!" : "Share results"}
-                  </button>
-                ) : s.status !== "closed" ? (
-                  <button
-                    type="button"
-                    className="race-action race-action--outline text-xs px-2 py-1"
-                    onClick={() =>
-                      handleCopy(s.id, `https://splitsync.org/stopwatch/s/${s.code}`)
-                    }
-                    aria-label={`Copy share link for session ${s.name ?? s.code}`}
-                  >
-                    {copiedId === s.id ? "Copied!" : "Share"}
-                  </button>
-                ) : null}
-                {/* Close button — only for waiting/running sessions */}
-                {(s.status === "waiting" || s.status === "running") && (
-                  <button
-                    type="button"
-                    className="race-action race-action--outline text-xs px-2 py-1"
-                    disabled={actionPendingId === s.id}
-                    onClick={() => onClose(s)}
-                    aria-label={`Close session ${s.name ?? s.code}`}
-                    data-testid={`close-btn-${s.id}`}
-                  >
-                    Close
-                  </button>
-                )}
-                {/* Delete button — via parent onDelete handler */}
-                <button
-                  type="button"
-                  className="inline-flex items-center justify-center rounded border border-race-line p-1 text-race-muted transition-colors hover:border-race-red hover:text-race-red focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0B6FB3]"
-                  disabled={actionPendingId === s.id}
-                  onClick={() => onDelete(s)}
-                  aria-label={`Delete session ${s.name ?? s.code}`}
-                  data-testid={`delete-btn-${s.id}`}
-                >
-                  <TrashIcon className="size-4" aria-hidden="true" />
-                  <span className="sr-only">Delete session</span>
-                </button>
-              </div>
+            <div slot="headline" className="truncate font-bold">
+              {s.name ?? "(unnamed)"}
             </div>
-          </div>
+            <div slot="supporting-text" className="flex items-center gap-2">
+              {statusLabel(s.status)}
+              <span className="text-[10px] text-race-muted">
+                {s.status === "running" ? "" : timeAgo(s.created_at)}
+              </span>
+              <span className="text-[10px] font-semibold text-race-muted">
+                code: {s.code}
+              </span>
+            </div>
+            <div slot="end" className="flex shrink-0 flex-wrap items-center justify-end gap-1">
+              {s.status === "stopped" ? (
+                <Link
+                  href={`/stopwatch/s/${s.code}/results`}
+                  className={linkActionClass}
+                >
+                  Results
+                </Link>
+              ) : (
+                <Link href={`/stopwatch/s/${s.code}`} className={linkActionClass}>
+                  {s.status === "closed" ? "View" : "Join"}
+                </Link>
+              )}
+              {s.status === "stopped" ? (
+                <md-outlined-button
+                  type="button"
+                  onClick={() =>
+                    handleCopy(
+                      s.id,
+                      `https://splitsync.org/stopwatch/s/${s.code}/results`
+                    )
+                  }
+                  aria-label={`Copy share results link for session ${s.name ?? s.code}`}
+                >
+                  {copiedId === s.id ? "Copied!" : "Share results"}
+                </md-outlined-button>
+              ) : s.status !== "closed" ? (
+                <md-outlined-button
+                  type="button"
+                  onClick={() =>
+                    handleCopy(s.id, `https://splitsync.org/stopwatch/s/${s.code}`)
+                  }
+                  aria-label={`Copy share link for session ${s.name ?? s.code}`}
+                >
+                  {copiedId === s.id ? "Copied!" : "Share"}
+                </md-outlined-button>
+              ) : null}
+              {/* Close button — only for waiting/running sessions */}
+              {(s.status === "waiting" || s.status === "running") && (
+                <md-outlined-button
+                  type="button"
+                  disabled={actionPendingId === s.id}
+                  onClick={() => onClose(s)}
+                  aria-label={`Close session ${s.name ?? s.code}`}
+                  data-testid={`close-btn-${s.id}`}
+                >
+                  Close
+                </md-outlined-button>
+              )}
+              {/* Delete button — via parent onDelete handler */}
+              <md-icon-button
+                type="button"
+                disabled={actionPendingId === s.id}
+                onClick={() => onDelete(s)}
+                aria-label={`Delete session ${s.name ?? s.code}`}
+                data-testid={`delete-btn-${s.id}`}
+              >
+                <TrashIcon className="size-4" aria-hidden="true" />
+                <span className="sr-only">Delete session</span>
+              </md-icon-button>
+            </div>
+          </md-list-item>
         ))}
-      </div>
+      </md-list>
     </section>
   );
 }
@@ -1558,25 +1593,29 @@ export default function StopwatchPage() {
                 <p className="race-kicker">Solo timer</p>
                 <h1 className="race-title">Stopwatch</h1>
               </div>
-              {/* Session switcher trigger (#367) */}
+              {/* Session switcher trigger (#367) — a two-line label + chevron
+                  doesn't fit `md-text-button`'s single-line layout, so this
+                  stays a native button restyled with the scoped MD3 tokens
+                  rather than forced into a component shape it isn't meant
+                  for (#442). */}
               <button
                 type="button"
                 onClick={() => setShowSessionPanel(true)}
-                className="flex flex-col items-end rounded pb-0.5 text-right focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--race-blue-primary)]"
+                className="flex flex-col items-end rounded pb-0.5 text-right focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--md-sys-color-primary)]"
                 aria-label="Manage sessions"
                 aria-haspopup="dialog"
                 data-testid="open-session-panel"
               >
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-race-muted">
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-[color:var(--md-sys-color-on-surface-variant)]">
                   Session
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="max-w-[120px] truncate text-sm font-bold text-race-ink">
+                  <span className="max-w-[120px] truncate text-sm font-bold text-[color:var(--md-sys-color-on-surface)]">
                     {currentSessionName}
                   </span>
                   {/* chevron down */}
                   <svg
-                    className="size-3 shrink-0 text-race-muted"
+                    className="size-3 shrink-0 text-[color:var(--md-sys-color-on-surface-variant)]"
                     viewBox="0 0 20 20"
                     fill="currentColor"
                     aria-hidden="true"
@@ -2077,15 +2116,8 @@ export default function StopwatchPage() {
 
           {/* ── "Time together" (#182) — hidden in large-display mode ──────── */}
           <div className={largeMode ? "hidden" : "mt-10 text-center"}>
-            <button
+            <md-filled-tonal-button
               type="button"
-              className="sw-together-btn"
-              style={{
-                cursor: "pointer",
-                opacity: 1,
-                color: "var(--race-ink)",
-                borderColor: "var(--race-ink)",
-              }}
               onClick={handleTimeTogether}
               aria-label={
                 user
@@ -2094,6 +2126,7 @@ export default function StopwatchPage() {
               }
             >
               <svg
+                slot="icon"
                 width="14"
                 height="14"
                 viewBox="0 0 14 14"
@@ -2111,7 +2144,7 @@ export default function StopwatchPage() {
                 />
               </svg>
               {togetherLabel}
-            </button>
+            </md-filled-tonal-button>
             <p className="mt-2 text-[11px] font-semibold text-race-muted">
               {user
                 ? "Create a shared session — anyone with the link can join."
