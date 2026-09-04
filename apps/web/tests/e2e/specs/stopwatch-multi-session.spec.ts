@@ -411,7 +411,7 @@ test.describe('/stopwatch multi-session: drag-to-reorder', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
 
     const sessionList = page.getByRole('list', { name: /solo sessions/i });
-    const rows = sessionList.getByRole('listitem');
+    const rows = sessionList.locator('md-list-item');
 
     // Initial order: Alpha (0), Beta (1), Gamma (2)
     await expect(rows.nth(0)).toContainText('Alpha');
@@ -452,7 +452,7 @@ test.describe('/stopwatch multi-session: drag-to-reorder', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
 
     const sessionList = page.getByRole('list', { name: /solo sessions/i });
-    const rows = sessionList.getByRole('listitem');
+    const rows = sessionList.locator('md-list-item');
 
     await expect(rows.nth(0)).toContainText('Gamma');
     await expect(rows.nth(1)).toContainText('Alpha');
@@ -466,7 +466,7 @@ test.describe('/stopwatch multi-session: drag-to-reorder', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
 
     const sessionList = page.getByRole('list', { name: /solo sessions/i });
-    const rows = sessionList.getByRole('listitem');
+    const rows = sessionList.locator('md-list-item');
 
     // Anchor the handle to Alpha's data-testid so the locator stays stable
     // even after ArrowDown changes the DOM order (rows.nth(0) would drift to
@@ -492,7 +492,7 @@ test.describe('/stopwatch multi-session: drag-to-reorder', () => {
     await page.getByTestId('open-session-panel').click();
     await expect(page.getByRole('dialog')).toBeVisible();
 
-    const rows2 = page.getByRole('list', { name: /solo sessions/i }).getByRole('listitem');
+    const rows2 = page.getByRole('list', { name: /solo sessions/i }).locator('md-list-item');
     await expect(rows2.nth(0)).toContainText('Beta');
     await expect(rows2.nth(1)).toContainText('Alpha');
 
