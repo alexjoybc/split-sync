@@ -89,9 +89,12 @@ test.describe('Creator owner identity', () => {
     await resetBtn.click();
 
     // Session returns to "Waiting" — no owner-check error surfaced.
+    // (Not `.text-race-red` generally: the owner-only Close/Delete session
+    // buttons legitimately use that class for their destructive styling, and
+    // Next.js's own route-announcer live region has role="alert".)
     await expect(
       page.locator('.race-kicker').filter({ hasText: /waiting/i }),
     ).toBeVisible({ timeout: 5_000 });
-    await expect(page.locator('.text-race-red')).toHaveCount(0);
+    await expect(page.getByTestId('action-error')).toHaveCount(0);
   });
 });
