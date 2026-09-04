@@ -264,6 +264,27 @@ Migration `20260829000001_realtime_publication.sql` first enabled the publicatio
 
 Both link directly into the Join screen. The native app registers an Android intent filter for the HTTPS pattern (App Links / `autoVerify: true`); `assetlinks.json` at `apps/web/public/.well-known/assetlinks.json` must include the app's signing-certificate SHA-256 to enable verified deep links. The `<code>` is the 6-character alphanumeric join code stored in `casual_sessions.code`.
 
+### Local solo sessions (client-side only)
+
+In addition to the Supabase-backed shared session model above, the stopwatch surface supports **local solo sessions** — purely client-side, with no server involvement whatsoever. See ADR 0024 (`docs/adr/0024-stopwatch-multiple-local-solo-sessions.md`) for the full decision record.
+
+| Property | Local solo session | Supabase-backed shared session |
+| --- | --- | --- |
+| Storage | `localStorage` / IndexedDB on web; `AsyncStorage` on native | `casual_sessions`, `casual_session_events`, `casual_session_participants` tables |
+| Auth required | No — no account, no sign-in | Creator must be authenticated; joiners are anonymous |
+| Shareable | No — device-private | Yes — via 6-char code / HTTPS deep link |
+| Participants | Single user only | Multiple devices, real-time Broadcast |
+| Max sessions per device | 10 (enforced in UI) | Unlimited (per account) |
+| Persistence boundary | Cleared by browser site-data reset / AsyncStorage wipe | Server-retained; results permalink survives after session expiry |
+
+**Key invariants:**
+
+- A local solo session is never written to Supabase. No migration, no RLS policy, no RPC.
+- Each session persists its own elapsed time, running/paused status, mode (stopwatch or countdown), and lap list entirely in device storage.
+- A running local session anchors to a wall-clock timestamp so it keeps counting correctly across tab switches, page refreshes, and browser restarts.
+- The session cap (10) is enforced purely in the client. It limits worst-case local storage to roughly 10 × (metadata + lap array) — well under 1 MB for up to ~500 laps per session.
+- Local solo sessions are wholly distinct from the casual shared-session model (ADR 0017, ADR 0022, ADR 0023). AGENTS.md's stopwatch surface description ("Creator owns session; participants join by code/link; event log is truth; no roster") refers to shared sessions and is unaffected.
+
 ## UI System
 
 The visual design system is a shared contract across web and mobile, documented in [`docs/adr/0015-broadcast-ui-refresh.md`](adr/0015-broadcast-ui-refresh.md) and [`docs/adr/0021-color-system.md`](adr/0021-color-system.md).
