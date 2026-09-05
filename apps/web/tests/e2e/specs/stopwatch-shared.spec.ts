@@ -190,8 +190,8 @@ test.describe('Shared controls', () => {
 
     // Regression test for #431: the joiner's clock must actually tick, not
     // just flip its status badge to "Live". record_session_event's returned
-    // event has no t0_server field (it lives on casual_sessions, not
-    // casual_session_events), so a client that hard-requires t0_server
+    // event has no t0_server field (it lives on shared_sessions, not
+    // shared_session_events), so a client that hard-requires t0_server
     // before starting its display loop shows "● Live" while the digits stay
     // frozen at 0:00. Sample the joiner's timer twice, a beat apart, and
     // assert it actually advanced.

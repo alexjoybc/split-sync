@@ -2,7 +2,7 @@
  * E2E spec: creator retains owner identity on their own shared session (#332)
  *
  * Regression covered:
- *   Before the fix, create_casual_session's session_id/participant_id were
+ *   Before the fix, create_shared_session's session_id/participant_id were
  *   discarded on the /stopwatch create modal, so the creator's own browser
  *   had no stored participant for the new session. Landing on
  *   /stopwatch/s/[code] then treated them as a first-time visitor, routing
