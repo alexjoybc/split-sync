@@ -252,7 +252,45 @@ begin
   select * into v_session from shared_sessions where id = p_session_id;
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   return json_build_object('session_id', v_session.id, 'session_name', v_session.name, 'code', v_session.code, 'status', v_session.status, 'expires_at', v_session.expires_at, 'sequence', v_session.sequence, 'state', v_session.state,
-    'participants', (select coalesce(json_agg(json_build_object('display_name', display_name, 'is_owner', is_owner, 'joined_at', joined_at) order by joined_at), '[]'::json) from shared_session_participants where session_id = p_session_id));
+    't0_server', (select client_recorded_at from shared_session_events where session_id = v_session.id and type = 'start' order by sequence desc limit 1),
+    'participants', (select coalesce(json_agg(json_build_object('id', id, 'display_name', display_name, 'is_owner', is_owner, 'joined_at', joined_at) order by joined_at), '[]'::json) from shared_session_participants where session_id = p_session_id),
+    'events', (select coalesce(json_agg(json_build_object('id', id, 'event_type', case type when 'complete' then 'stop' else type end, 'client_recorded_at', client_recorded_at, 'actor_participant_id', actor_participant_id, 'sequence', sequence, 't0_server', case when type = 'start' then client_recorded_at else null end) order by sequence), '[]'::json) from shared_session_events where session_id = p_session_id));
+end;
+$$;
+
+-- Keep the original single-timer client contract available while the
+-- multi-timer clients are rolled out. It records events through the canonical
+-- reducer using a lazily-created default timer; new clients use the seven
+-- argument overload above directly.
+create or replace function record_session_event(
+  p_session_id uuid, p_participant_id uuid, p_event_type text,
+  p_client_recorded_at timestamptz, p_client_event_id uuid
+) returns json language plpgsql security definer set search_path = public as $$
+declare
+  v_session shared_sessions;
+  v_timer_id uuid;
+  v_event json;
+  v_type text;
+begin
+  if p_event_type not in ('start', 'lap', 'stop', 'reset') then raise exception 'INVALID_EVENT_TYPE'; end if;
+  select * into v_session from shared_sessions where id = p_session_id;
+  if not found then raise exception 'SESSION_NOT_FOUND'; end if;
+  select (timer->>'id')::uuid into v_timer_id from jsonb_array_elements(coalesce(v_session.state->'timers', '[]'::jsonb)) timer limit 1;
+  if v_timer_id is null then
+    if p_event_type <> 'start' then raise exception 'TIMER_NOT_FOUND'; end if;
+    v_timer_id := gen_random_uuid();
+    perform record_session_event(p_session_id, p_participant_id, v_timer_id, 'timer_added', jsonb_build_object('name', 'Timer'), p_client_recorded_at, gen_random_uuid());
+  end if;
+  v_type := case when p_event_type = 'stop' then 'complete' else p_event_type end;
+  v_event := record_session_event(p_session_id, p_participant_id, v_timer_id, v_type, '{}'::jsonb, p_client_recorded_at, p_client_event_id);
+  return json_build_object(
+    'id', (v_event ->> 'id'),
+    'event_type', p_event_type,
+    'client_recorded_at', (v_event ->> 'client_recorded_at'),
+    'actor_participant_id', (v_event ->> 'actor_participant_id'),
+    'sequence', ((v_event ->> 'sequence')::bigint),
+    't0_server', (case when p_event_type = 'start' then p_client_recorded_at else null end)
+  );
 end;
 $$;
 
@@ -296,14 +334,15 @@ declare v_session shared_sessions;
 begin
   select * into v_session from shared_sessions where code = upper(trim(p_code));
   if not found or v_session.expires_at < now() then raise exception 'LIVE_VIEW_NOT_AVAILABLE'; end if;
-  return json_build_object('session', json_build_object('name', v_session.name, 'code', v_session.code, 'status', v_session.status, 'sequence', v_session.sequence, 'state', v_session.state),
-    'participants', (select coalesce(json_agg(json_build_object('display_name', display_name, 'is_owner', is_owner) order by joined_at), '[]'::json) from shared_session_participants where session_id = v_session.id));
+  return json_build_object('session', json_build_object('name', v_session.name, 'code', v_session.code, 'status', v_session.status, 'sequence', v_session.sequence, 'state', v_session.state, 't0_server', (select client_recorded_at from shared_session_events where session_id = v_session.id and type = 'start' order by sequence desc limit 1)),
+    'participants', (select coalesce(json_agg(json_build_object('display_name', display_name, 'is_owner', is_owner) order by joined_at), '[]'::json) from shared_session_participants where session_id = v_session.id),
+    'events', (select coalesce(json_agg(json_build_object('event_type', case e.type when 'complete' then 'stop' else e.type end, 'client_recorded_at', e.client_recorded_at, 'actor_name', p.display_name, 'sequence', e.sequence) order by e.sequence), '[]'::json) from shared_session_events e join shared_session_participants p on p.id = e.actor_participant_id where e.session_id = v_session.id));
 end;
 $$;
 
-revoke all on function create_shared_session(text, text), join_shared_session(text, text, uuid), record_session_event(uuid, uuid, uuid, text, jsonb, timestamptz, uuid), get_session_state(uuid, uuid), close_shared_session(uuid), delete_shared_session(uuid), get_shared_session_results(text), get_shared_session_live_view(text) from public;
+revoke all on function create_shared_session(text, text), join_shared_session(text, text, uuid), record_session_event(uuid, uuid, uuid, text, jsonb, timestamptz, uuid), record_session_event(uuid, uuid, text, timestamptz, uuid), get_session_state(uuid, uuid), close_shared_session(uuid), delete_shared_session(uuid), get_shared_session_results(text), get_shared_session_live_view(text) from public;
 grant execute on function create_shared_session(text, text), close_shared_session(uuid), delete_shared_session(uuid) to authenticated;
-grant execute on function join_shared_session(text, text, uuid), record_session_event(uuid, uuid, uuid, text, jsonb, timestamptz, uuid), get_session_state(uuid, uuid), get_shared_session_results(text), get_shared_session_live_view(text) to anon, authenticated;
+grant execute on function join_shared_session(text, text, uuid), record_session_event(uuid, uuid, uuid, text, jsonb, timestamptz, uuid), record_session_event(uuid, uuid, text, timestamptz, uuid), get_session_state(uuid, uuid), get_shared_session_results(text), get_shared_session_live_view(text) to anon, authenticated;
 
 do $$ begin
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'shared_session_events') then
