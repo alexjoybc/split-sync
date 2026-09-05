@@ -49,14 +49,15 @@ import "./md3-components";
 // `declare module "react" { namespace JSX { interface IntrinsicElements` augmentation
 // for most of the tags this page also renders (`md-dialog`,
 // `md-outlined-text-field`, `md-filled-button`, `md-outlined-button`,
-// `md-text-button`, `md-icon-button`, `md-list`, `md-list-item`) — TS
+// `md-text-button`, `md-icon-button`, `md-list`, `md-list-item`), and
+// `CountdownTimer.tsx` already covers `md-filled-tonal-button` — TS
 // interface merging requires every file augmenting the same key to use an
-// identical type, so this file only adds the two tags SoloSessionSwitcher.tsx
-// doesn't already cover (`md-filled-tonal-button`, `md-divider`) rather than
-// redeclaring the rest. `SoloSessionSwitcher.tsx`'s prop types carry a
-// permissive `[prop: string]: unknown` index signature precisely so this
-// page's additional attributes (e.g. `placeholder`, `readOnly`, `type`) type
-// check against the shared declaration.
+// identical type, so this file only adds the one tag neither of those files
+// already covers (`md-divider`) rather than redeclaring the rest.
+// `SoloSessionSwitcher.tsx`'s prop types carry a permissive
+// `[prop: string]: unknown` index signature precisely so this page's
+// additional attributes (e.g. `placeholder`, `readOnly`, `type`) type check
+// against the shared declaration.
 type Md3ElementProps<E extends HTMLElement = HTMLElement> = React.DetailedHTMLProps<
   React.HTMLAttributes<E> & { [attr: string]: unknown },
   E
@@ -65,7 +66,6 @@ type Md3ElementProps<E extends HTMLElement = HTMLElement> = React.DetailedHTMLPr
 declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      "md-filled-tonal-button": Md3ElementProps;
       "md-divider": Md3ElementProps;
     }
   }
