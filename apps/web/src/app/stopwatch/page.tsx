@@ -49,14 +49,15 @@ import "./md3-components";
 // `declare module "react" { namespace JSX { interface IntrinsicElements` augmentation
 // for most of the tags this page also renders (`md-dialog`,
 // `md-outlined-text-field`, `md-filled-button`, `md-outlined-button`,
-// `md-text-button`, `md-icon-button`, `md-list`, `md-list-item`) — TS
+// `md-text-button`, `md-icon-button`, `md-list`, `md-list-item`), and
+// `CountdownTimer.tsx` already covers `md-filled-tonal-button` — TS
 // interface merging requires every file augmenting the same key to use an
-// identical type, so this file only adds the two tags SoloSessionSwitcher.tsx
-// doesn't already cover (`md-filled-tonal-button`, `md-divider`) rather than
-// redeclaring the rest. `SoloSessionSwitcher.tsx`'s prop types carry a
-// permissive `[prop: string]: unknown` index signature precisely so this
-// page's additional attributes (e.g. `placeholder`, `readOnly`, `type`) type
-// check against the shared declaration.
+// identical type, so this file only adds the one tag neither of those files
+// already covers (`md-divider`) rather than redeclaring the rest.
+// `SoloSessionSwitcher.tsx`'s prop types carry a permissive
+// `[prop: string]: unknown` index signature precisely so this page's
+// additional attributes (e.g. `placeholder`, `readOnly`, `type`) type check
+// against the shared declaration.
 type Md3ElementProps<E extends HTMLElement = HTMLElement> = React.DetailedHTMLProps<
   React.HTMLAttributes<E> & { [attr: string]: unknown },
   E
@@ -65,7 +66,6 @@ type Md3ElementProps<E extends HTMLElement = HTMLElement> = React.DetailedHTMLPr
 declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
-      "md-filled-tonal-button": Md3ElementProps;
       "md-divider": Md3ElementProps;
     }
   }
@@ -127,7 +127,7 @@ function generateUUID(): string {
 // (apps/web/src/app/stopwatch/s/[code]/page.tsx) so the creator's own
 // browser recognizes them as the existing owner participant instead of
 // falling through to JoinForm (#332). `client_id` is not returned by
-// create_shared_session (the owner row's client_id is generated
+// create_casual_session (the owner row's client_id is generated
 // server-side and is not needed for local matching — isOwner is derived
 // from participant_id), so a fresh local UUID is stored as a placeholder.
 interface StoredParticipant {
@@ -203,7 +203,7 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
     setLoading(true);
     setError(null);
     try {
-      const { data, error: rpcError } = await supabase.rpc("create_shared_session", {
+      const { data, error: rpcError } = await supabase.rpc("create_casual_session", {
         p_name: name.trim(),
         p_display_name: displayName.trim(),
       });
@@ -417,7 +417,7 @@ function SessionHistory({
               </span>
             </div>
             <div slot="end" className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-              {s.status === "stopped" || s.status === "closed" ? (
+              {s.status === "stopped" ? (
                 <Link
                   href={`/stopwatch/s/${s.code}/results`}
                   className={linkActionClass}
@@ -426,10 +426,10 @@ function SessionHistory({
                 </Link>
               ) : (
                 <Link href={`/stopwatch/s/${s.code}`} className={linkActionClass}>
-                  Join
+                  {s.status === "closed" ? "View" : "Join"}
                 </Link>
               )}
-              {s.status === "stopped" || s.status === "closed" ? (
+              {s.status === "stopped" ? (
                 <md-outlined-button
                   type="button"
                   onClick={() =>
@@ -442,7 +442,7 @@ function SessionHistory({
                 >
                   {copiedId === s.id ? "Copied!" : "Share results"}
                 </md-outlined-button>
-              ) : (
+              ) : s.status !== "closed" ? (
                 <md-outlined-button
                   type="button"
                   onClick={() =>
@@ -452,7 +452,7 @@ function SessionHistory({
                 >
                   {copiedId === s.id ? "Copied!" : "Share"}
                 </md-outlined-button>
-              )}
+              ) : null}
               {/* Close button — only for waiting/running sessions */}
               {(s.status === "waiting" || s.status === "running") && (
                 <md-outlined-button
@@ -897,7 +897,7 @@ export default function StopwatchPage() {
 
   const fetchSessions = useCallback(async () => {
     const { data, error } = await supabase
-      .from("shared_sessions")
+      .from("casual_sessions")
       .select("id, code, name, status, created_at")
       .order("created_at", { ascending: false })
       .limit(20);
@@ -916,7 +916,7 @@ export default function StopwatchPage() {
         return;
       }
       setSessionActionPendingId(session.id);
-      const { error } = await supabase.rpc("close_shared_session", {
+      const { error } = await supabase.rpc("close_casual_session", {
         p_session_id: session.id,
       });
       if (!error) {
@@ -939,7 +939,7 @@ export default function StopwatchPage() {
         return;
       }
       setSessionActionPendingId(session.id);
-      const { error } = await supabase.rpc("delete_shared_session", {
+      const { error } = await supabase.rpc("delete_casual_session", {
         p_session_id: session.id,
       });
       if (!error) {
@@ -964,13 +964,13 @@ export default function StopwatchPage() {
 
     // Real-time subscription for live status updates
     const channel = supabase
-      .channel("shared_sessions_owner")
+      .channel("casual_sessions_owner")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "shared_sessions",
+          table: "casual_sessions",
         },
         () => {
           fetchSessions();

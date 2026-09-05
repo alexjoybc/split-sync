@@ -5,7 +5,7 @@
  *
  * Read-only, spectator-style view of a finished casual stopwatch session.
  * Anyone holding the 6-char code can open it — no sign-in, no participant
- * token — via the anon-callable `get_shared_session_results` RPC. Results
+ * token — via the anon-callable `get_casual_session_results` RPC. Results
  * survive the 4-hour join expiry (see ADR 0022). No session controls here.
  */
 
@@ -25,6 +25,7 @@ interface ResultsSession {
   code: string;
   status: string;
   created_at: string;
+  t0_server: string | null;
 }
 
 interface ResultsParticipant {
@@ -33,7 +34,7 @@ interface ResultsParticipant {
 }
 
 interface ResultsEvent {
-  type: "start" | "lap" | "complete" | "pause" | "reset" | "timer_added" | "timer_removed" | "timer_renamed" | "timers_reordered" | "session_renamed" | "repeat_config_set";
+  event_type: "start" | "lap" | "stop" | "reset";
   client_recorded_at: string;
   actor_name: string;
   sequence: number;
@@ -61,16 +62,16 @@ function deriveResults(events: ResultsEvent[]): DerivedResults {
   let laps: ExportLap[] = [];
 
   for (const ev of sorted) {
-    if (ev.type === "reset") {
+    if (ev.event_type === "reset") {
       baseAt = null;
       prevAt = null;
       totalMs = null;
       stoppedAt = null;
       laps = [];
-    } else if (ev.type === "start") {
+    } else if (ev.event_type === "start") {
       baseAt = new Date(ev.client_recorded_at);
       prevAt = baseAt;
-    } else if (ev.type === "lap" && baseAt && prevAt) {
+    } else if (ev.event_type === "lap" && baseAt && prevAt) {
       const at = new Date(ev.client_recorded_at);
       laps.push({
         lap: laps.length + 1,
@@ -79,7 +80,7 @@ function deriveResults(events: ResultsEvent[]): DerivedResults {
         actor: ev.actor_name,
       });
       prevAt = at;
-    } else if ((ev.type === "complete" || ev.type === "pause") && baseAt) {
+    } else if (ev.event_type === "stop" && baseAt) {
       totalMs = new Date(ev.client_recorded_at).getTime() - baseAt.getTime();
       stoppedAt = ev.client_recorded_at;
     }
@@ -108,7 +109,7 @@ export default function SessionResultsPage({
   useEffect(() => {
     let cancelled = false;
     supabase
-      .rpc("get_shared_session_results", { p_code: code })
+      .rpc("get_casual_session_results", { p_code: code })
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error || !data) {

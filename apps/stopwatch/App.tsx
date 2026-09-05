@@ -246,7 +246,7 @@ interface LiveViewNavParams {
 // ── Utility helpers ────────────────────────────────────────────────────────────
 function generateUUID(): string {
   // Crypto-strength UUID: these become idempotency keys
-  // (shared_session_events.id), so weak randomness risks collisions.
+  // (casual_session_events.client_id), so weak randomness risks collisions.
   return Crypto.randomUUID();
 }
 
@@ -1598,7 +1598,7 @@ function HomeScreen({
 
   const fetchSessions = useCallback(async () => {
     const { data } = await supabase
-      .from("shared_sessions")
+      .from("casual_sessions")
       .select("*")
       .order("created_at", { ascending: false })
       .limit(20);
@@ -1617,7 +1617,7 @@ function HomeScreen({
           style: "destructive",
           onPress: async () => {
             setActionPendingId(session.id);
-            const { error } = await supabase.rpc("close_shared_session", {
+            const { error } = await supabase.rpc("close_casual_session", {
               p_session_id: session.id,
             });
             if (error) {
@@ -1647,7 +1647,7 @@ function HomeScreen({
           style: "destructive",
           onPress: async () => {
             setActionPendingId(session.id);
-            const { error } = await supabase.rpc("delete_shared_session", {
+            const { error } = await supabase.rpc("delete_casual_session", {
               p_session_id: session.id,
             });
             if (error) {
@@ -1669,7 +1669,7 @@ function HomeScreen({
       .channel("my-sessions")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "shared_sessions" },
+        { event: "*", schema: "public", table: "casual_sessions" },
         () => fetchSessions()
       )
       .subscribe();
@@ -1908,7 +1908,7 @@ function CreateScreen({
     setError(null);
 
     const { data, error: rpcError } = await supabase.rpc(
-      "create_shared_session",
+      "create_casual_session",
       {
         p_name: sessionName.trim(),
         p_display_name: displayName.trim(),
@@ -2060,7 +2060,7 @@ function JoinScreen({
     }
 
     const { data, error: rpcError } = await supabase.rpc(
-      "join_shared_session",
+      "join_casual_session",
       {
         p_code: trimmedCode,
         p_display_name: displayName.trim(),
@@ -2193,7 +2193,7 @@ function LiveViewerScreen({ code, fontsLoaded, onBack }: { code: string; fontsLo
   const [unavailable, setUnavailable] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const refresh = useCallback(async () => {
-    const { data, error } = await supabase.rpc("get_shared_session_live_view", { p_code: code });
+    const { data, error } = await supabase.rpc("get_casual_session_live_view", { p_code: code });
     if (error || !data) { setUnavailable(true); return; }
     setPayload(data as NonNullable<typeof payload>);
   }, [code]);
@@ -2495,8 +2495,8 @@ function SessionScreen({
       }
 
       if (ev.event_type === "start") {
-        // `record_session_event` returns a row from `shared_session_events`,
-        // which has no `t0_server` column (that lives on `shared_sessions`
+        // `record_session_event` returns a row from `casual_session_events`,
+        // which has no `t0_server` column (that lives on `casual_sessions`
         // only) — so `ev.t0_server` is always absent here. Only refine the
         // clock-sync timestamp when present; never gate the status
         // transition on it, or Start silently does nothing (#339).
@@ -3046,7 +3046,7 @@ function SessionScreen({
           text: "Close session",
           style: "destructive",
           onPress: async () => {
-            const { error } = await supabase.rpc("close_shared_session", {
+            const { error } = await supabase.rpc("close_casual_session", {
               p_session_id: params.sessionId,
             });
             if (error) {
@@ -3084,7 +3084,7 @@ function SessionScreen({
               event: "session_deleted",
               payload: {},
             });
-            const { error } = await supabase.rpc("delete_shared_session", {
+            const { error } = await supabase.rpc("delete_casual_session", {
               p_session_id: params.sessionId,
             });
             if (error) {
