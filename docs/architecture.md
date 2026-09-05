@@ -206,37 +206,36 @@ The shared stopwatch is the **fourth surface**, independent of the three event-m
 
 ### Data model
 
-Three tables support this surface (migration
-`20260904000003_shared_session_event_sourcing.sql`):
+Three tables support shared sessions (migration tracked in #463):
 
 | Table | Purpose |
 | --- | --- |
-| `shared_sessions` | A shared multi-timer session: owner, name, unique 6-char join code, status (`waiting` / `running` / `stopped` / `closed`), expiry, current sequence, and a cached JSON state snapshot |
-| `shared_session_participants` | Everyone in a session — owner plus joiners. `client_id` UUID is the idempotency key for re-join |
-| `shared_session_events` | The canonical append-only event log. Client-generated `id` is the idempotency key; server identity `sequence` orders replay. Events cover timer controls and timer/session configuration |
+| `shared_sessions` | A shared session: owner, human-readable name, unique 6-character join code, status (`waiting` / `running` / `stopped` / `closed`), expiry, event sequence, and cached JSON state |
+| `shared_session_participants` | Everyone in a session — owner plus joiners. `(session_id, client_id)` is idempotent for re-join |
+| `shared_session_events` | The append-only event log. Client-generated `id` is the idempotency key; `timer_id` identifies a timer or is null for session-level events. The state cache is a derived read optimization; elapsed time, laps, splits, and timer configuration are reduced from this log |
 
 ### Auth and access control
 
-- **Creator must be authenticated.** `create_shared_session(name, display_name)` validates `auth.uid() IS NOT NULL` inside the security-definer RPC and stores `auth.uid()::text` as `shared_sessions.owner_id` — the same pattern as `events.owner_id`.
-- **Joiners are anonymous.** `join_shared_session(code, display_name, client_id)` is callable by the anon role; no account required.
-- **No direct anonymous table grants.** RLS is enabled on all three tables as defense in depth. Authenticated owners may directly list `shared_sessions`, scoped by `owner_id = auth.uid()::text`; all writes and all anonymous access flow through security-definer RPCs:
+- **Creator must be authenticated.** `create_shared_session(name, display_name)` validates `auth.uid() IS NOT NULL` in a security-definer RPC and stores `auth.uid()::text` as `shared_sessions.owner_id` — the same pattern as `events.owner_id`.
+- **Joiners are anonymous.** `join_shared_session(code, display_name, client_id)` is callable by the anon role; no account is required.
+- **No direct anon table grants.** RLS is enabled on all three tables as defense in depth. Owners may read their own session list through owner-scoped RLS; creation, joining, event recording, state reads, lifecycle writes, and public views flow through security-definer RPCs:
 
 | RPC | Caller | Description |
 | --- | --- | --- |
-| `create_shared_session(name, display_name)` | Authenticated | Creates session + owner participant; generates unique 6-char code |
-| `join_shared_session(code, display_name, client_id)` | Anon | Validates code, checks expiry/cap/status, creates participant row (idempotent) |
-| `record_session_event(session_id, participant_id, timer_id, type, payload, client_recorded_at, client_event_id)` | Anon | Validates membership, appends an idempotent event, and reduces the cached state in the same transaction |
-| `get_session_state(session_id, participant_id)` | Anon | Returns a fast cached snapshot and sanitized participant list for reconnect |
-| `get_shared_session_results(code)` | Anon | Read-only terminal-session snapshot plus ordered event log for the results permalink |
-| `get_shared_session_live_view(code)` | Anon | Read-only sanitized snapshot for a non-expired session |
-| `close_shared_session(session_id)` | Authenticated (owner only) | Sets status to `closed`, a terminal state that rejects new joins/events but keeps results readable |
-| `delete_shared_session(session_id)` | Authenticated (owner only) | Hard-deletes the session; cascades to participants and events |
+| `create_shared_session(name, display_name)` | Authenticated | Creates a session and owner participant; generates a unique 6-character code |
+| `join_shared_session(code, display_name, client_id)` | Anon | Validates code, expiry/cap/status, and creates an idempotent participant row |
+| `record_session_event(session_id, participant_id, timer_id, type, payload, client_recorded_at, client_event_id)` | Anon participant | Validates membership, appends an idempotent event, and applies the reducer to cached state atomically |
+| `get_session_state(session_id, participant_id)` | Anon participant | Returns the current cached session state and participant list for reconnect/catch-up |
+| `close_shared_session(session_id)` | Authenticated owner | Sets the session to `closed`, rejecting joins/events while preserving results |
+| `delete_shared_session(session_id)` | Authenticated owner | Hard-deletes a session and cascading participants/events |
+| `get_shared_session_results(code)` | Anon | Read-only terminal-session results at `/stopwatch/s/<code>/results` |
+| `get_shared_session_live_view(code)` | Anon | Sanitized non-expired live view at `/stopwatch/s/<code>/live`, without bearer identifiers |
 
 The `participant_id` UUID returned on join acts as a bearer token: calls without a valid `(session_id, participant_id)` pair are rejected. The owner RLS policy (`owner_id = auth.uid()::text`) allows authenticated creators to list their own sessions directly.
 
 ### Results permalink and event-log retention
 
-Once a session is stopped, closed, or its 4-hour join expiry passes, its results are readable by anyone holding the code at `/stopwatch/s/<code>/results` — no sign-in, read-only. `get_shared_session_results` ignores `expires_at` for reading (expiry gates joining, not remembering), never returns participant ids (they are write bearer tokens), and raises the same generic error for unknown codes and still-live sessions so the code space cannot be probed. The hourly expiry job retains stopped sessions for 30 days. Results and timer displays are derived by replaying the event log; `state` is only a transactionally maintained read cache.
+Once a session is stopped, closed, or its join expiry passes, results are readable by anyone holding the code at `/stopwatch/s/<code>/results` — no sign-in, read-only. `get_shared_session_results` never returns participant bearer identifiers and uses the same generic error for unknown and still-live codes. The ordered event log remains sufficient to derive each timer's laps, splits, totals, and configuration; the client performs CSV/copy export.
 
 ### Event log is source of truth
 
@@ -247,11 +246,11 @@ elapsed_ms = (Date.now() + offset_ms) - t0_server.getTime()
 split_ms   = client_recorded_at[lap_N] - client_recorded_at[lap_N-1]
 ```
 
-No calculated standings, total, or elapsed-time column is persisted — this mirrors domain invariant #2. The JSON snapshot caches event-reduction inputs for fast reads but does not replace the log as source of truth.
+No elapsed time, lap split, or timer state is directly written by a client as an authoritative value; event reduction remains the truth.
 
 ### Realtime
 
-`shared_session_events` and `shared_session_participants` are added to the `supabase_realtime` publication. The Broadcast channel key is `session:<code>` (e.g., `session:AB3K9X`). All participants in the same session subscribe to the same channel and broadcast the accepted event, never the full cached state. The anon role can use Broadcast channels without table SELECT grants, which is why Broadcast is preferred over `postgres_changes` for in-session state.
+`shared_session_events` and `shared_session_participants` are in the `supabase_realtime` publication. Participants subscribe to `session:<code>` (for example, `session:AB3K9X`). A participant broadcasts an accepted **event**, not a full state snapshot; each receiver applies the same reducer. Clients use `get_session_state` to catch up after a gap or reconnect. Broadcast is not an authorization boundary.
 
 Public live viewers treat Broadcast only as an invalidation signal and re-fetch `get_shared_session_live_view`; they have no participant record and do not count toward the participant cap.
 
