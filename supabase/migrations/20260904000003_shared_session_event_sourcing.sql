@@ -224,7 +224,18 @@ begin
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if v_session.status = 'closed' or v_session.expires_at < now() then raise exception 'SESSION_CLOSED'; end if;
   if p_type not in ('start', 'pause', 'lap', 'reset', 'complete', 'timer_added', 'timer_removed', 'timer_renamed', 'timers_reordered', 'session_renamed', 'repeat_config_set') then raise exception 'INVALID_EVENT_TYPE'; end if;
-  if p_type in ('timer_added', 'timer_removed', 'timer_renamed', 'timers_reordered', 'session_renamed', 'repeat_config_set') and not v_participant.is_owner then raise exception 'UNAUTHORIZED'; end if;
+  -- The five-argument legacy overload may initialize its one default timer
+  -- for any existing participant, preserving the prior shared stopwatch
+  -- contract. Other structural changes remain owner-only.
+  if p_type in ('timer_added', 'timer_removed', 'timer_renamed', 'timers_reordered', 'session_renamed', 'repeat_config_set')
+    and not v_participant.is_owner
+    and not (
+      p_type = 'timer_added'
+      and coalesce(p_payload->>'legacy_default_timer', 'false') = 'true'
+      and jsonb_array_length(coalesce(v_session.state->'timers', '[]'::jsonb)) = 0
+    ) then
+    raise exception 'UNAUTHORIZED';
+  end if;
   if p_type in ('timer_added', 'timer_removed', 'timer_renamed', 'start', 'pause', 'lap', 'reset', 'complete') and p_timer_id is null then raise exception 'TIMER_REQUIRED'; end if;
   if p_type = 'timer_added' and exists (select 1 from jsonb_array_elements(coalesce(v_session.state->'timers', '[]'::jsonb)) t where t->>'id' = p_timer_id::text) then raise exception 'TIMER_ALREADY_EXISTS'; end if;
   if p_type in ('timer_removed', 'timer_renamed', 'start', 'pause', 'lap', 'reset', 'complete') and not exists (select 1 from jsonb_array_elements(coalesce(v_session.state->'timers', '[]'::jsonb)) t where t->>'id' = p_timer_id::text) then raise exception 'TIMER_NOT_FOUND'; end if;
@@ -279,7 +290,7 @@ begin
   if v_timer_id is null then
     if p_event_type <> 'start' then raise exception 'TIMER_NOT_FOUND'; end if;
     v_timer_id := gen_random_uuid();
-    perform record_session_event(p_session_id, p_participant_id, v_timer_id, 'timer_added', jsonb_build_object('name', 'Timer'), p_client_recorded_at, gen_random_uuid());
+    perform record_session_event(p_session_id, p_participant_id, v_timer_id, 'timer_added', jsonb_build_object('name', 'Timer', 'legacy_default_timer', true), p_client_recorded_at, gen_random_uuid());
   end if;
   v_type := case when p_event_type = 'stop' then 'complete' else p_event_type end;
   v_event := record_session_event(p_session_id, p_participant_id, v_timer_id, v_type, '{}'::jsonb, p_client_recorded_at, p_client_event_id);
