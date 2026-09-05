@@ -22,6 +22,50 @@ import {
 const SESSION_NAME = 'Hill Repeats';
 const OWNER_NAME = 'Coach Alex';
 
+test('only the legacy event RPC can initialize its default timer for a joiner', async () => {
+  const owner = createTestSupabaseClient();
+  const email = uniqueTestEmail('sw-legacy-init');
+  const password = 'stopwatch-e2e-password-1';
+  await owner.auth.signUp({ email, password });
+  const { error: signInError } = await owner.auth.signInWithPassword({ email, password });
+  if (signInError) throw new Error(`signIn failed: ${signInError.message}`);
+
+  const { data: created, error: createError } = await owner.rpc('create_shared_session', {
+    p_name: 'Legacy initialization',
+    p_display_name: 'Owner',
+  });
+  if (createError || !created) throw new Error(`create_shared_session failed: ${createError?.message}`);
+
+  const joiner = createTestSupabaseClient();
+  const { data: joined, error: joinError } = await joiner.rpc('join_shared_session', {
+    p_code: created.code,
+    p_display_name: 'Joiner',
+    p_client_id: randomUUID(),
+  });
+  if (joinError || !joined) throw new Error(`join_shared_session failed: ${joinError?.message}`);
+
+  const { error: modernError } = await joiner.rpc('record_session_event', {
+    p_session_id: joined.session_id,
+    p_participant_id: joined.participant_id,
+    p_timer_id: randomUUID(),
+    p_type: 'timer_added',
+    p_payload: { name: 'Forged timer', legacy_default_timer: true },
+    p_client_recorded_at: new Date().toISOString(),
+    p_client_event_id: randomUUID(),
+  });
+  expect(modernError?.message).toContain('UNAUTHORIZED');
+
+  const { data: legacyEvent, error: legacyError } = await joiner.rpc('record_session_event', {
+    p_session_id: joined.session_id,
+    p_participant_id: joined.participant_id,
+    p_event_type: 'start',
+    p_client_recorded_at: new Date().toISOString(),
+    p_client_event_id: randomUUID(),
+  });
+  expect(legacyError).toBeNull();
+  expect(legacyEvent).toMatchObject({ event_type: 'start' });
+});
+
 /**
  * Creates a session as an authenticated owner, replays a deterministic event
  * log (start, 2 laps, stop), and returns the join code.
@@ -365,4 +409,3 @@ test.describe('solo stopwatch export', () => {
     expect(csv.split('\n').filter(Boolean)).toHaveLength(3); // header + 2 laps
   });
 });
-

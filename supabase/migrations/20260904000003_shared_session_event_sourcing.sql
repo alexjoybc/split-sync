@@ -207,9 +207,12 @@ begin
 end;
 $$;
 
-create or replace function record_session_event(
+-- Internal event writer. Only the legacy overload below may authorize the
+-- one-time default timer initialization; the public modern RPC cannot.
+create or replace function record_shared_session_event_internal(
   p_session_id uuid, p_participant_id uuid, p_timer_id uuid, p_type text,
-  p_payload jsonb, p_client_recorded_at timestamptz, p_client_event_id uuid
+  p_payload jsonb, p_client_recorded_at timestamptz, p_client_event_id uuid,
+  p_allow_legacy_default_timer boolean
 ) returns json language plpgsql security definer set search_path = public as $$
 declare v_session shared_sessions; v_participant shared_session_participants; v_event shared_session_events; v_state jsonb; v_status text;
 begin
@@ -224,14 +227,13 @@ begin
   if not found then raise exception 'SESSION_NOT_FOUND'; end if;
   if v_session.status = 'closed' or v_session.expires_at < now() then raise exception 'SESSION_CLOSED'; end if;
   if p_type not in ('start', 'pause', 'lap', 'reset', 'complete', 'timer_added', 'timer_removed', 'timer_renamed', 'timers_reordered', 'session_renamed', 'repeat_config_set') then raise exception 'INVALID_EVENT_TYPE'; end if;
-  -- The five-argument legacy overload may initialize its one default timer
-  -- for any existing participant, preserving the prior shared stopwatch
-  -- contract. Other structural changes remain owner-only.
+  -- Only the legacy overload can authorize initialization of its one default
+  -- timer for an existing participant. Other structural changes are owner-only.
   if p_type in ('timer_added', 'timer_removed', 'timer_renamed', 'timers_reordered', 'session_renamed', 'repeat_config_set')
     and not v_participant.is_owner
     and not (
       p_type = 'timer_added'
-      and coalesce(p_payload->>'legacy_default_timer', 'false') = 'true'
+      and p_allow_legacy_default_timer
       and jsonb_array_length(coalesce(v_session.state->'timers', '[]'::jsonb)) = 0
     ) then
     raise exception 'UNAUTHORIZED';
@@ -252,6 +254,18 @@ begin
     expires_at = case when p_type in ('start', 'lap') then least(greatest(expires_at, now() + interval '30 minutes'), created_at + interval '12 hours') else expires_at end
   where id = p_session_id;
   return row_to_json(v_event);
+end;
+$$;
+
+create or replace function record_session_event(
+  p_session_id uuid, p_participant_id uuid, p_timer_id uuid, p_type text,
+  p_payload jsonb, p_client_recorded_at timestamptz, p_client_event_id uuid
+) returns json language plpgsql security definer set search_path = public as $$
+begin
+  return record_shared_session_event_internal(
+    p_session_id, p_participant_id, p_timer_id, p_type, p_payload,
+    p_client_recorded_at, p_client_event_id, false
+  );
 end;
 $$;
 
@@ -290,7 +304,7 @@ begin
   if v_timer_id is null then
     if p_event_type <> 'start' then raise exception 'TIMER_NOT_FOUND'; end if;
     v_timer_id := gen_random_uuid();
-    perform record_session_event(p_session_id, p_participant_id, v_timer_id, 'timer_added', jsonb_build_object('name', 'Timer', 'legacy_default_timer', true), p_client_recorded_at, gen_random_uuid());
+    perform record_shared_session_event_internal(p_session_id, p_participant_id, v_timer_id, 'timer_added', jsonb_build_object('name', 'Timer'), p_client_recorded_at, gen_random_uuid(), true);
   end if;
   v_type := case when p_event_type = 'stop' then 'complete' else p_event_type end;
   v_event := record_session_event(p_session_id, p_participant_id, v_timer_id, v_type, '{}'::jsonb, p_client_recorded_at, p_client_event_id);
@@ -351,7 +365,7 @@ begin
 end;
 $$;
 
-revoke all on function create_shared_session(text, text), join_shared_session(text, text, uuid), record_session_event(uuid, uuid, uuid, text, jsonb, timestamptz, uuid), record_session_event(uuid, uuid, text, timestamptz, uuid), get_session_state(uuid, uuid), close_shared_session(uuid), delete_shared_session(uuid), get_shared_session_results(text), get_shared_session_live_view(text) from public;
+revoke all on function create_shared_session(text, text), join_shared_session(text, text, uuid), record_shared_session_event_internal(uuid, uuid, uuid, text, jsonb, timestamptz, uuid, boolean), record_session_event(uuid, uuid, uuid, text, jsonb, timestamptz, uuid), record_session_event(uuid, uuid, text, timestamptz, uuid), get_session_state(uuid, uuid), close_shared_session(uuid), delete_shared_session(uuid), get_shared_session_results(text), get_shared_session_live_view(text) from public;
 grant execute on function create_shared_session(text, text), close_shared_session(uuid), delete_shared_session(uuid) to authenticated;
 grant execute on function join_shared_session(text, text, uuid), record_session_event(uuid, uuid, uuid, text, jsonb, timestamptz, uuid), record_session_event(uuid, uuid, text, timestamptz, uuid), get_session_state(uuid, uuid), get_shared_session_results(text), get_shared_session_live_view(text) to anon, authenticated;
 
