@@ -371,6 +371,57 @@ No screen's JSX or styling changes in this issue. Applying these tokens to
 actual components (buttons, dialogs, segmented controls, CTAs) is tracked
 in the dependent follow-up, issue #461.
 
+### M3E polish rollout (issue #461)
+
+Issue #461 consumes the foundation tokens above across every already-
+migrated screen:
+
+- **Primary CTAs** (native `ExpressiveButton` wrapping Paper's `Button`;
+  web's `md-filled-button`/`md-outlined-button`/`md-text-button`) use the
+  `pill`/`stadium` shape with `stopwatchSpring.standard`-driven press-state
+  shape morph (native, via `Animated.spring` on `borderRadius`/`scale`) or
+  the `--md-motion-spring-standard-*` CSS custom properties (web, via a
+  `transform: scale()` transition).
+- **Physical control chrome** — native `DeviceBtn` and web's `.sw-pusher`
+  countdown pushers — get the identical pill/circle shape + spring press
+  treatment on their chrome only; the wrapped label/LCD content is
+  unaffected.
+- **Screen titles** switch to `stopwatchEmphasizedFonts.headlineSmallEmphasized`
+  / `labelLargeEmphasized` (native) or the `--md-sys-typescale-*-emphasized-*`
+  tokens applied to `md-dialog`'s headline slot (web — the only true M3
+  content headline on the web surface; its outer `<h1>` masthead stays on
+  the pre-existing `race-title` brand class, matching native's `CasingBar`,
+  which is also excluded as device-casing branding rather than MD3 content
+  typography).
+- **Segmented-button selection** (native `ModeToggleStrip`,
+  `TimerScreen`'s repeat-mode toggle) plays a `stopwatchSpring.expressive`
+  scale "pop" on value change. `react-native-paper`'s `SegmentedButtons` has
+  no exposed hook to override its internal per-segment transition, so the
+  whole control is wrapped and bounced instead of a true indicator
+  transition — a documented substitute, not a fork.
+- **Dialog motion — partial, documented exception**:
+  - Native `Dialog` (`NameInputModal`, `SessionSwitcherModal`) cannot be
+    overridden: `react-native-paper`'s `Modal` hardcodes
+    `Animated.timing(opacity, { easing: Easing.out(Easing.cubic) })` with
+    only a duration multiplier (`theme.animation.scale`) exposed, not the
+    easing curve. Forking the component was out of scope, so this dialog's
+    own open/close transition keeps the library default; its buttons still
+    get the M3E pill + spring-press treatment.
+  - Web `md-dialog` (`CreateSessionModal`, `SoloSessionSwitcher`) **can** be
+    overridden: `@material/web`'s dialog exposes `getOpenAnimation`/
+    `getCloseAnimation` as public, reassignable instance properties (see
+    `apps/web/src/app/stopwatch/dialogSpringMotion.ts`). The dialog's own
+    slide-in/out keyframe now uses the `--md-motion-spring-dialog-*` timing;
+    scrim/content/actions fades keep their default M3 timing.
+- **Fixed color roles**: `SessionSwitcherModal`'s persistent "active
+  session" row accent (previously the hand-picked `C.blueTint`/
+  `C.bluePrimary` pair, functionally the same "persistent status chip"
+  pattern called out in #461) now uses the `primaryFixed`/
+  `primaryFixedDim`/`onPrimaryFixedVariant` pairing. No other component in
+  either app reuses `primaryContainer` for a persistent emphasis accent, so
+  no other swap was made — per the issue's own "use judgment, not a 1:1
+  mechanical swap" guidance.
+
 ---
 
 ## Consequences

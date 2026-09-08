@@ -404,7 +404,13 @@ a:focus-visible {
   letter-spacing: -0.02em;
 }
 
-/* Chunky physical pushers */
+/* Chunky physical pushers — already fully round (border-radius: 50% on an
+   equal width/height element), i.e. the same "pill/stadium" full-corner
+   shape M3E calls for on physical control chrome; only the press transition
+   changes here. Press feedback uses the M3E spring motion token from
+   `stopwatch/md3-theme.css` (falls back to the previous linear easing if
+   rendered outside `.md3-stopwatch-scope`) — issue #461. The instrument
+   dial/LCD above/below stays untouched. */
 .sw-pusher {
   width:  var(--sw-pusher-size);
   height: var(--sw-pusher-size);
@@ -419,7 +425,10 @@ a:focus-visible {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: transform 80ms ease, box-shadow 80ms ease, filter 80ms ease;
+  transition:
+    transform var(--md-motion-spring-standard-duration, 80ms) var(--md-motion-spring-standard-easing, ease),
+    box-shadow var(--md-motion-spring-standard-duration, 80ms) var(--md-motion-spring-standard-easing, ease),
+    filter var(--md-motion-spring-standard-duration, 80ms) var(--md-motion-spring-standard-easing, ease);
   box-shadow: 0 6px 16px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.25);
   user-select: none;
   -webkit-user-select: none;

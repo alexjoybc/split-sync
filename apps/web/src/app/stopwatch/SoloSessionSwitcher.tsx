@@ -39,6 +39,7 @@ import { TrashIcon, PencilIcon, Bars3Icon, XMarkIcon, CheckIcon } from "@heroico
 // elements, so it re-imports the registrations here to guarantee they run
 // in the browser wherever this client component's chunk is loaded.
 import "./md3-components";
+import { applyDialogSpringMotion } from "./dialogSpringMotion";
 import {
   listSessions,
   createSession,
@@ -247,6 +248,14 @@ export function SoloSessionSwitcher({
 
   const requestClose = useCallback(() => {
     dialogRef.current?.close();
+  }, []);
+
+  // M3E dialog open/close spring motion (#461) — see dialogSpringMotion.ts.
+  // This panel always uses `.close()` (never unmounts first), so unlike
+  // CreateSessionModal's "cancel"-triggered unmount, the close animation
+  // set here actually gets to play out.
+  useEffect(() => {
+    applyDialogSpringMotion(dialogRef.current);
   }, []);
 
   const atCap = sessions.length >= SESSION_CAP;
