@@ -417,7 +417,7 @@ function SessionHistory({
               </span>
             </div>
             <div slot="end" className="flex shrink-0 flex-wrap items-center justify-end gap-1">
-              {s.status === "stopped" ? (
+              {s.status === "stopped" || s.status === "closed" ? (
                 <Link
                   href={`/stopwatch/s/${s.code}/results`}
                   className={linkActionClass}
@@ -426,10 +426,10 @@ function SessionHistory({
                 </Link>
               ) : (
                 <Link href={`/stopwatch/s/${s.code}`} className={linkActionClass}>
-                  {s.status === "closed" ? "View" : "Join"}
+                  Join
                 </Link>
               )}
-              {s.status === "stopped" ? (
+              {s.status === "stopped" || s.status === "closed" ? (
                 <md-outlined-button
                   type="button"
                   onClick={() =>
@@ -442,7 +442,7 @@ function SessionHistory({
                 >
                   {copiedId === s.id ? "Copied!" : "Share results"}
                 </md-outlined-button>
-              ) : s.status !== "closed" ? (
+              ) : (
                 <md-outlined-button
                   type="button"
                   onClick={() =>
@@ -452,7 +452,7 @@ function SessionHistory({
                 >
                   {copiedId === s.id ? "Copied!" : "Share"}
                 </md-outlined-button>
-              ) : null}
+              )}
               {/* Close button — only for waiting/running sessions */}
               {(s.status === "waiting" || s.status === "running") && (
                 <md-outlined-button

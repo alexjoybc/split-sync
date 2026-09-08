@@ -22,12 +22,56 @@ import {
 const SESSION_NAME = 'Hill Repeats';
 const OWNER_NAME = 'Coach Alex';
 
+test('only the legacy event RPC can initialize its default timer for a joiner', async () => {
+  const owner = createTestSupabaseClient();
+  const email = uniqueTestEmail('sw-legacy-init');
+  const password = 'stopwatch-e2e-password-1';
+  await owner.auth.signUp({ email, password });
+  const { error: signInError } = await owner.auth.signInWithPassword({ email, password });
+  if (signInError) throw new Error(`signIn failed: ${signInError.message}`);
+
+  const { data: created, error: createError } = await owner.rpc('create_shared_session', {
+    p_name: 'Legacy initialization',
+    p_display_name: 'Owner',
+  });
+  if (createError || !created) throw new Error(`create_shared_session failed: ${createError?.message}`);
+
+  const joiner = createTestSupabaseClient();
+  const { data: joined, error: joinError } = await joiner.rpc('join_shared_session', {
+    p_code: created.code,
+    p_display_name: 'Joiner',
+    p_client_id: randomUUID(),
+  });
+  if (joinError || !joined) throw new Error(`join_shared_session failed: ${joinError?.message}`);
+
+  const { error: modernError } = await joiner.rpc('record_session_event', {
+    p_session_id: joined.session_id,
+    p_participant_id: joined.participant_id,
+    p_timer_id: randomUUID(),
+    p_type: 'timer_added',
+    p_payload: { name: 'Forged timer', legacy_default_timer: true },
+    p_client_recorded_at: new Date().toISOString(),
+    p_client_event_id: randomUUID(),
+  });
+  expect(modernError?.message).toContain('UNAUTHORIZED');
+
+  const { data: legacyEvent, error: legacyError } = await joiner.rpc('record_session_event', {
+    p_session_id: joined.session_id,
+    p_participant_id: joined.participant_id,
+    p_event_type: 'start',
+    p_client_recorded_at: new Date().toISOString(),
+    p_client_event_id: randomUUID(),
+  });
+  expect(legacyError).toBeNull();
+  expect(legacyEvent).toMatchObject({ event_type: 'start' });
+});
+
 /**
  * Creates a session as an authenticated owner, replays a deterministic event
  * log (start, 2 laps, stop), and returns the join code.
  *
  * Timeline: lap 1 at +62.5s (split 1:02.50), lap 2 at +121.3s (split 58.80,
- * best), stop at +180s (total 3:00.00).
+ * best), complete at +180s (total 3:00.00).
  */
 async function createStoppedSession(): Promise<string> {
   const client = createTestSupabaseClient();
@@ -43,11 +87,11 @@ async function createStoppedSession(): Promise<string> {
   if (signInError) throw new Error(`signIn failed: ${signInError.message}`);
 
   const { data: created, error: createError } = await client.rpc(
-    'create_casual_session',
+    'create_shared_session',
     { p_name: SESSION_NAME, p_display_name: OWNER_NAME }
   );
   if (createError || !created) {
-    throw new Error(`create_casual_session failed: ${createError?.message}`);
+    throw new Error(`create_shared_session failed: ${createError?.message}`);
   }
   const { session_id, participant_id, code } = created as {
     session_id: string;
@@ -55,22 +99,32 @@ async function createStoppedSession(): Promise<string> {
     code: string;
   };
 
+  const timerId = randomUUID();
   const t0 = Date.now() - 10 * 60 * 1000; // ten minutes ago
-  const record = async (eventType: string, atMs: number) => {
+
+  const record = async (eventType: string, atMs: number, tid: string | null = timerId) => {
     const { error } = await client.rpc('record_session_event', {
       p_session_id: session_id,
       p_participant_id: participant_id,
-      p_event_type: eventType,
+      p_timer_id: tid,
+      p_type: eventType,
+      p_payload: {},
       p_client_recorded_at: new Date(atMs).toISOString(),
       p_client_event_id: randomUUID(),
     });
     if (error) throw new Error(`record ${eventType} failed: ${error.message}`);
   };
 
+  // Add a timer before recording timer events
+  await record('timer_added', t0 - 1_000, timerId);
   await record('start', t0);
   await record('lap', t0 + 62_500);
   await record('lap', t0 + 121_300);
-  await record('stop', t0 + 180_000);
+  await record('complete', t0 + 180_000);
+
+  // Close the session so results are available
+  const { error: closeError } = await client.rpc('close_shared_session', { p_session_id: session_id });
+  if (closeError) throw new Error(`close_shared_session failed: ${closeError.message}`);
 
   return code;
 }
@@ -187,30 +241,35 @@ test.describe('SessionHistory stopped session links', () => {
 
     // 2. Create and stop a session in the DB before the page loads.
     //    The page's sessions query will find it already stopped when it runs.
-    const { data: created } = await client.rpc('create_casual_session', {
+    const { data: created } = await client.rpc('create_shared_session', {
       p_name: 'Hist Test Session',
       p_display_name: 'Hist Owner',
     });
-    if (!created) throw new Error('create_casual_session returned null');
+    if (!created) throw new Error('create_shared_session returned null');
     const { session_id, participant_id, code: histCode } = created as {
       session_id: string;
       participant_id: string;
       code: string;
     };
     const t0 = Date.now() - 5 * 60 * 1000;
-    const rec = async (ev: string, atMs: number) => {
+    const histTimerId = randomUUID();
+    const rec = async (ev: string, atMs: number, tid: string | null = histTimerId) => {
       const { error } = await client.rpc('record_session_event', {
         p_session_id: session_id,
         p_participant_id: participant_id,
-        p_event_type: ev,
+        p_timer_id: tid,
+        p_type: ev,
+        p_payload: {},
         p_client_recorded_at: new Date(atMs).toISOString(),
         p_client_event_id: randomUUID(),
       });
       if (error) throw new Error(`record_session_event(${ev}) failed: ${error.message}`);
     };
+    await rec('timer_added', t0 - 1_000, histTimerId);
     await rec('start', t0);
     await rec('lap', t0 + 30_000);
-    await rec('stop', t0 + 60_000);
+    await rec('complete', t0 + 60_000);
+    await client.rpc('close_shared_session', { p_session_id: session_id });
 
     // 3. Inject auth into localStorage BEFORE the first page load via addInitScript.
     //    This ensures the supabase client on the page finds the session the very
@@ -253,30 +312,35 @@ test.describe('SessionHistory stopped session links', () => {
     if (!session) throw new Error('signInWithPassword returned no session');
 
     // 2. Create and stop a session in the DB before the page loads.
-    const { data: created } = await client.rpc('create_casual_session', {
+    const { data: created } = await client.rpc('create_shared_session', {
       p_name: 'Share Hist Session',
       p_display_name: 'Share Owner',
     });
-    if (!created) throw new Error('create_casual_session returned null');
+    if (!created) throw new Error('create_shared_session returned null');
     const { session_id, participant_id, code: shareCode } = created as {
       session_id: string;
       participant_id: string;
       code: string;
     };
     const t0 = Date.now() - 5 * 60 * 1000;
-    const rec = async (ev: string, atMs: number) => {
+    const shareTimerId = randomUUID();
+    const rec = async (ev: string, atMs: number, tid: string | null = shareTimerId) => {
       const { error } = await client.rpc('record_session_event', {
         p_session_id: session_id,
         p_participant_id: participant_id,
-        p_event_type: ev,
+        p_timer_id: tid,
+        p_type: ev,
+        p_payload: {},
         p_client_recorded_at: new Date(atMs).toISOString(),
         p_client_event_id: randomUUID(),
       });
       if (error) throw new Error(`record_session_event(${ev}) failed: ${error.message}`);
     };
+    await rec('timer_added', t0 - 1_000, shareTimerId);
     await rec('start', t0);
     await rec('lap', t0 + 30_000);
-    await rec('stop', t0 + 60_000);
+    await rec('complete', t0 + 60_000);
+    await client.rpc('close_shared_session', { p_session_id: session_id });
 
     // 3. Inject auth into localStorage BEFORE the first page load via addInitScript.
     await page.addInitScript(
@@ -345,4 +409,3 @@ test.describe('solo stopwatch export', () => {
     expect(csv.split('\n').filter(Boolean)).toHaveLength(3); // header + 2 laps
   });
 });
-
