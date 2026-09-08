@@ -2074,7 +2074,7 @@ function CreateScreen({
       <CasingBar
         title="NEW SESSION"
         rightSlot={
-          <Pressable onPress={onBack} style={s.backBtn}>
+          <Pressable onPress={onBack} style={s.backBtn} hitSlop={12}>
             <Text style={s.backBtnText}>← Back</Text>
           </Pressable>
         }
@@ -2224,7 +2224,7 @@ function JoinScreen({
       <CasingBar
         title="JOIN SESSION"
         rightSlot={
-          <Pressable onPress={onBack} style={s.backBtn}>
+          <Pressable onPress={onBack} style={s.backBtn} hitSlop={12}>
             <Text style={s.backBtnText}>← Back</Text>
           </Pressable>
         }
@@ -2342,7 +2342,7 @@ function LiveViewerScreen({ code, fontsLoaded, onBack }: { code: string; fontsLo
   }, [payload]);
   return <SafeAreaView style={s.screen}>
     <StatusBar barStyle="light-content" backgroundColor={C.casing} />
-    <CasingBar title={payload?.session.name ?? "LIVE VIEW"} rightSlot={<Pressable onPress={onBack} style={s.backBtn}><Text style={s.backBtnText}>← Back</Text></Pressable>} />
+    <CasingBar title={payload?.session.name ?? "LIVE VIEW"} rightSlot={<Pressable onPress={onBack} style={s.backBtn} hitSlop={12}><Text style={s.backBtnText}>← Back</Text></Pressable>} />
     {unavailable ? <View style={s.together}><Text style={s.mutedText}>This live session is unavailable.</Text></View> : !payload ? <View style={s.together}><ActivityIndicator color={C.ink} /></View> : <>
       <ScrollView horizontal style={s.participantStrip} contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 8, gap: 6 }}><Text style={s.instrLabel}>VIEW ONLY · {payload.session.status.toUpperCase()}</Text>{payload.participants.map((participant, index) => <View key={`${participant.display_name}-${index}`} style={s.participantPill}><Text style={s.participantPillText}>{participant.display_name}{participant.is_owner ? " ★" : ""}</Text></View>)}</ScrollView>
       <View style={s.instrument}><View style={s.instrHeader}><Text style={s.instrLabel}>LIVE RIDER DISPLAY</Text><Text style={[s.instrLabel, { marginLeft: "auto" as unknown as number }]}>{code}</Text></View><View style={s.instrMain}><LcdDisplay ms={elapsedMs} mainSize={lcdMainSize(width, height)} fontLoaded={fontsLoaded} /></View></View>
@@ -3469,6 +3469,7 @@ function SessionScreen({
                   s.outlineBtn,
                   { opacity: pressed ? 0.7 : 1 },
                 ]}
+                hitSlop={4}
               >
                 <Text style={s.outlineBtnText}>Share CSV</Text>
               </Pressable>
@@ -3481,6 +3482,7 @@ function SessionScreen({
                 s.ghostBtn,
                 { opacity: pressed ? 0.6 : 1 },
               ]}
+              hitSlop={4}
             >
               <Text style={s.ghostBtnText}>
                 Create a full SplitSync event →
@@ -3581,13 +3583,13 @@ function SessionScreen({
           }}
         >
           {!isClosed && (
-            <Pressable onPress={handleCloseSession} hitSlop={8}>
+            <Pressable onPress={handleCloseSession} hitSlop={15}>
               <Text style={{ color: C.faint, fontSize: 11, fontWeight: "700" }}>
                 Close session
               </Text>
             </Pressable>
           )}
-          <Pressable onPress={handleDeleteSession} hitSlop={8}>
+          <Pressable onPress={handleDeleteSession} hitSlop={15}>
             <Text style={{ color: C.red, fontSize: 11, fontWeight: "700" }}>
               Delete session
             </Text>
@@ -4357,6 +4359,7 @@ function SoloScreen({
                   s.delayOption,
                   delaySeconds === opt && s.delayOptionActive,
                 ]}
+                hitSlop={10}
                 accessible
                 accessibilityRole="radio"
                 accessibilityLabel={`Delayed start ${SOLO_DELAY_LABELS[opt]}`}
@@ -4423,6 +4426,7 @@ function SoloScreen({
               s.shareRowBtn,
               { opacity: pressed ? 0.7 : 1 },
             ]}
+            hitSlop={8}
             accessible
             accessibilityRole="button"
             accessibilityLabel="Share lap times"
@@ -4435,6 +4439,7 @@ function SoloScreen({
               s.shareRowBtn,
               { opacity: pressed ? 0.7 : 1 },
             ]}
+            hitSlop={8}
             accessible
             accessibilityRole="button"
             accessibilityLabel="Share lap times as CSV"

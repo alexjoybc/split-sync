@@ -77,6 +77,20 @@
      instrumentBezel/instrumentInner tokens untouched, per ADR 0026). */
   color: var(--md-sys-color-on-background);
 
+  /* ── Focus ring (WCAG 2.4.7 / AGENTS.md UI System rule, #445 a11y QA) ───
+     `@material/web`'s internal `md-focus-ring` shadow-DOM element defaults
+     its color to `var(--md-focus-ring-color, var(--md-sys-color-secondary))`
+     at a 3px width. In this scope `--md-sys-color-secondary` resolves to
+     `blueAccent` (#5BC8F5), which is only ~1.7:1 against the paper/white
+     backgrounds behind these components — well under the 3:1 WCAG 1.4.11
+     UI-component minimum, and not the "2px blue-primary outline" AGENTS.md
+     mandates. Overriding both custom properties here (every `@material/web`
+     component reads them) fixes every interactive MD3 web control in this
+     scope at once, matching the rest of the app's `:focus-visible` ring
+     (globals.css) without needing a per-component override. */
+  --md-focus-ring-color: var(--md-sys-color-primary);
+  --md-focus-ring-width: 2px;
+
   /* ── Material 3 Expressive (M3E) additions ──────────────────────────────
      Mirrors apps/stopwatch/src/theme.ts's stopwatchFixedColors,
      stopwatchEmphasizedFonts, stopwatchShape, and stopwatchSpring exports.
