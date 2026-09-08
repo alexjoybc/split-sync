@@ -468,3 +468,188 @@ migrated screen:
 - `apps/stopwatch/App.tsx` — `App()` wraps `RootNavigator` in
   `<PaperProvider theme={stopwatchTheme}>`, nested inside the existing
   `SafeAreaProvider`. No other change to `App.tsx`.
+
+---
+
+## Accessibility + contrast QA pass (issue #445)
+
+**Status:** Accepted (addendum)
+**Date:** 2026-09-08
+**Issue:** #445
+
+After the native (`react-native-paper`) and web (`@material/web`) MD3/M3E
+redesigns above were fully applied across every stopwatch screen (issues
+#434–#461), this issue performed a dedicated accessibility and contrast QA
+pass over the finished result: re-verify every color-role pairing actually
+in use, audit status/state indicators for text labels (WCAG 1.4.1), audit
+web `:focus-visible` behavior (WCAG 2.4.7 / AGENTS.md), and spot-check
+native touch target sizes (≥44×44pt). This section records the findings —
+it does not change any color role or the instrument face carve-out above.
+
+### Consolidated WCAG AA contrast table
+
+Every foreground/background pairing actually assigned in
+`apps/stopwatch/src/theme.ts` (native) and `md3-theme.css` (web), computed
+with ADR 0021's relative-luminance formula. This re-states the two tables
+already in this ADR (the original MD3 mapping and the M3E fixed-role
+amendment) in one place for the audit record, plus the two new rows this
+issue's own fix introduced (rows 27–28).
+
+| # | Foreground | Background | Pair | Ratio | AA Normal ≥4.5 | AA Large/UI ≥3.0 |
+|---|---|---|---|---|---|---|
+| 1 | `onPrimary` `#ffffff` | `primary` `#0B6FB3` | White text on primary button | **5.33:1** | ✓ | ✓ |
+| 2 | `onPrimaryContainer` `#063c60` | `primaryContainer` `#d9eefd` | Text on primary container | **9.65:1** | ✓ | ✓ |
+| 3 | `onSecondary` (`ink`) `#18181b` | `secondary` `#5BC8F5` | Text on secondary (blueAccent) | **9.30:1** | ✓ | ✓ |
+| 4 | `onSecondaryContainer` `#053f57` | `secondaryContainer` `#cfeffc` | Text on secondary container | **9.38:1** | ✓ | ✓ |
+| 5 | `onTertiary` (`ink`) `#18181b` | `tertiary` `#FFD700` | Text on tertiary (yellow) | **12.63:1** | ✓ | ✓ |
+| 6 | `onTertiaryContainer` (`ink`) `#18181b` | `tertiaryContainer` `#FFF8CC` | Text on tertiary container | **16.49:1** | ✓ | ✓ |
+| 7 | `onError` `#ffffff` | `error` `#CC1A22` | White text on error | **5.62:1** | ✓ | ✓ |
+| 8 | `onErrorContainer` (`red`) `#CC1A22` | `errorContainer` `#FDECEA` | Text on error container | **4.91:1** | ✓ | ✓ |
+| 9 | `onBackground` (`ink`) `#18181b` | `background` (`paper`) `#f4f1ea` | Body text on background | **15.71:1** | ✓ | ✓ |
+| 10 | `onSurface` (`ink`) `#18181b` | `surface` (`panel`) `#ffffff` | Body text on surface | **17.72:1** | ✓ | ✓ |
+| 11 | `onSurfaceVariant` (`muted`) `#636369` | `surfaceVariant` (`panelAlt`) `#e9e6df` | Secondary text on surface variant | **4.79:1** | ✓ | ✓ |
+| 12 | `outline` (`muted`) `#636369` | `background` (`paper`) `#f4f1ea` | Outline stroke vs background | **5.29:1** | — | ✓ |
+| 13 | `outline` (`muted`) `#636369` | `surface` (`panel`) `#ffffff` | Outline stroke vs surface | **5.97:1** | — | ✓ |
+| 14 | `inverseOnSurface` `#ffffff` | `inverseSurface` (`blueDim`) `#00213A` | White text on inverse (dark) surface | **16.42:1** | ✓ | ✓ |
+| 15 | `inversePrimary` (`blueAccent`) `#5BC8F5` | `inverseSurface` (`blueDim`) `#00213A` | Accent action on inverse surface | **8.62:1** | ✓ | ✓ |
+| 16 | `onPrimaryFixed` `#031e30` | `primaryFixed` `#cfeafc` | Text on primary-fixed | **13.66:1** | ✓ | ✓ |
+| 17 | `onPrimaryFixed` `#031e30` | `primaryFixedDim` `#9fd5f9` | Text on primary-fixed-dim | **10.84:1** | ✓ | ✓ |
+| 18 | `onPrimaryFixedVariant` `#063c60` | `primaryFixed` `#cfeafc` | Variant text on primary-fixed | **9.23:1** | ✓ | ✓ |
+| 19 | `onPrimaryFixedVariant` `#063c60` | `primaryFixedDim` `#9fd5f9` | Variant text on primary-fixed-dim | **7.33:1** | ✓ | ✓ |
+| 20 | `onSecondaryFixed` `#032330` | `secondaryFixed` `#cfeffc` | Text on secondary-fixed | **13.52:1** | ✓ | ✓ |
+| 21 | `onSecondaryFixed` `#032330` | `secondaryFixedDim` `#9fdff9` | Text on secondary-fixed-dim | **11.19:1** | ✓ | ✓ |
+| 22 | `onSecondaryFixedVariant` `#053f57` | `secondaryFixed` `#cfeffc` | Variant text on secondary-fixed | **9.38:1** | ✓ | ✓ |
+| 23 | `onSecondaryFixedVariant` `#053f57` | `secondaryFixedDim` `#9fdff9` | Variant text on secondary-fixed-dim | **7.76:1** | ✓ | ✓ |
+| 24 | `onTertiaryFixed` (`ink`) `#18181b` | `tertiaryFixed` `#fff7cc` | Text on tertiary-fixed | **16.39:1** | ✓ | ✓ |
+| 25 | `onTertiaryFixed` (`ink`) `#18181b` | `tertiaryFixedDim` `#ffef99` | Text on tertiary-fixed-dim | **15.24:1** | ✓ | ✓ |
+| 26 | `onTertiaryFixedVariant` (`ink`) `#18181b` | `tertiaryFixed`/`tertiaryFixedDim` | Variant text on tertiary-fixed(-dim) | **16.39:1** / **15.24:1** | ✓ | ✓ |
+| 27 | `--md-sys-color-primary` `#0B6FB3` (web focus ring, fixed by this issue) | `background` (`paper`) `#f4f1ea` | Focus ring vs page background | **4.73:1** | — | ✓ (needs 3:1) |
+| 28 | `--md-sys-color-primary` `#0B6FB3` (web focus ring, fixed by this issue) | `surface` (`panel`) `#ffffff` | Focus ring vs card/dialog surface | **5.33:1** | — | ✓ (needs 3:1) |
+
+Rows 1–26 restate ratios already established and cited in this ADR's
+original MD3-mapping and M3E-amendment sections above (no value changed —
+this issue is a re-verification, not a re-derivation). Rows 27–28 are new:
+they document the corrected web focus-ring color (see "Findings and
+fixes" below) against the two backgrounds it can appear on.
+
+All 28 pairings meet or exceed their required threshold (4.5:1 normal
+text / 3:1 large text and UI components). No forbidden pairing (white on
+`blueAccent`/`yellow`) is present anywhere in the theme.
+
+### Findings and fixes
+
+**1. Web focus ring color/width — violation found and fixed.**
+`@material/web`'s built-in `md-focus-ring` shadow-DOM element (used
+internally by every `md-filled-button`, `md-outlined-button`,
+`md-text-button`, `md-filled-tonal-button`, `md-icon-button`, `md-dialog`
+action, and `md-list-item` in the redesigned web screens) defaults its
+color and width to:
+
+```
+color: var(--md-focus-ring-color, var(--md-sys-color-secondary, #625b71));
+outline: var(--md-focus-ring-width, 3px) solid currentColor;
+```
+
+In `.md3-stopwatch-scope`, `--md-sys-color-secondary` resolves to
+`blueAccent` (`#5BC8F5`). Computed against this app's actual backgrounds:
+
+| Foreground | Background | Ratio | WCAG 1.4.11 (3:1 UI component) |
+|---|---|---|---|
+| `blueAccent` `#5BC8F5` (uncorrected default) | `background` (`paper`) `#f4f1ea` | **1.69:1** | ✗ fail |
+| `blueAccent` `#5BC8F5` (uncorrected default) | `surface` (`panel`) `#ffffff` | **1.91:1** | ✗ fail |
+
+This is a real WCAG 1.4.11 failure — the default keyboard focus indicator
+on every native `@material/web` component in the redesigned stopwatch UI
+was up to 2.7× too low-contrast to be reliably visible, and did not match
+AGENTS.md's "2px blue-primary outline" rule (it was also 3px, not 2px).
+The plain-`<button>` / Tailwind-class interactive elements on the same
+screens (e.g. the "Large display" toggle, session-switcher rename/drag
+controls) were unaffected — they already set `outlineColor:
+"var(--md-sys-color-primary)"` explicitly per-element or inherit
+`globals.css`'s existing `:focus-visible` rules.
+
+**Fix:** `apps/web/src/app/stopwatch/md3-theme.css` now sets, scoped to
+`.md3-stopwatch-scope` (never `:root`, consistent with this file's
+existing scoping discipline):
+
+```css
+--md-focus-ring-color: var(--md-sys-color-primary);
+--md-focus-ring-width: 2px;
+```
+
+Every `@material/web` component in the scope reads these two custom
+properties for its internal focus ring, so this single change fixes the
+ring color/width app-wide (rows 27–28 above) without touching any
+per-component markup. Covered by a new Playwright spec (see below).
+
+**2. Native touch targets — five under-sized `Pressable`s found and
+fixed.** Spot-checking every `Pressable`/`TouchableRipple`/`IconButton`
+in `apps/stopwatch/App.tsx` against a ≥44×44pt effective touch target
+(visual box, or visual box + `hitSlop`) found the primary CTAs
+(`DeviceBtn`, `ExpressiveButton`, `Appbar.BackAction`, the session-list
+rename/delete icons at `ICON_BTN_SIZE = 44`) already compliant, but five
+smaller text-only `Pressable`s were under 44pt tall with no or
+insufficient `hitSlop`:
+
+| Component | Visual height (approx.) | Before | After |
+|---|---|---|---|
+| `backBtn` ("← Back", 3 screens: New Session, Join Session, Live View) | ~24pt | no `hitSlop` | `hitSlop={12}` (→ ~48pt) |
+| `delayOption` (solo delayed-start radio options) | ~24pt | no `hitSlop` | `hitSlop={10}` (→ ~44pt) |
+| `shareRowBtn` (SHARE LAPS / SHARE CSV, paused solo view) | ~32pt | no `hitSlop` | `hitSlop={8}` (→ ~48pt) |
+| Close/Delete session text links (session detail screen) | ~14pt text | `hitSlop={8}` (→ ~30pt, still short) | `hitSlop={15}` (→ ~44pt) |
+| `outlineBtn` / `ghostBtn` (Share CSV / "Create a full SplitSync event →", stopped solo view) | ~40–42pt | no `hitSlop` | `hitSlop={4}` (→ ~48–50pt) |
+
+None of these fixes touch color, shape, padding, or any rendered pixel —
+`hitSlop` only expands the invisible touch-response area, so this is a
+touch-target fix with zero visual diff. All other `Pressable`/
+`TouchableRipple` usages (`DeviceBtn`'s 56×44+ chrome, the session-list
+drag handle and rename/delete icons at `ICON_BTN_SIZE = 44`,
+`react-native-paper`'s `Appbar.BackAction`/`Button`/`IconButton`, which
+ship a compliant ≥48dp default target) were already compliant and are
+unchanged.
+
+**3. Status/state indicators — no violation found.** Every status/state
+UI element in both surfaces (`TopBarStatus`, session-list status `Chip`s,
+the running/paused `stateBadge` in the session switcher, the web session
+list's `statusLabel()`, the solo-session-switcher status label, the
+countdown timer's fullscreen state banner, and the paused/alerting timer
+labels) already renders an explicit text label alongside its color —
+confirmed by direct code read, not just self-reported comments. No fix
+was needed here; this ADR's original "text label, never color-only"
+design intent (carried over from ADR 0021's WCAG 1.4.1 audit) held up
+across the full redesign.
+
+**4. Instrument face — not touched, no violation found.** The LCD
+display, casing, bezel (`instrumentFace`/`instrumentCasing`/
+`instrumentBezel`/`instrumentInner` tokens and the DSEG7 digit font)
+were left completely untouched by this QA pass, per this ADR's existing
+carve-out. The `CasingBar` component's `backBtn` touch-target fix above
+only adds `hitSlop` (an invisible interaction-area expansion) to a
+`Pressable` that happens to render inside `CasingBar`'s `rightSlot` — it
+does not change `CasingBar`'s background color (`C.casing` /
+`instrumentCasing`), border, or any other instrument-adjacent visual
+token. No accessibility issue was found in the instrument face itself.
+
+### E2E coverage
+
+`apps/web/tests/e2e/stopwatch-a11y-focus.spec.ts` (new) verifies the
+focus-ring fix above: a plain-`<button>` MD3 control shows a computed
+`2px solid rgb(11, 111, 179)` outline on keyboard focus, and
+`.md3-stopwatch-scope` exposes `--md-focus-ring-color` /
+`--md-focus-ring-width` resolving to the same primary/2px pair that every
+`@material/web` component in the scope reads. The existing
+`stopwatch-fullscreen.spec.ts` and `specs/stopwatch*.spec.ts` suites
+already cover status-label text content and touch-target sizing (e.g.
+`specs/stopwatch.spec.ts`'s "lock button meets 44px minimum touch-target
+size") incidentally through their functional assertions, so this issue
+did not duplicate that coverage.
+
+### Outcome
+
+All acceptance criteria for issue #445 are met: the consolidated contrast
+table above (28 pairings) all pass WCAG AA, every status indicator
+carries a text label, the web focus-visible violation was found and
+fixed, native touch targets were spot-checked and five under-sized
+`Pressable`s were fixed, and the E2E suite (`pnpm --filter web
+test:e2e`) and native typecheck (`pnpm --filter stopwatch exec tsc
+--noEmit`) both pass with these changes.
