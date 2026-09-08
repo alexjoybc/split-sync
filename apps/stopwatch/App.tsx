@@ -22,6 +22,7 @@ import { STOPWATCH_CORE_SCHEMA_VERSION } from "@splitsync/stopwatch-core";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   AppState,
   FlatList,
   Modal,
@@ -67,7 +68,14 @@ import {
   TouchableRipple,
   useTheme,
 } from "react-native-paper";
-import { stopwatchTheme } from "./src/theme";
+import {
+  stopwatchTheme,
+  stopwatchFixedColors,
+  stopwatchEmphasizedFonts,
+  stopwatchShape,
+  pressedCornerRadius,
+  stopwatchSpring,
+} from "./src/theme";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "./src/supabase";
@@ -807,6 +815,88 @@ interface BtnProps {
 // distinct body color so LAP/START/STOP/RESET stay visually distinguishable.
 // NOTE: this is unrelated to `LcdDisplay`'s instrument face, which this
 // change does not touch.
+// ── Material 3 Expressive (M3E) press/selection motion helpers (#461) ──────
+// `react-native-paper` v5 has no first-class M3E shape/motion support (see
+// `apps/stopwatch/src/theme.ts`), so these small hooks apply the exported
+// `stopwatchShape`/`stopwatchSpring` tokens directly via `Animated.spring`
+// (RN's built-in spring — no `react-native-reanimated` dependency needed)
+// wherever a primary CTA, physical control button, or segmented control
+// needs the expressive press-morph / selection-bounce feel. They never
+// touch the LCD/instrument-face components.
+
+/**
+ * Animates a shape's corner radius from `baseRadius` down to
+ * `pressedCornerRadius(baseRadius)` on press-in, and back on press-out,
+ * using one of `stopwatchSpring`'s presets. Also derives a subtle
+ * press-scale so the feedback stays visible even where the radius morph
+ * is clamped (e.g. an already fully-rounded pill/circle).
+ */
+function useExpressivePress(
+  baseRadius: number,
+  spring: keyof typeof stopwatchSpring = "standard"
+) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const spec = stopwatchSpring[spring];
+
+  const onPressIn = useCallback(() => {
+    Animated.spring(progress, {
+      toValue: 1,
+      useNativeDriver: false, // borderRadius can't use the native driver
+      ...spec,
+    }).start();
+  }, [progress, spec]);
+
+  const onPressOut = useCallback(() => {
+    Animated.spring(progress, {
+      toValue: 0,
+      useNativeDriver: false,
+      ...spec,
+    }).start();
+  }, [progress, spec]);
+
+  const borderRadius = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [baseRadius, pressedCornerRadius(baseRadius)],
+  });
+  const scale = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0.96] });
+
+  return { onPressIn, onPressOut, borderRadius, scale };
+}
+
+/**
+ * Drop-in wrapper around Paper's `Button` that applies the M3E pill shape
+ * with press-state shape morph + spring feedback (`stopwatchSpring.standard`).
+ * Use for primary CTAs: sign-in, create/join submit, session start/rejoin,
+ * and dialog save/confirm actions.
+ */
+function ExpressiveButton({
+  style,
+  onPressIn,
+  onPressOut,
+  ...rest
+}: React.ComponentProps<typeof Button>) {
+  const {
+    onPressIn: pressIn,
+    onPressOut: pressOut,
+    borderRadius,
+    scale,
+  } = useExpressivePress(stopwatchShape.pill);
+  return (
+    <Button
+      {...rest}
+      onPressIn={(e) => {
+        pressIn();
+        onPressIn?.(e);
+      }}
+      onPressOut={(e) => {
+        pressOut();
+        onPressOut?.(e);
+      }}
+      style={[{ borderRadius, transform: [{ scale }] }, style]}
+    />
+  );
+}
+
 function DeviceBtn({
   label,
   sub,
@@ -821,55 +911,65 @@ function DeviceBtn({
   const bg = disabled ? C.btnDimBody : body;
   const edge = disabled ? C.btnDimLo : lo;
   const txt = disabled ? C.pillBorder : textColor;
+  // M3E: physical control chrome gets the same pill shape + spring press
+  // morph as primary CTAs (#461). The wrapped label/sub-label content is
+  // unaffected — only the Surface/TouchableRipple chrome shape animates.
+  const { onPressIn, onPressOut, borderRadius, scale } = useExpressivePress(
+    stopwatchShape.pill
+  );
 
   return (
-    <Surface
-      style={{ flex, borderRadius: 10, minHeight: 56 }}
-      elevation={disabled ? 0 : 3}
-    >
-      <TouchableRipple
-        onPress={disabled ? undefined : onPress}
-        disabled={disabled}
-        rippleColor={hi ? `${hi}55` : "rgba(255,255,255,0.24)"}
-        accessible
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        accessibilityState={{ disabled: !!disabled }}
-        style={{
-          minHeight: 56,
-          minWidth: 44,
-          borderRadius: 10,
-          backgroundColor: bg,
-          borderWidth: 1,
-          borderColor: edge,
-          alignItems: "center",
-          justifyContent: "center",
-          paddingHorizontal: 4,
-          paddingVertical: 8,
-        }}
+    <Animated.View style={{ flex, transform: [{ scale }] }}>
+      <Surface
+        style={[{ borderRadius, minHeight: 56 }]}
+        elevation={disabled ? 0 : 3}
       >
-        <View style={{ alignItems: "center", justifyContent: "center" }}>
-          {sub && (
+        <TouchableRipple
+          onPress={disabled ? undefined : onPress}
+          onPressIn={disabled ? undefined : onPressIn}
+          onPressOut={disabled ? undefined : onPressOut}
+          disabled={disabled}
+          rippleColor={hi ? `${hi}55` : "rgba(255,255,255,0.24)"}
+          accessible
+          accessibilityRole="button"
+          accessibilityLabel={label}
+          accessibilityState={{ disabled: !!disabled }}
+          style={{
+            minHeight: 56,
+            minWidth: 44,
+            borderRadius,
+            backgroundColor: bg,
+            borderWidth: 1,
+            borderColor: edge,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingHorizontal: 4,
+            paddingVertical: 8,
+          }}
+        >
+          <View style={{ alignItems: "center", justifyContent: "center" }}>
+            {sub && (
+              <Text
+                style={{
+                  color: disabled ? C.dark : C.btnSubLabel,
+                  fontSize: 9,
+                  fontWeight: "900",
+                  letterSpacing: 2,
+                  marginBottom: 1,
+                }}
+              >
+                {sub}
+              </Text>
+            )}
             <Text
-              style={{
-                color: disabled ? C.dark : C.btnSubLabel,
-                fontSize: 9,
-                fontWeight: "900",
-                letterSpacing: 2,
-                marginBottom: 1,
-              }}
+              style={{ color: txt, fontSize: 14, fontWeight: "900", letterSpacing: 1.5 }}
             >
-              {sub}
+              {label}
             </Text>
-          )}
-          <Text
-            style={{ color: txt, fontSize: 14, fontWeight: "900", letterSpacing: 1.5 }}
-          >
-            {label}
-          </Text>
-        </View>
-      </TouchableRipple>
-    </Surface>
+          </View>
+        </TouchableRipple>
+      </Surface>
+    </Animated.View>
   );
 }
 
@@ -1459,16 +1559,19 @@ function LoginScreen({
         <View style={{ flex: 1, justifyContent: "center", padding: 20 }}>
           <Card mode="outlined">
             <Card.Content>
-              <PaperText variant="headlineSmall" style={{ marginBottom: 8 }}>
+              <PaperText
+                variant="headlineSmall"
+                style={[stopwatchEmphasizedFonts.headlineSmallEmphasized, { marginBottom: 8 }]}
+              >
                 Solo mode only
               </PaperText>
               <PaperText variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 20 }}>
                 Shared timing sessions aren&apos;t configured for this build.
                 You can still use the solo stopwatch.
               </PaperText>
-              <Button mode="contained" onPress={onSolo}>
+              <ExpressiveButton mode="contained" onPress={onSolo}>
                 Continue solo
-              </Button>
+              </ExpressiveButton>
             </Card.Content>
           </Card>
         </View>
@@ -1487,7 +1590,10 @@ function LoginScreen({
         contentContainerStyle={{ padding: 20, paddingTop: 28 }}
         keyboardShouldPersistTaps="handled"
       >
-        <PaperText variant="headlineSmall" style={{ marginBottom: 8 }}>
+        <PaperText
+          variant="headlineSmall"
+          style={[stopwatchEmphasizedFonts.headlineSmallEmphasized, { marginBottom: 8 }]}
+        >
           Session Creator
         </PaperText>
         <PaperText variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 24 }}>
@@ -1539,7 +1645,7 @@ function LoginScreen({
           {error}
         </HelperText>
 
-        <Button
+        <ExpressiveButton
           mode="contained"
           onPress={handleSignIn}
           loading={loading}
@@ -1547,7 +1653,7 @@ function LoginScreen({
           style={{ marginTop: 8, marginBottom: 16 }}
         >
           Sign in
-        </Button>
+        </ExpressiveButton>
 
         <Button mode="text" onPress={onSolo}>
           Use without account →
@@ -1773,7 +1879,10 @@ function HomeScreen({
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-        <PaperText variant="headlineSmall" style={{ marginBottom: 4 }}>
+        <PaperText
+          variant="headlineSmall"
+          style={[stopwatchEmphasizedFonts.headlineSmallEmphasized, { marginBottom: 4 }]}
+        >
           {greeting}
         </PaperText>
         <PaperText variant="bodyMedium" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 24 }}>
@@ -1781,16 +1890,19 @@ function HomeScreen({
         </PaperText>
 
         {/* Primary actions */}
-        <Button mode="contained" onPress={onNewSession} style={{ marginBottom: 10 }}>
+        <ExpressiveButton mode="contained" onPress={onNewSession} style={{ marginBottom: 10 }}>
           + New session
-        </Button>
+        </ExpressiveButton>
 
         <Button mode="outlined" onPress={onSolo} style={{ marginBottom: 28 }}>
           Solo stopwatch
         </Button>
 
         {/* Session history */}
-        <PaperText variant="labelLarge" style={{ color: theme.colors.onSurfaceVariant, marginBottom: 8 }}>
+        <PaperText
+          variant="labelLarge"
+          style={[stopwatchEmphasizedFonts.labelLargeEmphasized, { color: theme.colors.onSurfaceVariant, marginBottom: 8 }]}
+        >
           MY SESSIONS
         </PaperText>
 
@@ -2006,7 +2118,7 @@ function CreateScreen({
           {error ?? ""}
         </HelperText>
 
-        <PaperButton
+        <ExpressiveButton
           mode="contained"
           onPress={handleCreate}
           disabled={loading}
@@ -2015,7 +2127,7 @@ function CreateScreen({
           contentStyle={{ paddingVertical: 4 }}
         >
           Start session
-        </PaperButton>
+        </ExpressiveButton>
       </ScrollView>
     </SafeAreaView>
   );
@@ -2155,7 +2267,7 @@ function JoinScreen({
           {error ?? ""}
         </HelperText>
 
-        <PaperButton
+        <ExpressiveButton
           mode="contained"
           onPress={handleJoin}
           disabled={loading}
@@ -2164,7 +2276,7 @@ function JoinScreen({
           contentStyle={{ paddingVertical: 4 }}
         >
           Join
-        </PaperButton>
+        </ExpressiveButton>
         <PaperButton
           mode="outlined"
           onPress={() => onView(code.trim().toUpperCase())}
@@ -3546,6 +3658,35 @@ const SOLO_DELAY_STORAGE_KEY = "sw_delay_seconds";
 type SoloMode = "stopwatch" | "timer";
 const SOLO_MODE_STORAGE_KEY = "solo_mode_v1";
 
+/**
+ * Plays a spring "pop" (`stopwatchSpring.expressive`) on `value` change.
+ *
+ * `react-native-paper`'s `SegmentedButtons` has no exposed hook to override
+ * its internal selection transition (it's a plain background-color flip
+ * per segment), so this wraps the whole control and bounces it on
+ * selection change instead — an M3E-flavored substitute for a true
+ * per-segment indicator transition (#461).
+ */
+function useSelectionBounce(value: string) {
+  const scale = useRef(new Animated.Value(1)).current;
+  const isFirst = useRef(true);
+  const spec = stopwatchSpring.expressive;
+
+  useEffect(() => {
+    if (isFirst.current) {
+      isFirst.current = false;
+      return;
+    }
+    scale.setValue(0.94);
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, ...spec }).start();
+    // `spec` is a stable module-level object per preset; only `value` should
+    // retrigger the bounce.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  return scale;
+}
+
 // MD3 `SegmentedButtons` — replaces the old hand-rolled pill toggle (#439).
 function ModeToggleStrip({
   mode,
@@ -3554,31 +3695,34 @@ function ModeToggleStrip({
   mode: SoloMode;
   onSelect: (m: SoloMode) => void;
 }) {
+  const bounceScale = useSelectionBounce(mode);
   return (
     <View style={s.modeToggleWrap}>
       <Text style={s.delayLabel}>MODE</Text>
-      <SegmentedButtons
-        style={s.modeToggleButtons}
-        value={mode}
-        onValueChange={(v) => onSelect(v as SoloMode)}
-        density="small"
-        buttons={[
-          {
-            value: "stopwatch",
-            label: "STOPWATCH",
-            accessibilityLabel: "Stopwatch mode",
-            checkedColor: stopwatchTheme.colors.onPrimary,
-            uncheckedColor: stopwatchTheme.colors.onSurfaceVariant,
-          },
-          {
-            value: "timer",
-            label: "TIMER",
-            accessibilityLabel: "Countdown timer mode",
-            checkedColor: stopwatchTheme.colors.onPrimary,
-            uncheckedColor: stopwatchTheme.colors.onSurfaceVariant,
-          },
-        ]}
-      />
+      <Animated.View style={{ transform: [{ scale: bounceScale }] }}>
+        <SegmentedButtons
+          style={s.modeToggleButtons}
+          value={mode}
+          onValueChange={(v) => onSelect(v as SoloMode)}
+          density="small"
+          buttons={[
+            {
+              value: "stopwatch",
+              label: "STOPWATCH",
+              accessibilityLabel: "Stopwatch mode",
+              checkedColor: stopwatchTheme.colors.onPrimary,
+              uncheckedColor: stopwatchTheme.colors.onSurfaceVariant,
+            },
+            {
+              value: "timer",
+              label: "TIMER",
+              accessibilityLabel: "Countdown timer mode",
+              checkedColor: stopwatchTheme.colors.onPrimary,
+              uncheckedColor: stopwatchTheme.colors.onSurfaceVariant,
+            },
+          ]}
+        />
+      </Animated.View>
     </View>
   );
 }
@@ -4584,6 +4728,8 @@ function TimerScreen({
 
   // ── Repeat / Pomodoro mode (ADR 0025) ────────────────────────────────────────
   const [repeatEnabled, setRepeatEnabled] = useState(false);
+  // M3E spring "pop" on repeat-mode segmented-button selection change (#461)
+  const repeatModeBounce = useSelectionBounce(repeatEnabled ? "repeat" : "single");
   const [restDurationMs, setRestDurationMs] = useState(60_000);
   const [restHh, setRestHh] = useState("0");
   const [restMm, setRestMm] = useState("01");
@@ -5207,6 +5353,7 @@ function TimerScreen({
           {/* ── Repeat / Pomodoro mode (ADR 0025) ──────────────────────── */}
           <View style={[s.cueRow, { borderTopWidth: 1, borderTopColor: C.ink, flexDirection: "column", alignItems: "stretch", gap: 8 }]}>
             <Text style={s.cueLabel}>MODE</Text>
+            <Animated.View style={{ transform: [{ scale: repeatModeBounce }] }}>
             <SegmentedButtons
               value={repeatEnabled ? "repeat" : "single"}
               onValueChange={(value) => {
@@ -5224,6 +5371,7 @@ function TimerScreen({
                 { value: "repeat", label: "REPEAT", accessibilityLabel: "Enable repeat / Pomodoro mode" },
               ]}
             />
+            </Animated.View>
           </View>
           {repeatEnabled && (
             <>
@@ -5401,6 +5549,16 @@ function TimerScreen({
  * Uses React Native Modal so it works on both iOS and Android without
  * relying on Alert.prompt (iOS-only).
  */
+// NOTE (#461, M3E dialog motion): `react-native-paper`'s `Dialog`/`Modal`
+// hardcodes its open/close transition as `Animated.timing(opacity, {
+// easing: Easing.out(Easing.cubic), duration: theme.animation.scale * 220 })`
+// (see `Modal.tsx` in `react-native-paper`) with no prop or theme hook to
+// swap in spring physics — only `theme.animation.scale`, a plain duration
+// multiplier, is exposed. Overriding this would require forking the
+// component, which the issue explicitly says to avoid. Documented
+// exception: this dialog's own open/close transition keeps the library's
+// default easing; its *content* (buttons) still gets the M3E pill +
+// spring-press treatment below.
 function NameInputModal({
   visible,
   title,
@@ -5452,14 +5610,14 @@ function NameInputModal({
           <Button onPress={onCancel} accessibilityLabel="Cancel">
             Cancel
           </Button>
-          <Button
+          <ExpressiveButton
             mode="contained"
             onPress={handleConfirm}
             disabled={trimmedEmpty}
             accessibilityLabel="Confirm"
           >
             OK
-          </Button>
+          </ExpressiveButton>
         </Dialog.Actions>
       </Dialog>
     </Portal>
@@ -5848,14 +6006,14 @@ function SessionSwitcherModal({
         </Dialog.ScrollArea>
 
         <Dialog.Actions>
-          <Button
+          <ExpressiveButton
             mode="contained"
             onPress={atCap ? undefined : handleOpenCreate}
             disabled={atCap}
             accessibilityLabel="Create new session"
           >
             + New session
-          </Button>
+          </ExpressiveButton>
           <Button onPress={onClose} accessibilityLabel="Close sessions panel">
             Close
           </Button>
@@ -5902,10 +6060,15 @@ const ssm = StyleSheet.create({
     borderColor: C.line,
     minHeight: 66,
   },
+  // M3E: this persistent "active session" row accent now uses the
+  // tone-locked primaryFixed/primaryFixedDim pairing (#461) instead of the
+  // hand-picked `C.blueTint`/`C.bluePrimary` — it's the same "persistent
+  // status chip" pattern the M3E foundation issue calls out, so it won't
+  // flip if a future dark theme is added.
   rowActive: {
-    backgroundColor: C.blueTint,
+    backgroundColor: stopwatchFixedColors.primaryFixed,
     borderLeftWidth: 4,
-    borderLeftColor: C.bluePrimary,
+    borderLeftColor: stopwatchFixedColors.primaryFixedDim,
   },
   colorStrip: {
     width: 5,
@@ -5936,13 +6099,13 @@ const ssm = StyleSheet.create({
     flex: 1,
   },
   rowNameActive: {
-    color: C.bluePrimary,
+    color: stopwatchFixedColors.onPrimaryFixedVariant,
   },
   activeDot: {
     fontSize: 9,
     fontWeight: "900",
     letterSpacing: 1.5,
-    color: C.bluePrimary,
+    color: stopwatchFixedColors.onPrimaryFixedVariant,
   },
   rowMeta: {
     flexDirection: "row",

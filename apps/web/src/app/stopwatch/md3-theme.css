@@ -137,3 +137,65 @@
   --md-motion-spring-dialog-easing: cubic-bezier(0.3, 1.2, 0.5, 1);
   --md-motion-spring-dialog-duration: 220ms;
 }
+
+/* ── Material 3 Expressive (M3E) applied polish (#461) ─────────────────────
+   The foundation tokens above (added in #460) are now actually consumed by
+   the redesigned screens (#436-#444). Scope stays `.md3-stopwatch-scope`
+   only — never `:root` — per this file's header comment. */
+
+/* Primary CTA + physical control chrome: explicit pill/stadium shape.
+   `@material/web`'s filled/outlined/text buttons already default to a full
+   (999px) corner per standard M3, so this makes that M3E shape choice
+   explicit/auditable rather than changing the rendered shape. */
+.md3-stopwatch-scope md-filled-button,
+.md3-stopwatch-scope md-outlined-button,
+.md3-stopwatch-scope md-text-button,
+.md3-stopwatch-scope md-filled-tonal-button {
+  --md-filled-button-container-shape: var(--md-sys-shape-corner-pill);
+  --md-outlined-button-container-shape: var(--md-sys-shape-corner-pill);
+  --md-text-button-container-shape: var(--md-sys-shape-corner-pill);
+  --md-filled-tonal-button-container-shape: var(--md-sys-shape-corner-pill);
+}
+
+/* Spring-flavored press feedback for every M3 button chrome. `@material/web`
+   buttons are shadow-DOM custom elements with no exposed animation-override
+   hook for their internal state-layer/ripple, so the spring feel is applied
+   to the host element itself via a light-DOM transform + the
+   `--md-motion-spring-standard-*` CSS custom properties (approximated as a
+   cubic-bezier + duration pair — see this file's header comment on why true
+   CSS spring easing isn't used). */
+.md3-stopwatch-scope md-filled-button,
+.md3-stopwatch-scope md-outlined-button,
+.md3-stopwatch-scope md-text-button,
+.md3-stopwatch-scope md-filled-tonal-button,
+.md3-stopwatch-scope md-icon-button {
+  display: inline-flex;
+  transition: transform var(--md-motion-spring-standard-duration)
+    var(--md-motion-spring-standard-easing);
+}
+
+.md3-stopwatch-scope md-filled-button:active,
+.md3-stopwatch-scope md-outlined-button:active,
+.md3-stopwatch-scope md-text-button:active,
+.md3-stopwatch-scope md-filled-tonal-button:active,
+.md3-stopwatch-scope md-icon-button:active {
+  transform: scale(0.96);
+}
+
+/* Dialog headline → emphasized type scale. `md-dialog` exposes
+   `--md-dialog-headline-weight` as an overridable custom property; there is
+   no equivalent letter-spacing property, so tracking is applied directly to
+   our own `slot="headline"` light-DOM element instead. */
+.md3-stopwatch-scope md-dialog {
+  --md-dialog-headline-weight: var(--md-sys-typescale-headline-small-emphasized-weight);
+}
+
+.md3-stopwatch-scope md-dialog [slot="headline"] {
+  letter-spacing: var(--md-sys-typescale-headline-small-emphasized-tracking);
+}
+
+/* Countdown pusher chrome (CountdownTimer.tsx `.sw-pusher`) keeps its
+   existing fully-round shape (already the M3E pill/stadium treatment for a
+   circular physical control) — see globals.css for its spring-eased press
+   transition, which references the `--md-motion-spring-standard-*` tokens
+   defined above. The LCD/dial/instrument face is untouched throughout. */

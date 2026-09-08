@@ -25,6 +25,7 @@ import {
   type Lap as SessionLap,
 } from "./soloSessionStorage";
 import { SoloSessionSwitcher } from "./SoloSessionSwitcher";
+import { applyDialogSpringMotion } from "./dialogSpringMotion";
 // `./md3-components` registers `@material/web`'s custom elements as a side
 // effect; it must be imported from a Client Component to actually run in
 // the browser (see the comment at the top of md3-components.ts). This
@@ -197,6 +198,11 @@ function CreateSessionModal({ user, onClose, onCreated }: CreateSessionModalProp
     dialog.addEventListener("cancel", handleCancel);
     return () => dialog.removeEventListener("cancel", handleCancel);
   }, [onClose]);
+
+  // M3E dialog open/close spring motion (#461) — see dialogSpringMotion.ts.
+  useEffect(() => {
+    applyDialogSpringMotion(dialogRef.current);
+  }, []);
 
   const handleCreate = async () => {
     if (!name.trim() || !displayName.trim()) return;
@@ -387,9 +393,16 @@ function SessionHistory({
   // MD3 text-button-styled Next.js Links (#442) — kept as real `<Link>`
   // elements (not `<md-text-button>`) so navigation stays client-side/SPA
   // routed; styled with the scoped MD3 tokens for visual parity with the
-  // real `@material/web` buttons alongside them.
+  // real `@material/web` buttons alongside them. `rounded-full` already
+  // gives the M3E pill shape; `active:scale-95` + the inline transition
+  // below add the same spring press feedback as the `md-*-button` chrome
+  // (#461) — this is a "session rejoin" primary action per session row.
   const linkActionClass =
-    "inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-medium text-[color:var(--md-sys-color-primary)] transition-colors hover:bg-[color:var(--md-sys-color-primary-container)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--md-sys-color-primary)]";
+    "inline-flex shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-medium text-[color:var(--md-sys-color-primary)] transition-colors active:scale-95 hover:bg-[color:var(--md-sys-color-primary-container)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[color:var(--md-sys-color-primary)]";
+  const linkActionSpringStyle: React.CSSProperties = {
+    transition:
+      "background-color var(--md-motion-spring-standard-duration) var(--md-motion-spring-standard-easing), transform var(--md-motion-spring-standard-duration) var(--md-motion-spring-standard-easing)",
+  };
 
   return (
     <section
@@ -421,11 +434,16 @@ function SessionHistory({
                 <Link
                   href={`/stopwatch/s/${s.code}/results`}
                   className={linkActionClass}
+                  style={linkActionSpringStyle}
                 >
                   Results
                 </Link>
               ) : (
-                <Link href={`/stopwatch/s/${s.code}`} className={linkActionClass}>
+                <Link
+                  href={`/stopwatch/s/${s.code}`}
+                  className={linkActionClass}
+                  style={linkActionSpringStyle}
+                >
                   {s.status === "closed" ? "View" : "Join"}
                 </Link>
               )}
