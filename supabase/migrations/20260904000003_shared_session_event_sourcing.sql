@@ -369,6 +369,101 @@ revoke all on function create_shared_session(text, text), join_shared_session(te
 grant execute on function create_shared_session(text, text), close_shared_session(uuid), delete_shared_session(uuid) to authenticated;
 grant execute on function join_shared_session(text, text, uuid), record_session_event(uuid, uuid, uuid, text, jsonb, timestamptz, uuid), record_session_event(uuid, uuid, text, timestamptz, uuid), get_session_state(uuid, uuid), get_shared_session_results(text), get_shared_session_live_view(text) to anon, authenticated;
 
+-- Compatibility boundary for the deployed single-timer clients.  #465/#466
+-- will move those clients to the shared_* contract; until then, keep their
+-- existing RPC names and owner session-list read working without duplicating
+-- any data.  The compatibility RPCs are deliberately only projections onto
+-- the canonical shared tables and event log.
+create view casual_sessions with (security_invoker = true) as
+  select
+    s.id,
+    s.owner_id,
+    s.name,
+    s.code,
+    s.status,
+    s.created_at,
+    s.expires_at,
+    10::smallint as participant_cap,
+    (
+      select e.client_recorded_at
+      from shared_session_events e
+      where e.session_id = s.id and e.type = 'start'
+      order by e.sequence desc
+      limit 1
+    ) as t0_server
+  from shared_sessions s;
+
+create or replace function create_casual_session(p_name text, p_display_name text)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  return create_shared_session(p_name, p_display_name);
+end;
+$$;
+
+create or replace function join_casual_session(p_code text, p_display_name text, p_client_id uuid)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  return join_shared_session(p_code, p_display_name, p_client_id);
+end;
+$$;
+
+create or replace function close_casual_session(p_session_id uuid)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  return close_shared_session(p_session_id);
+end;
+$$;
+
+create or replace function delete_casual_session(p_session_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  perform delete_shared_session(p_session_id);
+end;
+$$;
+
+create or replace function get_casual_session_results(p_code text)
+returns json language plpgsql security definer set search_path = public as $$
+declare v_session shared_sessions;
+begin
+  select * into v_session from shared_sessions where code = upper(trim(p_code));
+  if not found or (v_session.status not in ('stopped', 'closed') and v_session.expires_at >= now()) then
+    raise exception 'RESULTS_NOT_AVAILABLE';
+  end if;
+  return json_build_object(
+    'session', json_build_object('name', v_session.name, 'code', v_session.code, 'status', v_session.status, 'created_at', v_session.created_at),
+    'participants', (
+      select coalesce(json_agg(json_build_object('display_name', display_name, 'is_owner', is_owner) order by joined_at), '[]'::json)
+      from shared_session_participants where session_id = v_session.id
+    ),
+    'events', (
+      select coalesce(json_agg(json_build_object(
+        'id', e.id,
+        'event_type', case e.type when 'complete' then 'stop' else e.type end,
+        'client_recorded_at', e.client_recorded_at,
+        'server_received_at', e.server_received_at,
+        'sequence', e.sequence,
+        'actor_name', p.display_name
+      ) order by e.sequence), '[]'::json)
+      from shared_session_events e
+      join shared_session_participants p on p.id = e.actor_participant_id
+      where e.session_id = v_session.id
+    )
+  );
+end;
+$$;
+
+create or replace function get_casual_session_live_view(p_code text)
+returns json language plpgsql security definer set search_path = public as $$
+begin
+  return get_shared_session_live_view(p_code);
+end;
+$$;
+
+grant select on casual_sessions to authenticated;
+revoke all on function create_casual_session(text, text), close_casual_session(uuid), delete_casual_session(uuid), join_casual_session(text, text, uuid), get_casual_session_results(text), get_casual_session_live_view(text) from public;
+grant execute on function create_casual_session(text, text), close_casual_session(uuid), delete_casual_session(uuid) to authenticated;
+grant execute on function join_casual_session(text, text, uuid), get_casual_session_results(text), get_casual_session_live_view(text) to anon, authenticated;
+
 do $$ begin
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = 'shared_session_events') then
     alter publication supabase_realtime add table shared_session_events;
